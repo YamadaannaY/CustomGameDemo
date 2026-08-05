@@ -1,0 +1,15 @@
+# Claude Code settings
+.claude/
+
+# Build artifacts
+*.obj
+*.pch
+*.lib
+*.dll
+*.exe
+
+# IDE files
+.vs/
+.idea/
+*.suo
+*.user
