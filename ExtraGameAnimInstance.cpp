@@ -89,7 +89,7 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		{
 			// Stride：归一化到 MaxWalkSpeed
 			const float MaxSpeed = OwnerMovementComp->MaxWalkSpeed;
-			Stride = (MaxSpeed > 0.f) ? FMath::Clamp(GroundSpeed / MaxSpeed, 0.f, 1.f) : 0.f;
+			Stride = (MaxSpeed > 0.f) ? FMath::Clamp(GroundSpeed*StrideCoefficient / MaxSpeed, 0.f, 1.f) : 0.f;
 		}
 
 		// WalkRunBlend：暂固定为 0（Walk 行），后续可扩展为冲刺驱动

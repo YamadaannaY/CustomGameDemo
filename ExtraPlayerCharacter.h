@@ -60,6 +60,23 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	UInputAction* CtrlInputAction;
 
+	// -- 武器输入（鸣潮风格：普攻点按=轻击，长按=重击；两个技能：E=技能，Q=大招）--
+	UPROPERTY(EditDefaultsOnly, Category="Input|Weapon")
+	UInputAction* NormalAttackAction;
+
+	UPROPERTY(EditDefaultsOnly, Category="Input|Weapon")
+	UInputAction* SkillAction;
+
+	UPROPERTY(EditDefaultsOnly, Category="Input|Weapon")
+	UInputAction* UltimateAction;
+
+	UPROPERTY(EditDefaultsOnly, Category="Input|Weapon")
+	UInputAction* DodgeAction;
+	
+	// 长按判定阈值（秒），超过此时间为重击，低于为轻击
+	UPROPERTY(EditDefaultsOnly, Category="Input|Weapon", meta=(ClampMin="0.1"))
+	float HeavyAttackHoldTime = 0.35f;
+
 	// -- MotionWarping 组件，用于转身动画的朝向匹配 --
 	UPROPERTY(VisibleDefaultsOnly, Category="MotionWarping")
 	UMotionWarpingComponent* MotionWarpingComp;
@@ -114,6 +131,12 @@ private:
 	void ChangeWalkMode(const FInputActionValue& InputActionValue);
 	void CalculateTargetDelta(float ForwardInput,float RightInput);
 
+	// -- 武器输入处理 --
+	void OnNormalAttackStarted(const FInputActionValue& InputActionValue);
+	void OnNormalAttackCompleted(const FInputActionValue& InputActionValue);
+	void OnSkillStarted(const FInputActionValue& InputActionValue);
+	void OnUltimateStarted(const FInputActionValue& InputActionValue);
+	void OnDodgeStarted(const FInputActionValue& InputActionValue);
 	void LerpArmLength(float Goal);
 	void TickArmLengthLerp(float Goal);
 	
@@ -137,7 +160,10 @@ private:
 	
 	float RightDirectionInput;
 	
-	bool bWalkMode = false ; 
-	
+	bool bWalkMode = false ;
+
+	// 记录普攻按下时间，用于点按/长按判定
+	float NormalAttackPressTime = 0.f;
+
 	FVector InputDirection;
 };

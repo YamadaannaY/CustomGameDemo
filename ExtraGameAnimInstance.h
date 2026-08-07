@@ -129,6 +129,9 @@ public:
 	// ─────────────────────────────────────────────────────────────
 
 private:
+	UPROPERTY(EditDefaultsOnly,Category = "StrideSetting")
+	float StrideCoefficient=1.f;
+	
 	float Acceleration =0 ;
 
 	bool bWalkMode = false;

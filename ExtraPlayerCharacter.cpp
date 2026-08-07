@@ -6,6 +6,9 @@
 #include "ExtraGameAnimInstance.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "WeaponSystem/ExtraGameWeaponComponent.h"
+#include "WeaponSystem/ExtraGameWeaponTypes.h"
+#include "AbilitySystemComponent.h"
 
 
 AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectInitializer)
@@ -59,6 +62,14 @@ void AExtraPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		InputComp->BindAction(SprintAction,ETriggerEvent::Completed,this,&ThisClass::OnSprintActionCompleted);
 		InputComp->BindAction(CameraZoomInputAction,ETriggerEvent::Triggered,this,&ThisClass::HandleCameraZoomInput);
 		InputComp->BindAction(CtrlInputAction,ETriggerEvent::Triggered,this,&ThisClass::ChangeWalkMode);
+
+		// -- 武器输入绑定 --
+		// 普攻：点按→轻击 / 长按→重击（通过 Started + Completed 区分时长）
+		InputComp->BindAction(NormalAttackAction, ETriggerEvent::Started, this, &ThisClass::OnNormalAttackStarted);
+		InputComp->BindAction(NormalAttackAction, ETriggerEvent::Completed, this, &ThisClass::OnNormalAttackCompleted);
+		InputComp->BindAction(SkillAction, ETriggerEvent::Started, this, &ThisClass::OnSkillStarted);
+		InputComp->BindAction(UltimateAction, ETriggerEvent::Started, this, &ThisClass::OnUltimateStarted);
+		InputComp->BindAction(DodgeAction, ETriggerEvent::Started, this, &ThisClass::OnDodgeStarted);
 	}
 	
 }
@@ -328,7 +339,7 @@ void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
 	}
 
 	// 计算目标朝向：当前朝向 ± 90°
-	const float TurnYawOffset = bTurnLeft ? -90.f : 90.f;
+	const float TurnYawOffset = bTurnLeft ? -TargetDelta : TargetDelta;
 	const FRotator CurrentRot = GetActorRotation();
 	const FRotator TargetRot(CurrentRot.Pitch, CurrentRot.Yaw + TurnYawOffset, CurrentRot.Roll);
 
@@ -345,4 +356,55 @@ void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
 
 	// 播放转身 montage
 	PlayAnimMontage(MontageToPlay, TurnMontagePlayRate);
+}
+
+// ──────────────────────────────────────────────────────────────
+// 武器输入处理（鸣潮风格）
+// ──────────────────────────────────────────────────────────────
+
+void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& InputActionValue)
+{
+	NormalAttackPressTime = GetWorld()->GetTimeSeconds();
+}
+
+void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& InputActionValue)
+{
+	if (!AbilitySystemComponent)
+	{
+		return;
+	}
+
+	const float Elapsed = GetWorld()->GetTimeSeconds() - NormalAttackPressTime;
+	const EWeaponAbilityInputID InputID = (Elapsed >= HeavyAttackHoldTime)
+		? EWeaponAbilityInputID::HeavyAttack
+		: EWeaponAbilityInputID::LightAttack;
+
+	AbilitySystemComponent->AbilityLocalInputPressed(static_cast<int32>(InputID));
+}
+
+void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionValue)
+{
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->AbilityLocalInputPressed(
+			static_cast<int32>(EWeaponAbilityInputID::Skill));
+	}
+}
+
+void AExtraPlayerCharacter::OnUltimateStarted(const FInputActionValue& InputActionValue)
+{
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->AbilityLocalInputPressed(
+			static_cast<int32>(EWeaponAbilityInputID::Ultimate));
+	}
+}
+
+void AExtraPlayerCharacter::OnDodgeStarted(const FInputActionValue& InputActionValue)
+{
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->AbilityLocalInputPressed(
+			static_cast<int32>(EWeaponAbilityInputID::Dodge));
+	}
 }

@@ -1,30 +1,47 @@
 #include "ExtraCharacter.h"
 #include "ExtraGameMovementComponent.h"
+#include "WeaponSystem/ExtraGameWeaponComponent.h"
+#include "WeaponSystem/ExtraGameAttributeSet.h"
+#include "AbilitySystemComponent.h"
 
 
-AExtraCharacter::AExtraCharacter(const FObjectInitializer& ObjectInitializer):Super(ObjectInitializer.SetDefaultSubobjectClass<UExtraGameMovementComponent>(ACharacter::CharacterMovementComponentName))
+AExtraCharacter::AExtraCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UExtraGameMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	PrimaryActorTick.bCanEverTick = true;
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::Type::NoCollision);
+
+	// ── GAS ──
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("ASC"));
+
+	// ── 武器组件 ──
+	WeaponComponent = CreateDefaultSubobject<UExtraGameWeaponComponent>(TEXT("WeaponComponent"));
 }
 
-// Called when the game starts or when spawned
+UAbilitySystemComponent* AExtraCharacter::GetAbilitySystemComponent() const
+{
+	return AbilitySystemComponent;
+}
+
 void AExtraCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	
+	InitAbilitySystem();
 }
 
-// Called every frame
-void AExtraCharacter::Tick(float DeltaTime)
+void AExtraCharacter::InitAbilitySystem()
 {
-	Super::Tick(DeltaTime);
+	if (AbilitySystemComponent)
+	{
+		// 设置 Owner 和 Avatar
+		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+
+		// 创建 AttributeSet
+		if (!AttributeSet)
+		{
+			AttributeSet = NewObject<UExtraGameAttributeSet>(this);
+			AbilitySystemComponent->AddAttributeSetSubobject<UExtraGameAttributeSet>(AttributeSet);
+		}
+	}
 }
-
-// Called to bind functionality to input
-void AExtraCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-}
-
