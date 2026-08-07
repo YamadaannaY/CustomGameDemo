@@ -17,4 +17,7 @@ UCLASS()
 class EXTRACTGAMECHARACTER_API UExtraGameplayAbility : public UGameplayAbility
 {
 	GENERATED_BODY()
+	
+public:
+	UExtraGameplayAbility();
 };

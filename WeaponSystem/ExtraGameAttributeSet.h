@@ -26,7 +26,7 @@ class EXTRACTGAMECHARACTER_API UExtraGameAttributeSet : public UAttributeSet
 public:
 	UExtraGameAttributeSet();
 
-	// 属性复制相关（单机项目可暂不启用网络复制）
+	// 属性复制相关
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// 属性变化前回调（Clamp 用）

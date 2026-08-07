@@ -121,6 +121,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Weapon|Events")
 	FOnWeaponGroupChanged OnWeaponGroupChanged;
 
+	// 在 ASC 初始化后调用（由 Character::ServerSideInit 触发）
+	void OnASCInitialized();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

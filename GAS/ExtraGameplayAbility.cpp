@@ -1,4 +1,8 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "ExtraGameplayAbility.h"
+
+UExtraGameplayAbility::UExtraGameplayAbility()
+{
+	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ClientOrServer;
+}

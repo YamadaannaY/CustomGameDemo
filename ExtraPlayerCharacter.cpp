@@ -6,9 +6,8 @@
 #include "ExtraGameAnimInstance.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "WeaponSystem/ExtraGameWeaponComponent.h"
 #include "WeaponSystem/ExtraGameWeaponTypes.h"
-#include "AbilitySystemComponent.h"
+#include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 
 
 AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectInitializer)

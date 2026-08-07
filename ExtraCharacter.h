@@ -7,7 +7,7 @@
 #include "GameFramework/Character.h"
 #include "ExtraCharacter.generated.h"
 
-class UAbilitySystemComponent;
+class UExtraAbilitySystemComponent;
 class UExtraGameWeaponComponent;
 class UExtraGameAttributeSet;
 
@@ -23,6 +23,10 @@ public:
 	// ── IAbilitySystemInterface ────────────────────────────────
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
+	// ── GAS 初始化（由 Controller OnPossess 调用）─────────────
+	// 先调用 InitAbilityActorInfo，再调用 ASC 的 ServerSideInit
+	virtual void ServerSideInit();
+
 	// ── 组件访问器 ─────────────────────────────────────────────
 	UFUNCTION(BlueprintPure, Category = "Weapon")
 	UExtraGameWeaponComponent* GetWeaponComponent() const { return WeaponComponent; }
@@ -32,17 +36,9 @@ protected:
 	
 	// ── GAS ────────────────────────────────────────────────────
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "GAS")
-	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	TObjectPtr<UExtraAbilitySystemComponent> AbilitySystemComponent;
 
 	// ── 武器系统 ───────────────────────────────────────────────
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<UExtraGameWeaponComponent> WeaponComponent;
-
-	// ── 属性集（运行时由 ASC 管理，BeginPlay 中初始化）─────────
-	UPROPERTY()
-	TObjectPtr<UExtraGameAttributeSet> AttributeSet;
-
-private:
-	// 初始化 ASC 的 OwnerActor / AvatarActor
-	void InitAbilitySystem();
 };

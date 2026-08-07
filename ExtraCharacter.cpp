@@ -1,8 +1,7 @@
 #include "ExtraCharacter.h"
 #include "ExtraGameMovementComponent.h"
 #include "WeaponSystem/ExtraGameWeaponComponent.h"
-#include "WeaponSystem/ExtraGameAttributeSet.h"
-#include "AbilitySystemComponent.h"
+#include "GAS/ExtraAbilitySystemComponent.h"
 
 
 AExtraCharacter::AExtraCharacter(const FObjectInitializer& ObjectInitializer)
@@ -12,7 +11,7 @@ AExtraCharacter::AExtraCharacter(const FObjectInitializer& ObjectInitializer)
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::Type::NoCollision);
 
 	// ── GAS ──
-	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("ASC"));
+	AbilitySystemComponent = CreateDefaultSubobject<UExtraAbilitySystemComponent>(TEXT("ASC"));
 
 	// ── 武器组件 ──
 	WeaponComponent = CreateDefaultSubobject<UExtraGameWeaponComponent>(TEXT("WeaponComponent"));
@@ -26,22 +25,19 @@ UAbilitySystemComponent* AExtraCharacter::GetAbilitySystemComponent() const
 void AExtraCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	InitAbilitySystem();
 }
 
-void AExtraCharacter::InitAbilitySystem()
+void AExtraCharacter::ServerSideInit()
 {
 	if (AbilitySystemComponent)
 	{
-		// 设置 Owner 和 Avatar
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+		AbilitySystemComponent->ServerSideInit();
+	}
 
-		// 创建 AttributeSet
-		if (!AttributeSet)
-		{
-			AttributeSet = NewObject<UExtraGameAttributeSet>(this);
-			AbilitySystemComponent->AddAttributeSetSubobject<UExtraGameAttributeSet>(AttributeSet);
-		}
+	// ASC 初始化完毕后，通知武器组件装备默认武器组
+	if (WeaponComponent)
+	{
+		WeaponComponent->OnASCInitialized();
 	}
 }

@@ -22,6 +22,12 @@ void UExtraGameWeaponComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 不在 BeginPlay 中装备默认武器组，改为 OnASCInitialized 中处理
+	// 此时 ASC 尚未 InitAbilityActorInfo
+}
+
+void UExtraGameWeaponComponent::OnASCInitialized()
+{
 	CacheOwnerASC();
 
 	// 自动装备默认武器组
