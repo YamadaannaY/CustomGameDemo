@@ -3,15 +3,13 @@
 
 #include "ExtraGameMovementComponent.h"
 
+#include "GameFramework/Character.h"
+
 
 // Sets default values for this component's properties
 UExtraGameMovementComponent::UExtraGameMovementComponent()
 {
-	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
-	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = true;
-
-	// ...
 }
 
 
@@ -19,9 +17,6 @@ UExtraGameMovementComponent::UExtraGameMovementComponent()
 void UExtraGameMovementComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// ...
-	
 }
 
 
@@ -30,7 +25,56 @@ void UExtraGameMovementComponent::TickComponent(float DeltaTime, ELevelTick Tick
                                                 FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+}
 
-	// ...
+void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
+{
+	if (!HasValidData() || !CharacterOwner)
+	{
+		return;
+	}
+
+	if (!bOrientRotationToMovement)
+	{
+		Super::PhysicsRotation(DeltaTime);
+		return;
+	}
+
+	if (Acceleration.IsNearlyZero(0.001f))
+	{
+		return;
+	}
+
+	if (HasRootMotionSources() || CharacterOwner->IsPlayingRootMotion())
+	{
+		Super::PhysicsRotation(DeltaTime);
+		return;
+	}
+
+	FRotator CurrentRotation = UpdatedComponent->GetComponentRotation();
+	FRotator TargetRotation = Acceleration.Rotation();
+	TargetRotation.Pitch = 0.f;
+	TargetRotation.Roll = 0.f;
+	CurrentRotation.Pitch = 0.f;
+	CurrentRotation.Roll = 0.f;
+
+	if (CurrentRotation.Equals(TargetRotation, 0.1f))
+	{
+		return;
+	}
+
+	float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentRotation.Yaw, TargetRotation.Yaw);
+	float AbsDeltaYaw = FMath::Abs(DeltaYaw);
+
+	float SpeedBlend = FMath::Clamp(AbsDeltaYaw / 180.f, 0.f, 1.f);
+	float CurrentRotationRate = FMath::Lerp(MinRotationRate, MaxRotationRate, SpeedBlend);
+
+	float MaxYawThisFrame = CurrentRotationRate * DeltaTime;
+	float StepYaw = FMath::Clamp(DeltaYaw, -MaxYawThisFrame, MaxYawThisFrame);
+
+	FRotator DesiredRotation = CurrentRotation;
+	DesiredRotation.Yaw = CurrentRotation.Yaw + StepYaw;
+
+	MoveUpdatedComponent(FVector::ZeroVector, DesiredRotation, false);
 }
 
