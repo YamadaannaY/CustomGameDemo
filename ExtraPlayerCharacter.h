@@ -32,6 +32,7 @@ public:
 	virtual void Jump() override;
 
 	bool GetWalkMode() { return  bWalkMode;}
+	FORCEINLINE bool HasForwardInput() const { return bHasMoveInput && ForwardDirectionInput > 0.f; }
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	class USpringArmComponent* CamBoom;
@@ -122,6 +123,10 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Movement", meta=(ClampMin="1.0"))
 	float InputDirectionInterpSpeed = 12.f;
 
+	// Sprint 时的额外速度乘数（1.x = 微快，2.0 = 双倍）
+	UPROPERTY(EditDefaultsOnly, Category="Movement|Sprint", meta=(ClampMin="1.0"))
+	float SprintSpeedMultiplier = 1.8f;
+
 	FTimerHandle ArmLengthLerpTimerHandle;
 
 	float TargetArmLength;
@@ -129,9 +134,9 @@ private:
 	void Move(const FInputActionValue& InputActionValue);
 	void StopMoveInput(const FInputActionValue& InputActionValue);
 	void Look(const FInputActionValue& InputActionValue);
-	void OnSprintActionStarted(const FInputActionValue& InputActionValue);
-	void OnSprintActionTriggered(const FInputActionValue& InputActionValue);
-	void OnSprintActionCompleted(const FInputActionValue& InputActionValue);
+
+	friend class UGA_Evade;
+
 	void HandleCameraZoomInput(const FInputActionValue& InputActionValue);
 	void ChangeWalkMode(const FInputActionValue& InputActionValue);
 	void CalculateTargetDelta(float ForwardInput,float RightInput);
@@ -156,6 +161,9 @@ private:
 
 	FVector InputDirection;
 
+	// 由 GA_Evade::OnEvadeToSprint 设置，触发 Sprint 过渡（仅当前帧有效）
+	FVector SprintTransitionVelocity = FVector::ZeroVector;
+
 	bool HasCalTargetDelta = false ;
 
 	bool bHasMoveInput=false;
@@ -171,6 +179,8 @@ private:
 	float RightDirectionInput;
 
 	bool bWalkMode = false ;
+
+	bool bIsSprinting = false;
 
 	// 记录普攻按下时间，用于点按/长按判定
 	float NormalAttackPressTime = 0.f;

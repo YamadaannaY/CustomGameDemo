@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -25,11 +23,11 @@ struct EXTRACTGAMECHARACTER_API FIdleActionEntry
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IdleAction",
 		meta = (ClampMin = "0.1"))
-	float Duration = 3.0f;
+	float Duration = 10.0f;
 };
 
 /**
- *
+ * Custom AnimInst
  */
 UCLASS()
 class EXTRACTGAMECHARACTER_API UExtraGameAnimInstance : public UAnimInstance
@@ -59,11 +57,11 @@ public:
 	FORCEINLINE  bool IsWalkingMode() const {return bWalkMode;}
 
 	// -- 延迟停步系统 --
-	// 玩家已松开移动键，等待下一个 FootPlant Notify 授权退出
+	// 玩家已松开移动键，等待下一个 FootPlant Notify 退出
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
 	bool bRequestStop = false;
 
-	// FootPlant Notify 触发且 bRequestStop==true 时设为 true，AnimBP Transition Rule 消费
+	// FootPlant Notify 触发且 bRequestStop==true 时设为 true，AnimBP Transition Rule使用
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
 	bool bCanEnterStop = false;
 
@@ -103,6 +101,23 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion")
 	bool bIsMoving = false;
+
+	// -- Sprint 状态 --
+	// AN_EvadeToSprint 截断 Montage 后置为 true，AnimBP 过渡条件
+	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Sprint")
+	bool bEvadeToSprint = false;
+
+	// 角色当前处于 Sprint 状态（AnimBP 进入 Sprint 后置 true，退出后置 false）
+	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Sprint")
+	bool bIsSprinting = false;
+
+	// Sprint 模式下的速度，AnimBP 用来驱动 Sprint BlendSpace
+	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Sprint")
+	float SprintSpeed = 0.f;
+
+	// AnimBP 退出 Sprint 状态时调用
+	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
+	void OnSprintStateLeft();
 
 	FVector CacheVelocity = FVector::ZeroVector;
 

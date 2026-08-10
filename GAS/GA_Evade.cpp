@@ -1,5 +1,9 @@
 #include "GA_Evade.h"
 #include "AbilitySystemComponent.h"
+#include "GameplayTagContainer.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "ExtractGameCharacter/ExtraGameAnimInstance.h"
+#include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "GameFramework/Character.h"
 
 void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -18,7 +22,6 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	// 根据前向速度选 Montage：有前向速度 → 前冲，否则 → 后冲
 	const FVector Velocity = AvatarChar->GetVelocity();
 	const FVector ForwardDir = AvatarChar->GetActorForwardVector();
 	const float FwdSpeed = FVector::DotProduct(Velocity, ForwardDir);
@@ -30,8 +33,8 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	// 直接通过 AnimInstance 播放 Montage，走 UE 原生 Root Motion 管线
-	// 不用 GAS 的 PlayMontageAndWait，后者会让 Root Motion 被 GAS 提取后未正确写入 CMC
+	bTransitionedToSprint = false;
+
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
 		UAnimInstance* AnimInst = AvatarChar->GetMesh()->GetAnimInstance();
@@ -46,6 +49,49 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		FOnMontageEnded EndDelegate;
 		EndDelegate.BindUObject(this, &UGA_Evade::OnEvadeMontageEnded);
 		AnimInst->Montage_SetEndDelegate(EndDelegate, CurrentPlayingMontage);
+		
+		
+		UAbilityTask_WaitGameplayEvent* WaitToSprintTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,FGameplayTag::RequestGameplayTag("Evade.ToSprint"));
+		WaitToSprintTask->EventReceived.AddDynamic(this,&ThisClass::OnEvadeToSprint);
+		
+		WaitToSprintTask->ReadyForActivation();
+	}
+}
+
+void UGA_Evade::OnEvadeToSprint(FGameplayEventData EventData)
+{
+	UE_LOG(LogTemp,Warning,TEXT("123"));
+	if (bTransitionedToSprint)
+	{
+		return;
+	}
+	bTransitionedToSprint = true;
+
+	AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
+	if (!PlayerChar)
+	{
+		return;
+	}
+
+	UAnimInstance* AnimInst = PlayerChar->GetMesh()->GetAnimInstance();
+	if (!AnimInst || !CurrentPlayingMontage)
+	{
+		return;
+	}
+
+	// 截断 Montage（BlendOut=0，立即停止 Root Motion 写入速度）
+	AnimInst->Montage_Stop(SprintTransitionBlendOut, CurrentPlayingMontage);
+
+	// 注入 Sprint 速度到 CMC
+	FVector Vel = PlayerChar->GetActorForwardVector() * 800.f;
+	Vel.Z = 0.f;
+	PlayerChar->SprintTransitionVelocity = Vel;
+
+	// 设过渡标志
+	UExtraGameAnimInstance* GameAI = Cast<UExtraGameAnimInstance>(AnimInst);
+	if (GameAI)
+	{
+		GameAI->bEvadeToSprint = true;
 	}
 }
 
@@ -65,7 +111,7 @@ void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGamep
 			UAnimInstance* AnimInst = AvatarChar->GetMesh()->GetAnimInstance();
 			if (AnimInst && AnimInst->Montage_IsPlaying(CurrentPlayingMontage))
 			{
-				AnimInst->Montage_Stop(0.1f, CurrentPlayingMontage);
+				AnimInst->Montage_Stop(0.2f, CurrentPlayingMontage);
 			}
 		}
 		CurrentPlayingMontage = nullptr;

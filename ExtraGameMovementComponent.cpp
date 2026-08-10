@@ -1,26 +1,20 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "ExtraGameMovementComponent.h"
 
 #include "GameFramework/Character.h"
 
 
-// Sets default values for this component's properties
 UExtraGameMovementComponent::UExtraGameMovementComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
 
-// Called when the game starts
 void UExtraGameMovementComponent::BeginPlay()
 {
 	Super::BeginPlay();
 }
 
 
-// Called every frame
 void UExtraGameMovementComponent::TickComponent(float DeltaTime, ELevelTick TickType,
                                                 FActorComponentTickFunction* ThisTickFunction)
 {

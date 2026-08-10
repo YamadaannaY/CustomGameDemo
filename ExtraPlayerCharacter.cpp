@@ -41,6 +41,26 @@ void AExtraPlayerCharacter::BeginPlay()
 void AExtraPlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (!SprintTransitionVelocity.IsNearlyZero())
+	{
+		GetCharacterMovement()->Velocity = SprintTransitionVelocity;
+		SprintTransitionVelocity = FVector::ZeroVector;
+	}
+
+	// Sprint 时调高 MaxWalkSpeed，退出时恢复默认
+	if (bIsSprinting)
+	{
+		float SprintMax = GetCharacterMovement()->MaxWalkSpeed * SprintSpeedMultiplier;
+		GetCharacterMovement()->MaxWalkSpeed = FMath::FInterpTo(
+			GetCharacterMovement()->MaxWalkSpeed, SprintMax, DeltaTime, 5.f);
+	}
+	else
+	{
+		float DefaultMax = 600.f;
+		GetCharacterMovement()->MaxWalkSpeed = FMath::FInterpTo(
+			GetCharacterMovement()->MaxWalkSpeed, DefaultMax, DeltaTime, 5.f);
+	}
 }
 
 // Called to bind functionality to input
@@ -56,9 +76,6 @@ void AExtraPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		InputComp->BindAction(MoveAction,ETriggerEvent::Triggered,this,&ThisClass::Move);
 		InputComp->BindAction(MoveAction,ETriggerEvent::Completed,this,&ThisClass::StopMoveInput);
 		InputComp->BindAction(LookAction,ETriggerEvent::Triggered,this,&ThisClass::Look);
-		InputComp->BindAction(SprintAction,ETriggerEvent::Started,this,&ThisClass::OnSprintActionStarted);
-		InputComp->BindAction(SprintAction,ETriggerEvent::Triggered,this,&ThisClass::OnSprintActionTriggered);
-		InputComp->BindAction(SprintAction,ETriggerEvent::Completed,this,&ThisClass::OnSprintActionCompleted);
 		InputComp->BindAction(CameraZoomInputAction,ETriggerEvent::Triggered,this,&ThisClass::HandleCameraZoomInput);
 		InputComp->BindAction(CtrlInputAction,ETriggerEvent::Triggered,this,&ThisClass::ChangeWalkMode);
 
@@ -172,13 +189,15 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	InputDirection = FVector::ZeroVector;
 	SmoothedInputDirection = FVector::ZeroVector;
 
-	/*// Root Motion montage 控制着角色运动，此时松手不应干预
-	if (IsPlayingRootMotion())
+	// 只在普通跑步移动时才响应松手停步，避免干扰 Evade / Stop / Turn 等 Montage
+	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
 	{
-		return;
-	}*/
+		if (AnimInst->IsAnyMontagePlaying())
+		{
+			return;
+		}
+	}
 
-	// 先清除旧的停步请求，本次松手会重新决定走哪条路径
 	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
 	{
 		AnimInst->ClearStopRequest();
@@ -241,19 +260,6 @@ void AExtraPlayerCharacter::Look(const FInputActionValue& InputActionValue)
 		AddControllerYawInput(DesiredYawInput);
 		AddControllerPitchInput(-DesiredPitchInput);
 	}
-}
-
-void AExtraPlayerCharacter::OnSprintActionStarted(const FInputActionValue& InputActionValue)
-{
-}
-
-void AExtraPlayerCharacter::OnSprintActionTriggered(const FInputActionValue& InputActionValue)
-{
-}
-
-void AExtraPlayerCharacter::OnSprintActionCompleted(const FInputActionValue& InputActionValue)
-{
-
 }
 
 void AExtraPlayerCharacter::HandleCameraZoomInput(const FInputActionValue& InputActionValue)

@@ -14,10 +14,6 @@ UExtraGameWeaponComponent::UExtraGameWeaponComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-// ──────────────────────────────────────────────────────────────
-// 生命周期
-// ──────────────────────────────────────────────────────────────
-
 void UExtraGameWeaponComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -30,11 +26,20 @@ void UExtraGameWeaponComponent::OnASCInitialized()
 {
 	CacheOwnerASC();
 
-	// 自动装备默认武器组
-	if (WeaponDataAsset && WeaponDataAsset->DefaultWeaponGroupTag.IsValid())
+	if (!WeaponDataAsset)
 	{
-		EquipWeaponGroup(WeaponDataAsset->DefaultWeaponGroupTag);
+		UE_LOG(LogTemp, Error, TEXT("[WeaponComponent] OnASCInitialized: WeaponDataAsset is null! Configure it on the Character Blueprint."));
+		return;
 	}
+
+	if (!WeaponDataAsset->DefaultWeaponGroupTag.IsValid())
+	{
+		UE_LOG(LogTemp, Error, TEXT("[WeaponComponent] OnASCInitialized: DefaultWeaponGroupTag is invalid in WeaponDataAsset '%s'."), *WeaponDataAsset->GetName());
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[WeaponComponent] OnASCInitialized: Equipping default weapon group '%s'."), *WeaponDataAsset->DefaultWeaponGroupTag.ToString());
+	EquipWeaponGroup(WeaponDataAsset->DefaultWeaponGroupTag);
 }
 
 void UExtraGameWeaponComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)

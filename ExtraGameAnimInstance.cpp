@@ -1,8 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "ExtraGameAnimInstance.h"
-
 #include "ExtraGameMovementComponent.h"
 #include "ExtraPlayerCharacter.h"
 
@@ -21,6 +17,9 @@ void UExtraGameAnimInstance::RequestStop()
 	bRequestStop = true;
 	bCanEnterStop = false;
 	PendingStopFoot = EFootPlant::None;
+
+	// 停步时退出 Sprint 状态
+	bIsSprinting = false;
 }
 
 void UExtraGameAnimInstance::ClearStopRequest()
@@ -32,10 +31,15 @@ void UExtraGameAnimInstance::ClearStopRequest()
 
 void UExtraGameAnimInstance::OnStopStateEntered()
 {
-	// 进入 Stop 状态后消费请求，防止重复触发
 	bRequestStop = false;
 	bCanEnterStop = false;
 	PendingStopFoot = EFootPlant::None;
+}
+
+void UExtraGameAnimInstance::OnSprintStateLeft()
+{
+	bIsSprinting = false;
+	bEvadeToSprint = false;
 }
 
 void UExtraGameAnimInstance::NativeInitializeAnimation()
@@ -64,14 +68,12 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 		Acceleration = OwnerMovementComp->GetCurrentAcceleration().Length();
 	}
-	
-	// 离地时清除停步请求，防止落地后误触发 Stop
+
 	if (bisFalling || bisJumping)
 	{
 		ClearStopRequest();
 	}
 
-	// -- BlendSpace 驱动参数 --
 	if (OwnerCharacter && OwnerMovementComp)
 	{
 		if (!bRequestStop)
@@ -79,23 +81,29 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			CacheVelocity = OwnerCharacter->GetVelocity();
 			GroundSpeed = CacheVelocity.Size2D();
 		}
+		else if (bEvadeToSprint)
+		{
+			CacheVelocity = OwnerCharacter->GetVelocity();
+			GroundSpeed = CacheVelocity.Size2D();
+			bIsSprinting = true;
+			bEvadeToSprint = false;
+		}
 		else
 		{
-			OwnerMovementComp->Velocity = CacheVelocity ; 
+			OwnerMovementComp->Velocity = CacheVelocity;
 		}
 		bIsMoving = GroundSpeed > 3.f && OwnerMovementComp->IsMovingOnGround();
-
-		if (!bRequestStop )
+		
+		if (!bRequestStop)
 		{
-			// Stride：归一化到 MaxWalkSpeed
-			const float MaxSpeed = OwnerMovementComp->MaxWalkSpeed;
-			Stride = (MaxSpeed > 0.f) ? FMath::Clamp(GroundSpeed*StrideCoefficient / MaxSpeed, 0.f, 1.f) : 0.f;
+			const float MaxSpeed = bIsSprinting
+				? OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed * 2.f
+				: OwnerMovementComp->MaxWalkSpeed;
+			Stride = (MaxSpeed > 0.f) ? FMath::Clamp(GroundSpeed * StrideCoefficient / MaxSpeed, 0.f, 1.f) : 0.f;
 		}
 
-		// WalkRunBlend：暂固定为 0（Walk 行），后续可扩展为冲刺驱动
-		WalkRunBlend = 0.f;
+		WalkRunBlend = bIsSprinting ? 1.f : 0.f;
 
-		// MoveDirection：速度方向相对角色朝向的角度
 		if (bIsMoving)
 		{
 			const FRotator ActorRot = OwnerCharacter->GetActorRotation();
@@ -111,10 +119,8 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		{
 			MoveDirection = 0.f;
 		}
-
 	}
 
-	// -- Idle Action System --
 	UpdateIdleActionSystem(DeltaSeconds);
 }
 
@@ -123,18 +129,13 @@ void UExtraGameAnimInstance::NativeThreadSafeUpdateAnimation(float DeltaSeconds)
 	Super::NativeThreadSafeUpdateAnimation(DeltaSeconds);
 }
 
-// ── Idle Action System ─────────────────────────────────────────────────
-
 int32 UExtraGameAnimInstance::PickNextIdleAction()
 {
 	const int32 N = IdleActionEntries.Num();
 	if (N == 0) return 0;
 
-	// 只有一个动作时始终选它
 	if (N == 1) return 1;
 
-	// O(1) 无重复随机选取：
-	// 从 [0, N-2] 中选取，若结果 >= 排除索引则 +1，均匀映射到 [0, N-1] \ {excluded}
 	int32 RandomIdx = FMath::RandRange(0, N - 2);
 	if (RandomIdx >= PrevIdleActionIndex)
 	{
@@ -142,12 +143,11 @@ int32 UExtraGameAnimInstance::PickNextIdleAction()
 	}
 
 	PrevIdleActionIndex = RandomIdx;
-	return RandomIdx + 1; // 转为 1-based 给 AnimBP
+	return RandomIdx + 1;
 }
 
 void UExtraGameAnimInstance::UpdateIdleActionSystem(float DeltaSeconds)
 {
-	// Guard：只在站立不动时运行，移动/下落/跳跃时重置为 Idle
 	if (bIsMoving || bisFalling || bisJumping)
 	{
 		IdlePhaseTimer = 0.f;
@@ -166,7 +166,6 @@ void UExtraGameAnimInstance::UpdateIdleActionSystem(float DeltaSeconds)
 
 	if (IdleActionIndex == 0)
 	{
-		// ── Phase 0: Idle ─────────────────────────────────────
 		if (IdlePhaseTimer >= IdleChangeInterval)
 		{
 			IdleActionIndex = PickNextIdleAction();
@@ -181,15 +180,13 @@ void UExtraGameAnimInstance::UpdateIdleActionSystem(float DeltaSeconds)
 	}
 	else
 	{
-		// ── Phase 1..N: Action ────────────────────────────────
 		const int32 ArrayIdx = IdleActionIndex - 1;
 		const float ActionDuration = IdleActionEntries.IsValidIndex(ArrayIdx)
 			? IdleActionEntries[ArrayIdx].Duration
-			: 2.0f; // 兜底值
+			: 10.0f;
 
 		if (IdlePhaseTimer >= ActionDuration)
-		{ 
-			// 播完 → 回到常驻 Idle
+		{
 			IdleActionIndex = 0;
 			IdlePhaseTimer = 0.f;
 			CurrentIdleActionSequence = nullptr;
