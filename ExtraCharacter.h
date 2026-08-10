@@ -31,6 +31,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Weapon")
 	UExtraGameWeaponComponent* GetWeaponComponent() const { return WeaponComponent; }
 
+	// GAS 是否已初始化（防止 OnPossess 重复调用）
+	bool bGASInitialized = false;
+
 protected:
 	virtual void BeginPlay() override;
 	

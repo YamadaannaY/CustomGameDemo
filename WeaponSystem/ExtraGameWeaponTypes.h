@@ -72,12 +72,7 @@ USTRUCT(BlueprintType)
 struct EXTRACTGAMECHARACTER_API FExtraGameWeaponGroup
 {
 	GENERATED_BODY()
-
-	// ── 标识 ────────────────────────────────────────────────
-	// 武器组唯一 Tag（如 "WeaponGroup.DualSwords"）
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Group|Identity")
-	FGameplayTag GroupTag;
-
+	
 	// 武器组显示名称（UI 用）
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Group|Identity")
 	FText GroupDisplayName;

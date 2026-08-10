@@ -29,6 +29,12 @@ void AExtraCharacter::BeginPlay()
 
 void AExtraCharacter::ServerSideInit()
 {
+	if (bGASInitialized)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ExtraCharacter] ServerSideInit: GAS already initialized. Skipping duplicate call."));
+		return;
+	}
+
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
@@ -40,4 +46,6 @@ void AExtraCharacter::ServerSideInit()
 	{
 		WeaponComponent->OnASCInitialized();
 	}
+
+	bGASInitialized = true;
 }

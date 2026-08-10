@@ -1,0 +1,197 @@
+#include "GA_Combo.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "GameplayTagsManager.h"
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
+#include "ExtractGameCharacter/ExtraPlayerCharacter.h"
+#include  "GameFramework/CharacterMovementComponent.h"
+#include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+
+UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
+{
+	//为了在GA内不重复触发GA
+	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
+	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
+}
+
+void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+                                const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
+{
+	if (! K2_CommitAbility())
+	{
+		K2_EndAbility();
+		return ;
+	}
+
+	if (HasAuthorityOrPredictionKey(ActorInfo,&ActivationInfo))
+	{
+		UAbilityTask_PlayMontageAndWait* PlayComboMontageTask=UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this,NAME_None,ComboMontage);
+		PlayComboMontageTask->OnBlendOut.AddDynamic(this,&ThisClass::K2_EndAbility);
+		PlayComboMontageTask->OnCancelled.AddDynamic(this,&ThisClass::K2_EndAbility);
+		PlayComboMontageTask->OnCompleted.AddDynamic(this,&ThisClass::K2_EndAbility);
+		PlayComboMontageTask->OnInterrupted.AddDynamic(this,&ThisClass::K2_EndAbility);
+		PlayComboMontageTask->ReadyForActivation();
+
+		//接收Notify的EventTag
+		UAbilityTask_WaitGameplayEvent* WaitComboChangeEventTask=UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,GetComboChangedEventTag(),nullptr,false,false);
+		WaitComboChangeEventTask->EventReceived.AddDynamic(this,&ThisClass::ComboChangedEventReceived);
+		WaitComboChangeEventTask->ReadyForActivation();
+		
+		UAbilityTask_WaitGameplayEvent* WaitCancelAbilityTask=UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,GetRecoveryCancelTag(),nullptr,false,true);
+		WaitCancelAbilityTask->EventReceived.AddDynamic(this,&ThisClass::OnRecoveryCancelNotifyReceived);
+		WaitCancelAbilityTask->ReadyForActivation();
+		
+		
+		
+	}
+
+	//在服务端实现Damage逻辑
+	if (K2_HasAuthority())
+	{
+		UAbilityTask_WaitGameplayEvent* WaitTargetEventTask=UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,GetComboTargetEventTag());
+		WaitTargetEventTask->EventReceived.AddDynamic(this,&ThisClass::DoDamage);
+		WaitTargetEventTask->ReadyForActivation();
+		
+	}
+
+	//处理第一次输入
+	SetupWaitComboInputPress();
+}
+
+void UGA_Combo::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	// 确保清理 Timer
+	if (MovementCheckTimerHandle.IsValid())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(MovementCheckTimerHandle);
+	}
+	
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+FGameplayTag UGA_Combo::GetComboChangedEventTag()
+{
+	return FGameplayTag::RequestGameplayTag("ability.combo.change");
+}
+
+FGameplayTag UGA_Combo::GetComboChangedEventEndTag()
+{
+	return FGameplayTag::RequestGameplayTag("ability.combo.change.end");
+}
+
+FGameplayTag UGA_Combo::GetComboTargetEventTag()
+{
+	return FGameplayTag::RequestGameplayTag("ability.combo.damage");
+}
+
+FGameplayTag UGA_Combo::GetRecoveryCancelTag()
+{
+	return FGameplayTag::RequestGameplayTag("ability.combo.cancel");
+}
+
+void UGA_Combo::HandleInputPress(float TimeWaited)
+{
+	SetupWaitComboInputPress();
+	TryCommitCombo();
+}
+
+void UGA_Combo::SetupWaitComboInputPress()
+{
+	UAbilityTask_WaitInputPress* WaitInputPress=UAbilityTask_WaitInputPress::WaitInputPress(this);
+	WaitInputPress->OnPress.AddDynamic(this,&ThisClass::HandleInputPress);
+	WaitInputPress->ReadyForActivation();
+}
+
+void UGA_Combo::TryCommitCombo()
+{
+	if (NextComboName==NAME_None) return;
+	
+	UAnimInstance* OwnerAnimInst=GetOwnerAnimInstance();
+	if (!OwnerAnimInst) return;
+
+	//设置当前Montage Section的NextSection
+	OwnerAnimInst->Montage_SetNextSection(OwnerAnimInst->Montage_GetCurrentSection(ComboMontage),NextComboName,ComboMontage);
+	OwnerAnimInst->Montage_JumpToSection(NextComboName, ComboMontage);
+}
+
+TSubclassOf<UGameplayEffect> UGA_Combo::GetDamageEffectForCurrentCombo() const
+{
+	if (UAnimInstance* OwnerAnimInst=GetOwnerAnimInstance())
+	{
+		const FName CurrentSectionName=OwnerAnimInst->Montage_GetCurrentSection(ComboMontage);
+		const TSubclassOf<UGameplayEffect>* FoundEffectPtr=DamageEffectMap.Find(CurrentSectionName);
+		if (FoundEffectPtr)
+		{
+			return *FoundEffectPtr;
+		}
+	} 
+	return DefaultDamageEffect;
+}
+
+void UGA_Combo::ComboChangedEventReceived(FGameplayEventData InPayLoad)
+{
+	const FGameplayTag EventTag=InPayLoad.EventTag;
+
+	if (EventTag==GetComboChangedEventEndTag())
+	{
+		//此时到Section末尾，需要重置NextComboName
+		NextComboName=NAME_None;
+		return;
+	}
+
+	TArray<FName> TagNames;
+	UGameplayTagsManager::Get().SplitGameplayTagFName(EventTag, TagNames);
+	NextComboName=TagNames.Last();
+}
+
+void UGA_Combo::DoDamage(FGameplayEventData Data)
+{
+}
+
+void UGA_Combo::OnRecoveryCancelNotifyReceived(FGameplayEventData Payload)
+{
+	// 进入后摇窗口：先检查当前是否“已经”按下了 WASD
+	if (HasMovementInput())
+	{
+		// 玩家已经在按移动键了！立刻打断后摇，结束 GA
+		K2_EndAbility();
+		return;
+	}
+
+	// 如果当前没按 WASD，启动一个轮询 Timer（或者使用自定义的 WaitMovementInput Task）
+	// 每帧/每 0.02 秒检查一次玩家是否按下移动键，直到动画自己播放完毕
+	GetWorld()->GetTimerManager().SetTimer(
+		MovementCheckTimerHandle, 
+		this, 
+		&ThisClass::CheckMovementInputForCancel, 
+		0.02f, 
+		true // 循环检查
+	);
+}
+
+bool UGA_Combo::HasMovementInput() const
+{
+	AExtraPlayerCharacter* AvatarChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
+	if (AvatarChar && AvatarChar->GetCharacterMovement())
+	{
+		// 检查加速度向量的模长，大于 0 说明玩家正在按 WASD / 摇杆
+		return AvatarChar->GetCharacterMovement()->GetCurrentAcceleration().SizeSquared() > 0.0f;
+	}
+	
+	return false  ; 
+}
+
+void UGA_Combo::CheckMovementInputForCancel()
+{
+	if (HasMovementInput())
+	{
+		// 清理 Timer
+		GetWorld()->GetTimerManager().ClearTimer(MovementCheckTimerHandle);
+        
+		// 触发打断！结束 GA
+		// 这会触发 EndAbility()，停止 Montage 并释放 RootMotion 锁，角色立刻跑起来
+		K2_EndAbility();
+	}
+}
