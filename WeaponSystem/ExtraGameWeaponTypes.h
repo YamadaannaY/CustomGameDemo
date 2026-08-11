@@ -64,8 +64,7 @@ struct EXTRACTGAMECHARACTER_API FExtraGameWeaponEntry
  * 一个武器组 = 多个 Weapon Mesh + 一套共享的 GA / GE / Tags / Params。
  *
  * 使用方式：
- * - 双持：WeaponEntries 放入 [左手刀, 右手刀]，共享同一套技能 GA
- * - 剑盾：WeaponEntries 放入 [剑, 盾牌]，技能 GA 同时作用于两者
+ * 
  * - 切换武器组 = 旧组全部隐藏 + 新组全部显示 + GA/GE 整体替换
  */
 USTRUCT(BlueprintType)

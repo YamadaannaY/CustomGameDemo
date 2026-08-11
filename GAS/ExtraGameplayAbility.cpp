@@ -1,5 +1,8 @@
 #include "ExtraGameplayAbility.h"
 
+#include "ExtractGameCharacter/ExtraPlayerCharacter.h"
+#include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
+
 UExtraGameplayAbility::UExtraGameplayAbility()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -15,4 +18,18 @@ UAnimInstance* UExtraGameplayAbility::GetOwnerAnimInstance() const
 		return OwnerSkeletalMeshComp->GetAnimInstance();
 	}
 	return nullptr;
+}
+
+void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
+	bool bReplicateEndAbility, bool bWasCancelled)
+{
+	
+	AExtraPlayerCharacter* Char = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
+	if (Char && Char->GetWeaponComponent() && ClearWeaponShowOnAbilityEnd)
+	{
+		Char->GetWeaponComponent()->HideWeapon();
+	}
+	
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

@@ -42,8 +42,6 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		WaitCancelAbilityTask->EventReceived.AddDynamic(this,&ThisClass::OnRecoveryCancelNotifyReceived);
 		WaitCancelAbilityTask->ReadyForActivation();
 		
-		
-		
 	}
 
 	//在服务端实现Damage逻辑
@@ -114,6 +112,8 @@ void UGA_Combo::TryCommitCombo()
 	//设置当前Montage Section的NextSection
 	OwnerAnimInst->Montage_SetNextSection(OwnerAnimInst->Montage_GetCurrentSection(ComboMontage),NextComboName,ComboMontage);
 	OwnerAnimInst->Montage_JumpToSection(NextComboName, ComboMontage);
+	
+	NextComboName=NAME_None;
 }
 
 TSubclassOf<UGameplayEffect> UGA_Combo::GetDamageEffectForCurrentCombo() const
@@ -166,7 +166,7 @@ void UGA_Combo::OnRecoveryCancelNotifyReceived(FGameplayEventData Payload)
 		MovementCheckTimerHandle, 
 		this, 
 		&ThisClass::CheckMovementInputForCancel, 
-		0.02f, 
+		0.1f, 
 		true // 循环检查
 	);
 }

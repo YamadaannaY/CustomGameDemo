@@ -64,16 +64,14 @@ public:
 	/** 切换到另一个武器组 */
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Group")
 	bool SwitchWeaponGroup(FGameplayTag NewGroupTag);
-
-	/** 循环切换到下一个武器组（按 DataAsset 中的顺序） */
-	UFUNCTION(BlueprintCallable, Category = "Weapon|Group")
-	bool CycleToNextWeaponGroup();
-
-	// ── 整体显隐（所有 Mesh） ───────────────────────────────
-
+	
 	/** 显示当前武器组所有 Mesh（过场后恢复显示等） */
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
 	void ShowWeapon();
+
+	/** 强制显示当前武器组所有 Mesh，同时清空逐条目隐藏状态 */
+	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
+	void ShowAllWeapons();
 
 	/** 隐藏当前武器组所有 Mesh（过场、攀爬、游泳等） */
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
@@ -95,10 +93,9 @@ public:
 
 	// ── 查询 API ────────────────────────────────────────────
 
-	/** 获取当前武器组完整数据（C++ 专用，可能返回 nullptr） */
 	const FExtraGameWeaponGroup* GetCurrentWeaponGroup() const;
 
-	/** 通过 GroupTag 获取武器组数据（C++ 专用，可能返回 nullptr） */
+	/** 通过 GroupTag 获取武器组数据 */
 	const FExtraGameWeaponGroup* GetWeaponGroupByTag(FGameplayTag GroupTag) const;
 
 	/** 蓝图：获取当前武器组数据，返回是否有效 */

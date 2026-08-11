@@ -13,10 +13,7 @@
  * 一个角色原型对应一个 DataAsset，包含该角色可使用的全部武器组。
  *
  * 使用方式：
- * 1. 在编辑器中创建此 DataAsset 的蓝图子类
- * 2. 填入 WeaponGroups Map（GroupTag → 武器组数据）
- * 3. 设置 DefaultWeaponGroupTag
- * 4. 在角色蓝图的 WeaponComponent 上引用此 DataAsset
+ * 在角色BP的 WeaponComponent 上引用此 DataAsset
  */
 UCLASS(BlueprintType)
 class EXTRACTGAMECHARACTER_API UExtraGameWeaponData : public UPrimaryDataAsset

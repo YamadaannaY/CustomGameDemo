@@ -211,34 +211,6 @@ bool UExtraGameWeaponComponent::SwitchWeaponGroup(FGameplayTag NewGroupTag)
 	return EquipWeaponGroup(NewGroupTag);
 }
 
-bool UExtraGameWeaponComponent::CycleToNextWeaponGroup()
-{
-	if (!WeaponDataAsset || WeaponDataAsset->GetGroupCount() == 0)
-	{
-		return false;
-	}
-
-	const TArray<FGameplayTag> AllTags = WeaponDataAsset->GetAllGroupTags();
-	if (AllTags.Num() == 0)
-	{
-		return false;
-	}
-
-	// 找到当前 Tag 的索引
-	int32 CurrentIndex = AllTags.IndexOfByKey(CurrentGroupTag);
-
-	// 如果当前没有装备或处于最后一个，回到第一个
-	const int32 NextIndex = (CurrentIndex == INDEX_NONE || CurrentIndex >= AllTags.Num() - 1)
-		? 0
-		: CurrentIndex + 1;
-
-	return SwitchWeaponGroup(AllTags[NextIndex]);
-}
-
-// ──────────────────────────────────────────────────────────────
-// 整体显隐
-// ──────────────────────────────────────────────────────────────
-
 void UExtraGameWeaponComponent::ShowWeapon()
 {
 	bWeaponVisible = true;
@@ -252,6 +224,20 @@ void UExtraGameWeaponComponent::ShowWeapon()
 			{
 				SetWeaponMeshVisibility(Entry.WeaponTag, true);
 			}
+		}
+	}
+}
+
+void UExtraGameWeaponComponent::ShowAllWeapons()
+{
+	bWeaponVisible = true;
+	HiddenWeaponEntries.Empty();
+
+	if (const FExtraGameWeaponGroup* Group = GetCurrentWeaponGroup())
+	{
+		for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
+		{
+			SetWeaponMeshVisibility(Entry.WeaponTag, true);
 		}
 	}
 }
