@@ -10,9 +10,10 @@
 
 UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
 {
-	//为了在GA内不重复触发GA
+	//为了在GA内不重复触发GA，且在空中时不激活地面 Combo
 	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
+	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirborneTag());
 }
 
 void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
