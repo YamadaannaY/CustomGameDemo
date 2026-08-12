@@ -25,9 +25,24 @@ public:
 
 private:
 	void OnEvadeMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	void PollMoveInputForSprint();
+	void UpdateEvadeFacing();
 
 	UPROPERTY(EditDefaultsOnly, Category="Montage")
 	float SprintTransitionBlendOut = 0.35f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Montage")
+	float InputPollInterval = 0.05f;
+
+	// -- Phase 1: AN 触发之前，左右输入调整朝向 --
+	UPROPERTY(EditDefaultsOnly, Category="Evade|Facing")
+	float EvadeFacingUpdateInterval = 0.016f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Evade|Facing")
+	float EvadeMaxRotationAngle = 90.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Evade|Facing")
+	float EvadeRotationInterpSpeed = 10.f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Montage")
 	UAnimMontage* ForwardEvadeMontage;
@@ -38,5 +53,10 @@ private:
 	UPROPERTY()
 	TObjectPtr<UAnimMontage> CurrentPlayingMontage;
 
+	FTimerHandle InputPollTimer;
+	FTimerHandle EvadeFacingTimer;
+	float EvadeBaseYaw = 0.f;
+	float CurrentEvadeFacingOffset = 0.f;
 	bool bTransitionedToSprint = false;
+	bool bIsPollingForInput = false;
 };

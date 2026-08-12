@@ -8,6 +8,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "WeaponSystem/ExtraGameWeaponTypes.h"
 #include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
+#include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 
 
 AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectInitializer)
@@ -61,9 +62,23 @@ void AExtraPlayerCharacter::Tick(float DeltaTime)
 		GetCharacterMovement()->MaxWalkSpeed = FMath::FInterpTo(
 			GetCharacterMovement()->MaxWalkSpeed, DefaultMax, DeltaTime, 5.f);
 	}
+
+	// 维护空中的 GameplayTag（用于 GA activation 过滤）
+	if (AbilitySystemComponent)
+	{
+		const bool bAirborne = GetCharacterMovement()->IsFalling();
+		const FGameplayTag AirborneTag = UUExtraAbilitySystemStatic::GetAirborneTag();
+		if (bAirborne && !AbilitySystemComponent->HasMatchingGameplayTag(AirborneTag))
+		{
+			AbilitySystemComponent->AddLooseGameplayTag(AirborneTag);
+		}
+		else if (!bAirborne && AbilitySystemComponent->HasMatchingGameplayTag(AirborneTag))
+		{
+			AbilitySystemComponent->RemoveLooseGameplayTag(AirborneTag);
+		}
+	}
 }
 
-// Called to bind functionality to input
 void AExtraPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
@@ -94,7 +109,6 @@ void AExtraPlayerCharacter::PawnClientRestart()
 {
 	Super::PawnClientRestart();
 
-	// 在 owning client 上添加 IMC（比 SetupPlayerInputComponent 更可靠）
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		if (UEnhancedInputLocalPlayerSubsystem* InputSystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))

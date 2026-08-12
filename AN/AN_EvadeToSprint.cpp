@@ -28,18 +28,13 @@ void UAN_EvadeToSprint::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBa
 		return;
 	}
 
-	if (!PlayerChar->HasMoveInput())
-	{
-		return;
-	}
+	// 无条件发送事件，由 GA 负责在 Notify 之后持续检测输入
+	if (!MeshComp->GetOwner()) return;
 
-	//触发Notify时将EventTag发送给Actor以触发WaitEventTask，进而触发Received回调
-	if (! MeshComp->GetOwner()) return;
-
-	UAbilitySystemComponent* OwnerASC=UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(MeshComp->GetOwner());
+	UAbilitySystemComponent* OwnerASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(MeshComp->GetOwner());
 	if (!OwnerASC) return;
 
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(MeshComp->GetOwner(),FGameplayTag::RequestGameplayTag("Evade.ToSprint"),FGameplayEventData());
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(MeshComp->GetOwner(), FGameplayTag::RequestGameplayTag("Evade.ToSprint"), FGameplayEventData());
 }
 
 FString UAN_EvadeToSprint::GetNotifyName_Implementation() const
