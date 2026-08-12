@@ -15,4 +15,5 @@ class EXTRACTGAMECHARACTER_API UUExtraAbilitySystemStatic : public UBlueprintFun
 	
 public:
 	static FGameplayTag GetBasicAttackAbilityTag();
+	static FGameplayTag GetAirborneTag();
 };
