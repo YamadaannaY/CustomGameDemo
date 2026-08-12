@@ -34,6 +34,9 @@ public:
 	bool GetWalkMode() { return  bWalkMode;}
 	FORCEINLINE bool HasForwardInput() const { return bHasMoveInput && ForwardDirectionInput > 0.f; }
 	FORCEINLINE bool HasMoveInput() const { return bHasMoveInput; }
+	FORCEINLINE float GetRightDirectionInput() const { return RightDirectionInput; }
+	FORCEINLINE const FVector& GetInputDirection() const { return InputDirection; }
+	FORCEINLINE UMotionWarpingComponent* GetMotionWarpingComponent() const { return MotionWarpingComp; }
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	class USpringArmComponent* CamBoom;
