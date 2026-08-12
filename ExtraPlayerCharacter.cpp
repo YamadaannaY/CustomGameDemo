@@ -257,9 +257,7 @@ void AExtraPlayerCharacter::Look(const FInputActionValue& InputActionValue)
 	if (Controller != nullptr)
 	{
 		FVector2D LookAxisVector = InputActionValue.Get<FVector2D>();
-
-		FRotator CurrentRotation = Controller->GetControlRotation();
-
+		
 		const float MaxDegreesPerSecond = 360.f;
 
 		const float DelatTime = GetWorld()->GetDeltaSeconds();

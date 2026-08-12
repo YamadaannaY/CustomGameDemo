@@ -111,7 +111,6 @@ void UGA_Evade::UpdateEvadeFacing()
 		}
 
 		// 以 EvadeBaseYaw 为"前"，计算输入方向在左右轴上的投影
-		const FVector EvadeForward = FRotationMatrix(FRotator(0.f, EvadeBaseYaw, 0.f)).GetUnitAxis(EAxis::X);
 		const FVector EvadeRight = FRotationMatrix(FRotator(0.f, EvadeBaseYaw, 0.f)).GetUnitAxis(EAxis::Y);
 
 		const float RawRight = FVector::DotProduct(InputDir, EvadeRight);
