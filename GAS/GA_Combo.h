@@ -5,7 +5,7 @@
 #include "GA_Combo.generated.h"
 
 /**
- * 
+ *
  */
 UCLASS()
 class  EXTRACTGAMECHARACTER_API UGA_Combo : public UExtraGameplayAbility
@@ -23,7 +23,7 @@ public:
 	static FGameplayTag GetComboChangedEventEndTag();
 	//获得TargetEvent对应的DamageTag
 	static FGameplayTag GetComboTargetEventTag();
-	
+
 	static FGameplayTag GetRecoveryCancelTag();
 
 private:
@@ -47,7 +47,7 @@ private:
 	//实现伤害逻辑
 	UFUNCTION()
 	void DoDamage(FGameplayEventData Data);
-	
+
 	//DamageGE
 	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
 	TSubclassOf<UGameplayEffect> DefaultDamageEffect;
@@ -55,14 +55,14 @@ private:
 	//对不同Section对应的Montage触发的DamageGE进行不同的设置
 	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
 	TMap<FName,TSubclassOf<UGameplayEffect>> DamageEffectMap;
-	
+
 	//包含所有ComboAnimationSequence的Montage
 	UPROPERTY(EditDefaultsOnly,Category="Animation")
 	UAnimMontage* ComboMontage;
-	
+
 	//获得当前ComboMontage对应的下一个ComboMontage的字面量后缀，同时设置ComboSection的字面量和后缀相等
 	FName NextComboName;
-	
+
 protected:
 	// 后摇 Notify 触发时的回调（通过 AnimNotify 发送 EventTag 触发）
 	UFUNCTION()
@@ -74,4 +74,11 @@ protected:
 	// 定时检查移动输入的 Timer
 	FTimerHandle MovementCheckTimerHandle;
 	void CheckMovementInputForCancel();
+
+	// 是否因移动输入触发 EndAbility（用于区分 BlendOut 时间）
+	bool bEndingFromMovement = false;
+
+	// 移动打断时的 Montage 淡出时间
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	float MovementCancelBlendOutTime = 0.1f;
 };

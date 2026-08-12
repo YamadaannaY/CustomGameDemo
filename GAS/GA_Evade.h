@@ -27,7 +27,7 @@ private:
 	void OnEvadeMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
 	UPROPERTY(EditDefaultsOnly, Category="Montage")
-	float SprintTransitionBlendOut = 0.0f;
+	float SprintTransitionBlendOut = 0.35f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Montage")
 	UAnimMontage* ForwardEvadeMontage;

@@ -28,7 +28,7 @@ void UAN_EvadeToSprint::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBa
 		return;
 	}
 
-	if (!PlayerChar->HasForwardInput())
+	if (!PlayerChar->HasMoveInput())
 	{
 		return;
 	}

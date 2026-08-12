@@ -23,10 +23,9 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	}
 
 	const FVector Velocity = AvatarChar->GetVelocity();
-	const FVector ForwardDir = AvatarChar->GetActorForwardVector();
-	const float FwdSpeed = FVector::DotProduct(Velocity, ForwardDir);
+	float Speed = Velocity.Size2D();
 
-	CurrentPlayingMontage = (FwdSpeed > 0.f) ? ForwardEvadeMontage : BackwardEvadeMontage;
+	CurrentPlayingMontage = (Speed > 0.f) ? ForwardEvadeMontage : BackwardEvadeMontage;
 	if (!CurrentPlayingMontage)
 	{
 		K2_EndAbility();
@@ -60,7 +59,6 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 void UGA_Evade::OnEvadeToSprint(FGameplayEventData EventData)
 {
-	UE_LOG(LogTemp,Warning,TEXT("123"));
 	if (bTransitionedToSprint)
 	{
 		return;
@@ -80,19 +78,19 @@ void UGA_Evade::OnEvadeToSprint(FGameplayEventData EventData)
 	}
 
 	// 截断 Montage（BlendOut=0，立即停止 Root Motion 写入速度）
-	AnimInst->Montage_Stop(SprintTransitionBlendOut, CurrentPlayingMontage);
-
-	// 注入 Sprint 速度到 CMC
-	FVector Vel = PlayerChar->GetActorForwardVector() * 800.f;
-	Vel.Z = 0.f;
-	PlayerChar->SprintTransitionVelocity = Vel;
-
-	// 设过渡标志
-	UExtraGameAnimInstance* GameAI = Cast<UExtraGameAnimInstance>(AnimInst);
-	if (GameAI)
-	{
-		GameAI->bEvadeToSprint = true;
-	}
+     	AnimInst->Montage_Stop(SprintTransitionBlendOut, CurrentPlayingMontage);
+     
+     	/*// 注入 Sprint 速度到 CMC
+     	FVector Vel = PlayerChar->GetActorForwardVector() * 800.f;
+     	Vel.Z = 0.f;
+     	PlayerChar->SprintTransitionVelocity = Vel;
+     
+     	// 设过渡标志
+     	UExtraGameAnimInstance* GameAI = Cast<UExtraGameAnimInstance>(AnimInst);
+     	if (GameAI)
+     	{
+     		GameAI->bEvadeToSprint = true;
+     	}*/
 }
 
 void UGA_Evade::OnEvadeMontageEnded(UAnimMontage* Montage, bool bInterrupted)

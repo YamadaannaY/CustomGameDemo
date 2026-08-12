@@ -37,11 +37,11 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		UAbilityTask_WaitGameplayEvent* WaitComboChangeEventTask=UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,GetComboChangedEventTag(),nullptr,false,false);
 		WaitComboChangeEventTask->EventReceived.AddDynamic(this,&ThisClass::ComboChangedEventReceived);
 		WaitComboChangeEventTask->ReadyForActivation();
-		
+
 		UAbilityTask_WaitGameplayEvent* WaitCancelAbilityTask=UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,GetRecoveryCancelTag(),nullptr,false,true);
 		WaitCancelAbilityTask->EventReceived.AddDynamic(this,&ThisClass::OnRecoveryCancelNotifyReceived);
 		WaitCancelAbilityTask->ReadyForActivation();
-		
+
 	}
 
 	//在服务端实现Damage逻辑
@@ -50,7 +50,7 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		UAbilityTask_WaitGameplayEvent* WaitTargetEventTask=UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,GetComboTargetEventTag());
 		WaitTargetEventTask->EventReceived.AddDynamic(this,&ThisClass::DoDamage);
 		WaitTargetEventTask->ReadyForActivation();
-		
+
 	}
 
 	//处理第一次输入
@@ -60,12 +60,20 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 void UGA_Combo::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
-	// 确保清理 Timer
 	if (MovementCheckTimerHandle.IsValid())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(MovementCheckTimerHandle);
 	}
-	
+
+	if (bEndingFromMovement && ComboMontage)
+	{
+		UAnimInstance* AnimInst = GetOwnerAnimInstance();
+		if (AnimInst && AnimInst->Montage_IsPlaying(ComboMontage))
+		{
+			AnimInst->Montage_Stop(MovementCancelBlendOutTime, ComboMontage);
+		}
+	}
+
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
@@ -105,15 +113,16 @@ void UGA_Combo::SetupWaitComboInputPress()
 void UGA_Combo::TryCommitCombo()
 {
 	if (NextComboName==NAME_None) return;
-	
+
 	UAnimInstance* OwnerAnimInst=GetOwnerAnimInstance();
 	if (!OwnerAnimInst) return;
 
 	//设置当前Montage Section的NextSection
 	OwnerAnimInst->Montage_SetNextSection(OwnerAnimInst->Montage_GetCurrentSection(ComboMontage),NextComboName,ComboMontage);
 	OwnerAnimInst->Montage_JumpToSection(NextComboName, ComboMontage);
-	
+
 	NextComboName=NAME_None;
+	bEndingFromMovement = false;
 }
 
 TSubclassOf<UGameplayEffect> UGA_Combo::GetDamageEffectForCurrentCombo() const
@@ -126,7 +135,7 @@ TSubclassOf<UGameplayEffect> UGA_Combo::GetDamageEffectForCurrentCombo() const
 		{
 			return *FoundEffectPtr;
 		}
-	} 
+	}
 	return DefaultDamageEffect;
 }
 
@@ -152,22 +161,19 @@ void UGA_Combo::DoDamage(FGameplayEventData Data)
 
 void UGA_Combo::OnRecoveryCancelNotifyReceived(FGameplayEventData Payload)
 {
-	// 进入后摇窗口：先检查当前是否“已经”按下了 WASD
 	if (HasMovementInput())
 	{
-		// 玩家已经在按移动键了！立刻打断后摇，结束 GA
+		bEndingFromMovement = true;
 		K2_EndAbility();
 		return;
 	}
 
-	// 如果当前没按 WASD，启动一个轮询 Timer（或者使用自定义的 WaitMovementInput Task）
-	// 每帧/每 0.02 秒检查一次玩家是否按下移动键，直到动画自己播放完毕
 	GetWorld()->GetTimerManager().SetTimer(
-		MovementCheckTimerHandle, 
-		this, 
-		&ThisClass::CheckMovementInputForCancel, 
-		0.1f, 
-		true // 循环检查
+		MovementCheckTimerHandle,
+		this,
+		&ThisClass::CheckMovementInputForCancel,
+		0.1f,
+		true
 	);
 }
 
@@ -176,22 +182,18 @@ bool UGA_Combo::HasMovementInput() const
 	AExtraPlayerCharacter* AvatarChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
 	if (AvatarChar && AvatarChar->GetCharacterMovement())
 	{
-		// 检查加速度向量的模长，大于 0 说明玩家正在按 WASD / 摇杆
 		return AvatarChar->GetCharacterMovement()->GetCurrentAcceleration().SizeSquared() > 0.0f;
 	}
-	
-	return false  ; 
+
+	return false  ;
 }
 
 void UGA_Combo::CheckMovementInputForCancel()
 {
 	if (HasMovementInput())
 	{
-		// 清理 Timer
 		GetWorld()->GetTimerManager().ClearTimer(MovementCheckTimerHandle);
-        
-		// 触发打断！结束 GA
-		// 这会触发 EndAbility()，停止 Montage 并释放 RootMotion 锁，角色立刻跑起来
+		bEndingFromMovement = true;
 		K2_EndAbility();
 	}
 }

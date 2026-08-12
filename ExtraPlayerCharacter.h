@@ -33,6 +33,7 @@ public:
 
 	bool GetWalkMode() { return  bWalkMode;}
 	FORCEINLINE bool HasForwardInput() const { return bHasMoveInput && ForwardDirectionInput > 0.f; }
+	FORCEINLINE bool HasMoveInput() const { return bHasMoveInput; }
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	class USpringArmComponent* CamBoom;

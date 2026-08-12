@@ -261,11 +261,8 @@ void UExtraGameWeaponComponent::ShowWeaponEntry(FGameplayTag WeaponTag)
 
 	HiddenWeaponEntries.Remove(WeaponTag);
 
-	// 如果整体可见，立即显示
-	if (bWeaponVisible)
-	{
-		SetWeaponMeshVisibility(WeaponTag, true);
-	}
+	SetWeaponMeshVisibility(WeaponTag, true);
+	
 }
 
 void UExtraGameWeaponComponent::HideWeaponEntry(FGameplayTag WeaponTag)
