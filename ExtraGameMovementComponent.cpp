@@ -27,7 +27,8 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 	{
 		return;
 	}
-
+	
+	
 	if (!bOrientRotationToMovement)
 	{
 		Super::PhysicsRotation(DeltaTime);
@@ -36,12 +37,6 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 
 	if (Acceleration.IsNearlyZero(0.001f))
 	{
-		return;
-	}
-
-	if (HasRootMotionSources() || CharacterOwner->IsPlayingRootMotion())
-	{
-		Super::PhysicsRotation(DeltaTime);
 		return;
 	}
 
@@ -57,13 +52,19 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 		return;
 	}
 
-	float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentRotation.Yaw, TargetRotation.Yaw);
-	float AbsDeltaYaw = FMath::Abs(DeltaYaw);
+	const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentRotation.Yaw, TargetRotation.Yaw);
+	const float AbsDeltaYaw = FMath::Abs(DeltaYaw);
 
-	float SpeedBlend = FMath::Clamp(AbsDeltaYaw / 180.f, 0.f, 1.f);
+	const float SpeedBlend = FMath::Clamp(AbsDeltaYaw / 180.f, 0.f, 1.f);
 	float CurrentRotationRate = FMath::Lerp(MinRotationRate, MaxRotationRate, SpeedBlend);
 
-	float MaxYawThisFrame = CurrentRotationRate * DeltaTime;
+	// 空中（跳跃/下落）时削弱转向幅度，仅允许小幅度的左右朝向旋转
+	if (IsFalling())
+	{
+		CurrentRotationRate *= AirRotationScale;
+	}
+
+	const float MaxYawThisFrame = CurrentRotationRate * DeltaTime;
 	float StepYaw = FMath::Clamp(DeltaYaw, -MaxYawThisFrame, MaxYawThisFrame);
 
 	FRotator DesiredRotation = CurrentRotation;

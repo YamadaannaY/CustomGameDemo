@@ -181,9 +181,14 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		}
 		else
 		{
-			float DeltaTime = GetWorld()->GetDeltaSeconds();
-			SmoothedInputDirection = FMath::VInterpTo(SmoothedInputDirection, RawInputDir, DeltaTime, InputDirectionInterpSpeed);
-			SmoothedInputDirection.Normalize();
+			// 用角度插值而非向量插值：向量插值在 180° 反向时会经过零点，
+			// Normalize 后方向不变，导致直接反向前进卡死。角度插值能正确处理反向转身。
+			const float DeltaTime = GetWorld()->GetDeltaSeconds();
+			const float CurrentYaw = SmoothedInputDirection.Rotation().Yaw;
+			const float TargetYaw = RawInputDir.Rotation().Yaw;
+			const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentYaw, TargetYaw);
+			const float StepYaw = DeltaYaw * FMath::Clamp(DeltaTime * InputDirectionInterpSpeed, 0.f, 1.f);
+			SmoothedInputDirection = FRotationMatrix(FRotator(0.f, CurrentYaw + StepYaw, 0.f)).GetUnitAxis(EAxis::X);
 		}
 
 		InputDirection = SmoothedInputDirection;

@@ -22,6 +22,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation Settings)", meta=(ClampMin="0.0"))
 	float MinRotationRate = 180.f;
 
+	// 空中（跳跃/下落）时左右输入转向的削弱系数，值越小空中越难转向（0 = 空中完全不能转向，1 = 与地面一致）
+	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation Settings)", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float AirRotationScale = 0.3f;
+
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
