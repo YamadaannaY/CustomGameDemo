@@ -2,12 +2,21 @@
 
 #include "CoreMinimal.h"
 #include "ExtraGameplayAbility.h"
+#include "Engine/EngineTypes.h"
 #include "GA_AirAttack.generated.h"
 
 /**
- * 空中普攻：在空中按下轻击 → 播放落地攻击 Montage → 落地后结束
- * Activation 需要 character.state.airborne Tag。
- * 与 GA_Combo 共用 InputID=LightAttack，由 Tag 过滤自动路由。
+ * 空中下落重击：角色在空中（跳跃或下落）按下轻击 → 触发一次空中攻击。
+ *
+ * 流程（三段动画）：
+ *   1. 起手动画 AirAttackStartMontage 播完（OnCompleted）
+ *   2. 循环下砸动画 AirAttackLoopMontage，直到落地
+ *   3. 落地动画 AirAttackLandMontage，播完结束 GA
+ *
+ * 约束：
+ *   - 一次浮空期间只允许触发一次（ActivationBlockedTags + airattack Tag）
+ *   - 激活需要 character.state.airborne Tag（与 GA_Combo 靠 Tag 分流）
+ *   - 空中期间锁定水平移动（SetMovementInputLocked）
  */
 UCLASS()
 class EXTRACTGAMECHARACTER_API UGA_AirAttack : public UExtraGameplayAbility
@@ -20,12 +29,62 @@ public:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 private:
+	// ── 动画 ──────────────────────────────────────────────
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
-	UAnimMontage* AirAttackMontage;
+	UAnimMontage* AirAttackStartMontage;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	UAnimMontage* AirAttackLoopMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	UAnimMontage* AirAttackLandMontage;
+
+	// Loop 落地瞬间，Loop → Land 的 blend 时间
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	float LoopToLandBlendInTime = 0.15f;
+
+	// 起手动画结束到循环动画的 blend 时间（PlayLoop 时作为 blend-in）
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	float StartToLoopBlendInTime = 0.15f;
+
+	// ── 回调 ──────────────────────────────────────────────
+	// 起手动画播放完毕 → 进入循环下砸
 	UFUNCTION()
-	void OnMontageBlendOut();
-	
+	void OnStartMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
+	// 角色落地事件回调（LandedDelegate）
 	UFUNCTION()
-	void OnMontageCancelled();
+	void OnLandDetected(const FHitResult& Hit);
+
+	// 落地检测兜底 Timer 回调
+	UFUNCTION()
+	void PollLandCheck();
+
+	// 落地动画播放完毕 → 结束 GA
+	UFUNCTION()
+	void OnLandMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
+	// ── 辅助 ──────────────────────────────────────────────
+	// 共享的落地处理逻辑（无论来自 delegate 还是 timer）
+	void TryTriggerLand();
+
+	void PlayLoopMontage();
+	void PlayLandMontage();
+	void StopLoopMontage();
+
+	// 进入起手阶段（播放起手动画并绑定结束回调）
+	void PlayStartMontage();
+
+	// 记录当前处于哪个阶段，用于 EndAbility 清理
+	enum class EAirAttackPhase : uint8
+	{
+		None,
+		Start,
+		Loop,
+		Land
+	};
+	EAirAttackPhase CurrentPhase = EAirAttackPhase::None;
+
+	// 落地检测兜底 Timer 句柄
+	FTimerHandle LandCheckTimerHandle;
 };
