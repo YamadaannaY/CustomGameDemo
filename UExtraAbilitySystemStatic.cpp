@@ -1,11 +1,87 @@
 #include "UExtraAbilitySystemStatic.h"
 
+// ── Native GameplayTag 定义（静态注册，早于 CDO 构造）──
+UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack, "ability.basicattack");
+UE_DEFINE_GAMEPLAY_TAG(Ability_Dodge, "ability.dodge");
+UE_DEFINE_GAMEPLAY_TAG(State_Airborne, "character.state.airborne");
+UE_DEFINE_GAMEPLAY_TAG(State_AirAttack, "character.state.airattack");
+UE_DEFINE_GAMEPLAY_TAG(InputTag_LightAttack, "InputTag.LightAttack");
+UE_DEFINE_GAMEPLAY_TAG(InputTag_HeavyAttack, "InputTag.HeavyAttack");
+UE_DEFINE_GAMEPLAY_TAG(InputTag_Skill, "InputTag.Skill");
+UE_DEFINE_GAMEPLAY_TAG(InputTag_Ultimate, "InputTag.Ultimate");
+UE_DEFINE_GAMEPLAY_TAG(InputTag_Dodge, "InputTag.Dodge");
+UE_DEFINE_GAMEPLAY_TAG(Combo_Change, "ability.combo.change");
+UE_DEFINE_GAMEPLAY_TAG(Combo_Change_End, "ability.combo.change.end");
+UE_DEFINE_GAMEPLAY_TAG(Combo_Damage, "ability.combo.damage");
+UE_DEFINE_GAMEPLAY_TAG(Evade_ToSprint, "Evade.ToSprint");
+UE_DEFINE_GAMEPLAY_TAG(Ability_Cancel, "ability.cancel");
+
 FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 {
-	return FGameplayTag::RequestGameplayTag("ability.basicattack");
+	return Ability_BasicAttack;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetDodgeAbilityTag()
+{
+	return Ability_Dodge;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetAirborneTag()
 {
-	return FGameplayTag::RequestGameplayTag("character.state.airborne");
+	return State_Airborne;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackTag()
+{
+	return State_AirAttack;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetLightAttackInputTag()
+{
+	return InputTag_LightAttack;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHeavyAttackInputTag()
+{
+	return InputTag_HeavyAttack;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetSkillInputTag()
+{
+	return InputTag_Skill;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetUltimateInputTag()
+{
+	return InputTag_Ultimate;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetDodgeInputTag()
+{
+	return InputTag_Dodge;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetComboChangedEventTag()
+{
+	return Combo_Change;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetComboChangedEventEndTag()
+{
+	return Combo_Change_End;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetComboTargetEventTag()
+{
+	return Combo_Damage;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetEvadeToSprintTag()
+{
+	return Evade_ToSprint;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetAbilityCancelTag()
+{
+	return Ability_Cancel;
 }

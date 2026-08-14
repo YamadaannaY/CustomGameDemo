@@ -489,16 +489,8 @@ void UExtraGameWeaponComponent::RemoveGrantedEffects()
 	ActiveEffectHandles.Empty();
 }
 
-// 固定 InputID 映射，与 EWeaponAbilityInputID 对齐
-// GrantedAbilities 数组按此顺序配置：[0]LightAttack [1]HeavyAttack [2]Skill [3]Ultimate
-// Dodge(6) 是角色级能力，不随武器组切换，由 AExtraPlayerController 在 BeginPlay 时一次性授予
-static constexpr int32 WeaponInputIDMap[] = {
-	2,  // LightAttack
-	3,  // HeavyAttack
-	4,  // Skill
-	5,  // Ultimate
-};
-
+// 武器组 GA 全部以 INDEX_NONE 授予，触发方式由 GA 自身的 AbilityTriggers（InputTag）决定。
+// 废弃 InputID 硬映射；换武器 = 换一批已授予的 GA，每个 GA 自带固定 InputTag。
 void UExtraGameWeaponComponent::GrantWeaponGroupAbilities(const FExtraGameWeaponGroup& Group)
 {
 	if (!OwnerASC)
@@ -506,18 +498,15 @@ void UExtraGameWeaponComponent::GrantWeaponGroupAbilities(const FExtraGameWeapon
 		return;
 	}
 
-	for (int32 i = 0; i < Group.GrantedAbilities.Num(); ++i)
+	for (const TSubclassOf<UExtraGameplayAbility>& AbilityClass : Group.GrantedAbilities)
 	{
-		const TSubclassOf<UExtraGameplayAbility>& AbilityClass = Group.GrantedAbilities[i];
 		if (!AbilityClass)
 		{
 			continue;
 		}
 
-		const int32 InputID = (i < UE_ARRAY_COUNT(WeaponInputIDMap)) ? WeaponInputIDMap[i] : INDEX_NONE;
-
 		FGameplayAbilitySpecHandle Handle = OwnerASC->GiveAbility(
-			FGameplayAbilitySpec(AbilityClass, 1, InputID, this));
+			FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
 		ActiveAbilityHandles.Add(Handle);
 	}
 }

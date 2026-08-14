@@ -2,6 +2,7 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
+#include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Character.h"
 
@@ -32,7 +33,7 @@ void UAN_EvadeToSprint::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBa
 	UAbilitySystemComponent* OwnerASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(MeshComp->GetOwner());
 	if (!OwnerASC) return;
 
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(MeshComp->GetOwner(), FGameplayTag::RequestGameplayTag("Evade.ToSprint"), FGameplayEventData());
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(MeshComp->GetOwner(), UUExtraAbilitySystemStatic::GetEvadeToSprintTag(), FGameplayEventData());
 }
 
 FString UAN_EvadeToSprint::GetNotifyName_Implementation() const

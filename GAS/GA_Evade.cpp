@@ -1,12 +1,28 @@
 #include "GA_Evade.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayTagContainer.h"
+#include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
+#include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "MotionWarpingComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+
+UGA_Evade::UGA_Evade()
+{
+	// 闪避不可重复触发：自身激活期间挂 AbilityTags 并用 BlockAbilitiesWithTag 阻断
+	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
+	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
+
+	// 通过 InputTag 触发（废弃 InputID）
+	FAbilityTriggerData DodgeTrigger;
+	DodgeTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
+	DodgeTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetDodgeInputTag();
+	AbilityTriggers.Add(DodgeTrigger);
+}
 
 void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
@@ -25,11 +41,11 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	//基于速度判断前/后 Evade
-	const FVector Velocity = AvatarChar->GetVelocity();
-	float Speed = Velocity.Size2D();
-	
-	CurrentPlayingMontage = (Speed > 0.f) ? ForwardEvadeMontage : BackwardEvadeMontage;
+	//基于移动加速度（是否有移动输入）判断前/后 Evade
+	const FVector Acceleration = AvatarChar->GetCharacterMovement()->GetCurrentAcceleration();
+	const bool bHasMoveInput = Acceleration.Size2D() > 0.f;
+
+	CurrentPlayingMontage = bHasMoveInput ? ForwardEvadeMontage : BackwardEvadeMontage;
 	if (!CurrentPlayingMontage)
 	{
 		K2_EndAbility();
@@ -56,7 +72,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		EndDelegate.BindUObject(this, &UGA_Evade::OnEvadeMontageEnded);
 		AnimInst->Montage_SetEndDelegate(EndDelegate, CurrentPlayingMontage);
 
-		UAbilityTask_WaitGameplayEvent* WaitToSprintTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, FGameplayTag::RequestGameplayTag("Evade.ToSprint"));
+		UAbilityTask_WaitGameplayEvent* WaitToSprintTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, UUExtraAbilitySystemStatic::GetEvadeToSprintTag());
 		WaitToSprintTask->EventReceived.AddDynamic(this, &ThisClass::OnEvadeToSprint);
 		WaitToSprintTask->ReadyForActivation();
 

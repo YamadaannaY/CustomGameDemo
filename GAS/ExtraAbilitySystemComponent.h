@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayAbilitySpec.h"
-#include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponTypes.h"
 #include "ExtraAbilitySystemComponent.generated.h"
 
 class UExtraGameplayAbility;
@@ -27,13 +26,10 @@ public:
 
 	// ── 天生能力配置（在角色蓝图的 ASC 组件上配置）─────────
 
-	// 主动技能：InputID → GA 映射
+	// 角色级能力：全部以 INDEX_NONE 授予，触发方式由各 GA 自身的 AbilityTriggers（InputTag）决定。
+	// 例如 Dodge(GA_Evade) 归这里，武器技能(Combo/AirAttack等)归 WeaponData 的 GrantedAbilities。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Innate")
-	TMap<EWeaponAbilityInputID, TSubclassOf<UExtraGameplayAbility>> InnateActiveAbilities;
-
-	// 被动技能：无需 InputID，通过 Tag/Event 触发
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Innate")
-	TArray<TSubclassOf<UExtraGameplayAbility>> InnatePassiveAbilities;
+	TArray<TSubclassOf<UExtraGameplayAbility>> InnateAbilities;
 
 	// 初始化 GE：ServerSideInit 时应用到自身
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Innate")

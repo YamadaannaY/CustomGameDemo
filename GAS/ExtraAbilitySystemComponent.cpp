@@ -71,19 +71,7 @@ void UExtraAbilitySystemComponent::ApplyInitialEffects()
 
 void UExtraAbilitySystemComponent::GiveInitialAbilities()
 {
-	for (const auto& Pair : InnateActiveAbilities)
-	{
-		if (!Pair.Value)
-		{
-			continue;
-		}
-		const int32 InputID = static_cast<int32>(Pair.Key);
-		FGameplayAbilitySpecHandle Handle = GiveAbility(
-			FGameplayAbilitySpec(Pair.Value, 1, InputID, this));
-		InnateAbilityHandles.Add(Handle);
-	}
-
-	for (const TSubclassOf<UExtraGameplayAbility>& AbilityClass : InnatePassiveAbilities)
+	for (const TSubclassOf<UExtraGameplayAbility>& AbilityClass : InnateAbilities)
 	{
 		if (!AbilityClass)
 		{

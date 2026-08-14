@@ -15,7 +15,6 @@ class  EXTRACTGAMECHARACTER_API UGA_Combo : public UExtraGameplayAbility
 public:
 	UGA_Combo();
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
-	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 	//获得ComboChange下所有具体的comboTag
 	static FGameplayTag GetComboChangedEventTag();
@@ -24,15 +23,13 @@ public:
 	//获得TargetEvent对应的DamageTag
 	static FGameplayTag GetComboTargetEventTag();
 
-	static FGameplayTag GetRecoveryCancelTag();
-
 private:
-	//实现一个WaitInputPressTask，绑定触发输入后的回调HandleInputPress
+	//实现一个WaitGameplayEvent，监听 LightAttack InputTag，触发回调 HandleInputPress
 	void SetupWaitComboInputPress();
 
-	//再次实现WaitInputPressTask处理下一次输入，形成循环，同时处理当前输入
+	//再次实现WaitGameplayEvent处理下一次输入，形成循环，同时处理当前输入
 	UFUNCTION()
-	void HandleInputPress(float TimeWaited);
+	void HandleInputPress(FGameplayEventData EventData);
 
 	//输入后，若NextComboName存在，则设置NextSection为这个Name对应的Section
 	void TryCommitCombo();
@@ -64,21 +61,6 @@ private:
 	FName NextComboName;
 
 protected:
-	// 后摇 Notify 触发时的回调（通过 AnimNotify 发送 EventTag 触发）
-	UFUNCTION()
-	void OnRecoveryCancelNotifyReceived(FGameplayEventData Payload);
-
-	// 检查玩家是否有 WASD 移动输入
-	bool HasMovementInput() const;
-
-	// 定时检查移动输入的 Timer
-	FTimerHandle MovementCheckTimerHandle;
-	void CheckMovementInputForCancel();
-
-	// 是否因移动输入触发 EndAbility（用于区分 BlendOut 时间）
-	bool bEndingFromMovement = false;
-
-	// 移动打断时的 Montage 淡出时间
-	UPROPERTY(EditDefaultsOnly, Category = "Animation")
-	float MovementCancelBlendOutTime = 0.1f;
+	// 覆写：返回当前可被移动打断的 Montage（即 ComboMontage）
+	virtual UAnimMontage* GetActiveMontageForCancel() const override { return ComboMontage; }
 };

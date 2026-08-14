@@ -1,9 +1,9 @@
 #include "GA_Combo.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayTagsManager.h"
+#include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
-#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include  "GameFramework/CharacterMovementComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
@@ -14,6 +14,15 @@ UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
 	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirborneTag());
+
+	// 启用移动打断（基类机制）
+	bEnableMovementCancel = true;
+
+	// 通过 InputTag 触发
+	FAbilityTriggerData LightAttackTrigger;
+	LightAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
+	LightAttackTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetLightAttackInputTag();
+	AbilityTriggers.Add(LightAttackTrigger);
 }
 
 void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -23,6 +32,15 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	{
 		K2_EndAbility();
 		return ;
+	}
+
+	// 重置跨激活状态（InstancedPerActor 实例复用，避免残留到下一次激活）
+	NextComboName = NAME_None;
+
+	// 移动打断（基类机制）：监听取消事件
+	if (bEnableMovementCancel)
+	{
+		SetupMovementCancel();
 	}
 
 	if (HasAuthorityOrPredictionKey(ActorInfo,&ActivationInfo))
@@ -39,10 +57,6 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		WaitComboChangeEventTask->EventReceived.AddDynamic(this,&ThisClass::ComboChangedEventReceived);
 		WaitComboChangeEventTask->ReadyForActivation();
 
-		UAbilityTask_WaitGameplayEvent* WaitCancelAbilityTask=UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,GetRecoveryCancelTag(),nullptr,false,true);
-		WaitCancelAbilityTask->EventReceived.AddDynamic(this,&ThisClass::OnRecoveryCancelNotifyReceived);
-		WaitCancelAbilityTask->ReadyForActivation();
-
 	}
 
 	//在服务端实现Damage逻辑
@@ -58,47 +72,22 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	SetupWaitComboInputPress();
 }
 
-void UGA_Combo::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
-{
-	if (MovementCheckTimerHandle.IsValid())
-	{
-		GetWorld()->GetTimerManager().ClearTimer(MovementCheckTimerHandle);
-	}
-
-	if (bEndingFromMovement && ComboMontage)
-	{
-		UAnimInstance* AnimInst = GetOwnerAnimInstance();
-		if (AnimInst && AnimInst->Montage_IsPlaying(ComboMontage))
-		{
-			AnimInst->Montage_Stop(MovementCancelBlendOutTime, ComboMontage);
-		}
-	}
-
-	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
-}
-
 FGameplayTag UGA_Combo::GetComboChangedEventTag()
 {
-	return FGameplayTag::RequestGameplayTag("ability.combo.change");
+	return UUExtraAbilitySystemStatic::GetComboChangedEventTag();
 }
 
 FGameplayTag UGA_Combo::GetComboChangedEventEndTag()
 {
-	return FGameplayTag::RequestGameplayTag("ability.combo.change.end");
+	return UUExtraAbilitySystemStatic::GetComboChangedEventEndTag();
 }
 
 FGameplayTag UGA_Combo::GetComboTargetEventTag()
 {
-	return FGameplayTag::RequestGameplayTag("ability.combo.damage");
+	return UUExtraAbilitySystemStatic::GetComboTargetEventTag();
 }
 
-FGameplayTag UGA_Combo::GetRecoveryCancelTag()
-{
-	return FGameplayTag::RequestGameplayTag("ability.combo.cancel");
-}
-
-void UGA_Combo::HandleInputPress(float TimeWaited)
+void UGA_Combo::HandleInputPress(FGameplayEventData EventData)
 {
 	SetupWaitComboInputPress();
 	TryCommitCombo();
@@ -106,9 +95,11 @@ void UGA_Combo::HandleInputPress(float TimeWaited)
 
 void UGA_Combo::SetupWaitComboInputPress()
 {
-	UAbilityTask_WaitInputPress* WaitInputPress=UAbilityTask_WaitInputPress::WaitInputPress(this);
-	WaitInputPress->OnPress.AddDynamic(this,&ThisClass::HandleInputPress);
-	WaitInputPress->ReadyForActivation();
+	// 废弃 WaitInputPress，改为监听 LightAttack InputTag 的 GameplayEvent
+	UAbilityTask_WaitGameplayEvent* WaitComboInputTag = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, UUExtraAbilitySystemStatic::GetLightAttackInputTag(), nullptr, true, false);
+	WaitComboInputTag->EventReceived.AddDynamic(this, &ThisClass::HandleInputPress);
+	WaitComboInputTag->ReadyForActivation();
 }
 
 void UGA_Combo::TryCommitCombo()
@@ -158,43 +149,4 @@ void UGA_Combo::ComboChangedEventReceived(FGameplayEventData InPayLoad)
 
 void UGA_Combo::DoDamage(FGameplayEventData Data)
 {
-}
-
-void UGA_Combo::OnRecoveryCancelNotifyReceived(FGameplayEventData Payload)
-{
-	if (HasMovementInput())
-	{
-		bEndingFromMovement = true;
-		K2_EndAbility();
-		return;
-	}
-
-	GetWorld()->GetTimerManager().SetTimer(
-		MovementCheckTimerHandle,
-		this,
-		&ThisClass::CheckMovementInputForCancel,
-		0.1f,
-		true
-	);
-}
-
-bool UGA_Combo::HasMovementInput() const
-{
-	AExtraPlayerCharacter* AvatarChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-	if (AvatarChar && AvatarChar->GetCharacterMovement())
-	{
-		return AvatarChar->GetCharacterMovement()->GetCurrentAcceleration().SizeSquared() > 0.0f;
-	}
-
-	return false  ;
-}
-
-void UGA_Combo::CheckMovementInputForCancel()
-{
-	if (HasMovementInput())
-	{
-		GetWorld()->GetTimerManager().ClearTimer(MovementCheckTimerHandle);
-		bEndingFromMovement = true;
-		K2_EndAbility();
-	}
 }

@@ -1,24 +1,8 @@
 #include "ExtraGameMovementComponent.h"
 
-#include "GameFramework/Character.h"
-
-
 UExtraGameMovementComponent::UExtraGameMovementComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-}
-
-
-void UExtraGameMovementComponent::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
-
-void UExtraGameMovementComponent::TickComponent(float DeltaTime, ELevelTick TickType,
-                                                FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 }
 
 void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)

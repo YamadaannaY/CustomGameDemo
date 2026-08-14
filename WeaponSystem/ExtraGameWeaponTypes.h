@@ -10,24 +10,6 @@ class UExtraGameplayAbility;
 class UGameplayEffect;
 
 /**
- * 武器技能输入 ID
- * 每个武器 GA 通过 AbilityTriggers 绑定对应的 InputID，
- * ASC 收到输入后自动路由到当前已授予的 GA。
- */
-UENUM(BlueprintType)
-enum class EWeaponAbilityInputID : uint8
-{
-	None,
-	Confirm,      // 0
-	Cancel,       // 1
-	LightAttack,  // 2
-	HeavyAttack,  // 3
-	Skill,        // 4
-	Ultimate,     // 5
-	Dodge         // 6
-};
-
-/**
  * 单个武器 Mesh 的视觉配置（纯视觉，不含 GAS 数据）
  * 一个武器组可包含多个 WeaponEntry，各自独立显隐。
  */

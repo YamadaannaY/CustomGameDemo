@@ -9,6 +9,7 @@
 #include "WeaponSystem/ExtraGameWeaponTypes.h"
 #include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "AbilitySystemBlueprintLibrary.h"
 
 
 AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectInitializer)
@@ -123,6 +124,12 @@ void AExtraPlayerCharacter::PawnClientRestart()
 
 void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 {
+	// 空中攻击期间锁定移动输入：不更新方向/不 AddMovementInput
+	if (bMovementInputLocked)
+	{
+		return;
+	}
+
 	FVector2D InputVal=InputActionValue.Get<FVector2d>();
 
 	// 检测 无输入→有输入 的跳变，记录按键开始时间
@@ -131,6 +138,9 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		// 清除延迟停步请求（新输入打断停步等待）
 		if (UExtraGameAnimInstance* GameAI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
 		{
+			// 停步请求仍挂着说明玩家在"等待落脚踏入 stop"期间给了新输入，
+			// 记录此事实，下次松开改走 RequestStop 重新建立停步流程
+			bInterruptedStop = GameAI->bRequestStop;
 			GameAI->ClearStopRequest();
 		}
 
@@ -215,6 +225,19 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 		{
 			return;
 		}
+	}
+
+	// 停步请求曾被短输入打断（等待落脚踏入 stop 期间给了新输入）：
+	// 重新走 RequestStop 建立停步流程，而不是播急停蒙太奇，
+	// 否则停步状态机会因 bRequestStop/bCanEnterStop 被清空而卡死在 jogging
+	if (bInterruptedStop)
+	{
+		bInterruptedStop = false;
+		if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
+		{
+			AI->RequestStop();
+		}
+		return;
 	}
 
 	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
@@ -395,19 +418,19 @@ void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& Inp
 	}
 
 	const float Elapsed = GetWorld()->GetTimeSeconds() - NormalAttackPressTime;
-	const EWeaponAbilityInputID InputID = (Elapsed >= HeavyAttackHoldTime)
-		? EWeaponAbilityInputID::HeavyAttack
-		: EWeaponAbilityInputID::LightAttack;
+	const FGameplayTag InputTag = (Elapsed >= HeavyAttackHoldTime)
+		? UUExtraAbilitySystemStatic::GetHeavyAttackInputTag()
+		: UUExtraAbilitySystemStatic::GetLightAttackInputTag();
 
-	AbilitySystemComponent->AbilityLocalInputPressed(static_cast<int32>(InputID));
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, InputTag, FGameplayEventData());
 }
 
 void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionValue)
 {
 	if (AbilitySystemComponent)
 	{
-		AbilitySystemComponent->AbilityLocalInputPressed(
-			static_cast<int32>(EWeaponAbilityInputID::Skill));
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+			this, UUExtraAbilitySystemStatic::GetSkillInputTag(), FGameplayEventData());
 	}
 }
 
@@ -415,8 +438,8 @@ void AExtraPlayerCharacter::OnUltimateStarted(const FInputActionValue& InputActi
 {
 	if (AbilitySystemComponent)
 	{
-		AbilitySystemComponent->AbilityLocalInputPressed(
-			static_cast<int32>(EWeaponAbilityInputID::Ultimate));
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+			this, UUExtraAbilitySystemStatic::GetUltimateInputTag(), FGameplayEventData());
 	}
 }
 
@@ -424,7 +447,7 @@ void AExtraPlayerCharacter::OnDodgeStarted(const FInputActionValue& InputActionV
 {
 	if (AbilitySystemComponent)
 	{
-		AbilitySystemComponent->AbilityLocalInputPressed(
-			static_cast<int32>(EWeaponAbilityInputID::Dodge));
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+			this, UUExtraAbilitySystemStatic::GetDodgeInputTag(), FGameplayEventData());
 	}
 }
