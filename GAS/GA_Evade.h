@@ -25,7 +25,6 @@ public:
 	void OnEvadeToSprint(FGameplayEventData EventData);
 
 private:
-	void OnEvadeMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void PollMoveInputForSprint();
 	void UpdateEvadeFacing();
 

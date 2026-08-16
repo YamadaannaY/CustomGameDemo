@@ -43,14 +43,16 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
 	float LoopToLandBlendInTime = 0.15f;
 
-	// 起手动画结束到循环动画的 blend 时间（PlayLoop 时作为 blend-in）
+	// Start → Loop 的交叉淡化时间（对齐原项目 0.034s）
+	// 关键：让 Start 的 blend out 与 Loop 的 blend in 重叠，消除「真空帧」，
+	// 否则真空帧会被状态机 idle/falling 抢占导致瞬变。
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
-	float StartToLoopBlendInTime = 0.15f;
+	float StartToLoopBlendInTime = 0.034f;
 
 	// ── 回调 ──────────────────────────────────────────────
-	// 起手动画播放完毕 → 进入循环下砸
+	// 起手动画开始淡出（OnBlendOut）→ 立即进入循环下砸，与 Start 淡出重叠
 	UFUNCTION()
-	void OnStartMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	void OnStartMontageBlendOut();
 
 	// 角色落地事件回调（LandedDelegate）
 	UFUNCTION()
@@ -74,6 +76,9 @@ private:
 
 	// 进入起手阶段（播放起手动画并绑定结束回调）
 	void PlayStartMontage();
+
+	// 覆写：移动打断时淡出的 Montage（落地动画带 cancel AN）
+	virtual UAnimMontage* GetActiveMontageForCancel() const override { return AirAttackLandMontage; }
 
 	// 记录当前处于哪个阶段，用于 EndAbility 清理
 	enum class EAirAttackPhase : uint8

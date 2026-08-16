@@ -164,12 +164,11 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		ForwardDirectionInput = InputVal.Y;
 		RightDirectionInput = InputVal.X;
 
-		if (!HasCalTargetDelta)
-		{
-			CalculateTargetDelta(ForwardDirectionInput, RightDirectionInput);
-			HasCalTargetDelta = true;
-		}
-
+		// 每帧用「当前朝向 vs 当前输入方向」重算 TargetDelta，而非只在首帧算一次：
+		// 角色用 bOrientRotationToMovement 逐帧转向，松手瞬间的 TargetDelta 应是
+		// 最新的剩余角度差（转向到位→小角度→急停；快速反向还没转到位→大角度→转身 montage）。
+		// 旧的 HasCalTargetDelta 只在首帧计算，转身后松手仍用初始值，导致左右判断错乱。
+		CalculateTargetDelta(ForwardDirectionInput, RightDirectionInput);
 		const FVector Forward = FRotationMatrix(YawRot).GetUnitAxis(EAxis::X);
 		const FVector Right = FRotationMatrix(YawRot).GetUnitAxis(EAxis::Y);
 
@@ -212,7 +211,6 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	LastMoveInputDuration = GetWorld()->GetTimeSeconds() - MoveInputStartTime;
 
 	bHasMoveInput = false;
-	HasCalTargetDelta = false;
 	ForwardDirectionInput = 0.f;
 	RightDirectionInput = 0.f;
 	InputDirection = FVector::ZeroVector;
@@ -325,10 +323,13 @@ void AExtraPlayerCharacter::CalculateTargetDelta(float ForwardInput,float RightI
 	FVector RightVector = FRotationMatrix(ControlRot).GetScaledAxis(EAxis::Y);
 
 	FVector DesiredDirection = (ForwardVector * ForwardInput) + (RightVector * RightInput);
-	if (!DesiredDirection.IsNearlyZero())
+	if (DesiredDirection.IsNearlyZero())
 	{
-		DesiredDirection.Normalize();
+		// 无明确输入方向（摇杆回中边缘），保留上一次的 TargetDelta：
+		// 零向量的 Rotation().Yaw 恒为 0，直接计算会把 TargetDelta 污染成「朝向 vs 世界 0°」。
+		return;
 	}
+	DesiredDirection.Normalize();
 
 	FRotator ActorRot = GetActorRotation();
 	FVector CurrentForward = ActorRot.Vector();

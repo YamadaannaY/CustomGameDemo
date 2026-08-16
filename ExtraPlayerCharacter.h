@@ -172,8 +172,6 @@ private:
 	// 由 GA_Evade::OnEvadeToSprint 设置，触发 Sprint 过渡（仅当前帧有效）
 	FVector SprintTransitionVelocity = FVector::ZeroVector;
 
-	bool HasCalTargetDelta = false ;
-
 	bool bHasMoveInput=false;
 
 	float TargetDelta=0.0f;

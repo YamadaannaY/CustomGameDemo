@@ -119,6 +119,12 @@ public:
 	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
 	void OnSprintStateLeft();
 
+	// ── 空中攻击标记 ────────────────────────────────────────
+	// GA_AirAttack 激活期间为 true，AnimBP 的 falling 过渡条件用它来「让位」，
+	// 避免 Start→Loop 切换的权重真空帧被状态机 falling 抢占导致瞬变。
+	UPROPERTY(BlueprintReadOnly, Category="Locomotion|AirAttack")
+	bool bAirAttacking = false;
+
 	FVector CacheVelocity = FVector::ZeroVector;
 
 	// ── Idle Action 系统 ─────────────────────────────────────────

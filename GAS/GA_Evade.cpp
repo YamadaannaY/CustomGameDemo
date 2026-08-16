@@ -3,6 +3,7 @@
 #include "GameplayTagContainer.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "GameFramework/Character.h"
@@ -59,18 +60,17 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
-		UAnimInstance* AnimInst = AvatarChar->GetMesh()->GetAnimInstance();
-		if (!AnimInst)
-		{
-			K2_EndAbility();
-			return;
-		}
-
-		AnimInst->Montage_Play(CurrentPlayingMontage);
-
-		FOnMontageEnded EndDelegate;
-		EndDelegate.BindUObject(this, &UGA_Evade::OnEvadeMontageEnded);
-		AnimInst->Montage_SetEndDelegate(EndDelegate, CurrentPlayingMontage);
+		// 统一用 PlayMontageAndWait（与 GA_Combo / GA_AirAttack 一致），让 GAS 管理复制/预测/取消，
+		// 替代裸 Montage_Play + Montage_SetEndDelegate。
+		// 不绑 OnBlendOut：前冲 Evade 的 Sprint 过渡依赖 Montage_Stop(0.35s) 淡出，若在 BlendOut 开始时
+		// EndAbility，会被 EndAbility 里的 Montage_Stop(0.2f) 截断淡出时间。
+		// OnCompleted / OnInterrupted 即等价于原 OnEvadeMontageEnded 的两种结束路径。
+		UAbilityTask_PlayMontageAndWait* PlayEvadeMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+			this, NAME_None, CurrentPlayingMontage);
+		PlayEvadeMontageTask->OnCompleted.AddDynamic(this, &ThisClass::K2_EndAbility);
+		PlayEvadeMontageTask->OnInterrupted.AddDynamic(this, &ThisClass::K2_EndAbility);
+		PlayEvadeMontageTask->OnCancelled.AddDynamic(this, &ThisClass::K2_EndAbility);
+		PlayEvadeMontageTask->ReadyForActivation();
 
 		UAbilityTask_WaitGameplayEvent* WaitToSprintTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, UUExtraAbilitySystemStatic::GetEvadeToSprintTag());
 		WaitToSprintTask->EventReceived.AddDynamic(this, &ThisClass::OnEvadeToSprint);
@@ -206,11 +206,6 @@ void UGA_Evade::PollMoveInputForSprint()
 	bTransitionedToSprint = true;
 
 	AnimInst->Montage_Stop(SprintTransitionBlendOut, CurrentPlayingMontage);
-}
-
-void UGA_Evade::OnEvadeMontageEnded(UAnimMontage* Montage, bool bInterrupted)
-{
-	K2_EndAbility();
 }
 
 void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

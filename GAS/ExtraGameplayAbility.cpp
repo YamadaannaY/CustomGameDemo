@@ -5,7 +5,6 @@
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 
@@ -113,10 +112,11 @@ void UExtraGameplayAbility::CheckMovementInputForCancel()
 
 bool UExtraGameplayAbility::HasMovementInput() const
 {
+	// 用角色的 bHasMoveInput（输入级信号），而非 GetCurrentAcceleration（物理级，会因空中/落地硬直/时序滞后而为 0）
 	AExtraPlayerCharacter* AvatarChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-	if (AvatarChar && AvatarChar->GetCharacterMovement())
+	if (AvatarChar)
 	{
-		return AvatarChar->GetCharacterMovement()->GetCurrentAcceleration().SizeSquared() > 0.0f;
+		return AvatarChar->HasMoveInput();
 	}
 
 	return false;

@@ -2,11 +2,13 @@
 #include "AbilitySystemComponent.h"
 #include "GameplayTagContainer.h"
 #include "Abilities/GameplayAbilityTypes.h"
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
+#include "ExtractGameCharacter/ExtraGameAnimInstance.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 
 UGA_AirAttack::UGA_AirAttack()
@@ -16,6 +18,9 @@ UGA_AirAttack::UGA_AirAttack()
 	ActivationRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetAirborneTag());
 	
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirAttackTag());
+
+	// 启用移动打断（落地动画的 cancel AN 可打断后摇）
+	bEnableMovementCancel = true;
 
 	// 通过InputTag触发
 	FAbilityTriggerData LightAttackTrigger;
@@ -59,6 +64,18 @@ void UGA_AirAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 		PlayerChar->SetMovementInputLocked(true);
 	}
 
+	// 标记空中攻击中：让 AnimBP 状态机在攻击期间不让 falling 抢占动画输出
+	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetOwnerAnimInstance()))
+	{
+		AnimInst->bAirAttacking = true;
+	}
+
+	// 移动打断（基类机制）：监听落地动画 cancel AN 的 ability.cancel 事件
+	if (bEnableMovementCancel)
+	{
+		SetupMovementCancel();
+	}
+
 	CurrentPhase = EAirAttackPhase::None;
 
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
@@ -77,18 +94,21 @@ void UGA_AirAttack::PlayStartMontage()
 	}
 
 	CurrentPhase = EAirAttackPhase::Start;
-	AnimInst->Montage_Play(AirAttackStartMontage);
 
-	FOnMontageEnded EndDelegate;
-	EndDelegate.BindUObject(this, &UGA_AirAttack::OnStartMontageEnded);
-	AnimInst->Montage_SetEndDelegate(EndDelegate, AirAttackStartMontage);
+	// 用 PlayMontageAndWait，在 Start 的 BlendOut（开始淡出）时就触发 OnStartMontageBlendOut，
+	// 让 Loop 与 Start 的淡出重叠，避免「完全结束后才播 Loop」造成的真空帧。
+	UAbilityTask_PlayMontageAndWait* PlayStartTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+		this, NAME_None, AirAttackStartMontage, 1.0f, NAME_None, false, 1.0f);
+	PlayStartTask->OnBlendOut.AddDynamic(this, &UGA_AirAttack::OnStartMontageBlendOut);
+	PlayStartTask->OnInterrupted.AddDynamic(this, &UGA_AirAttack::K2_EndAbility);
+	PlayStartTask->OnCancelled.AddDynamic(this, &UGA_AirAttack::K2_EndAbility);
+	PlayStartTask->ReadyForActivation();
 }
 
-void UGA_AirAttack::OnStartMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+void UGA_AirAttack::OnStartMontageBlendOut()
 {
-	if (bInterrupted)
+	if (CurrentPhase != EAirAttackPhase::Start)
 	{
-		K2_EndAbility();
 		return;
 	}
 
@@ -105,7 +125,7 @@ void UGA_AirAttack::PlayLoopMontage()
 	}
 
 	CurrentPhase = EAirAttackPhase::Loop;
-	AnimInst->Montage_PlayWithBlendIn(AirAttackLoopMontage, FAlphaBlend(StartToLoopBlendInTime), 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, true);
+	AnimInst->Montage_PlayWithBlendIn(AirAttackLoopMontage, FAlphaBlend(StartToLoopBlendInTime), 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
 
 	// 强制 section 自循环：不依赖资产 bLoop 是否勾选，确保下砸循环动画播完会跳回自身，
 	// 避免播完一遍后被 AnimBP 状态机接管切到 falling，导致 GA 与动画状态脱节。
@@ -120,7 +140,6 @@ void UGA_AirAttack::PlayLoopMontage()
 		AvatarChar->LandedDelegate.AddDynamic(this, &UGA_AirAttack::OnLandDetected);
 	}
 
-	// 兜底：定时检查是否已落地（防止 LandedDelegate 边缘情况漏触发）
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().SetTimer(
@@ -176,6 +195,12 @@ void UGA_AirAttack::PlayLandMontage()
 
 	StopLoopMontage();
 
+	// 落地阶段解锁移动输入：角色已在地面，允许移动并让移动打断机制生效
+	if (AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo()))
+	{
+		PlayerChar->SetMovementInputLocked(false);
+	}
+
 	UAnimInstance* AnimInst = GetOwnerAnimInstance();
 	if (!AnimInst)
 	{
@@ -224,6 +249,12 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->RemoveLooseGameplayTag(UUExtraAbilitySystemStatic::GetAirAttackTag());
+	}
+
+	// 清除 AnimBP 的空中攻击标记，让状态机恢复正常
+	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetOwnerAnimInstance()))
+	{
+		AnimInst->bAirAttacking = false;
 	}
 
 	// 解锁移动输入
