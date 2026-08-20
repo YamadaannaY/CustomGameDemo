@@ -1,5 +1,4 @@
 #include "ExtraGameplayAbility.h"
-
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
@@ -39,7 +38,8 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		MovementCheckTimerHandle.Invalidate();
 	}
 
-	// 若因移动输入结束，淡出当前 Montage
+	// 若因移动输入结束，用 Montage 资产自身配置的 BlendOut 时长停止（而非 0s 硬停），避免动画跳变。
+	// 位移已通过 RootMotion 开关 AN / LayerPerBone 混合与姿势解耦，过渡期间即可移动，无需靠 0s 抢输入。
 	if (bEndingFromMovement)
 	{
 		if (UAnimMontage* ActiveMontage = GetActiveMontageForCancel())
@@ -47,7 +47,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 			UAnimInstance* AnimInst = GetOwnerAnimInstance();
 			if (AnimInst && AnimInst->Montage_IsPlaying(ActiveMontage))
 			{
-				AnimInst->Montage_Stop(MovementCancelBlendOutTime, ActiveMontage);
+				AnimInst->Montage_Stop(MontageCancelBlendOutTime, ActiveMontage);
 			}
 		}
 	}
@@ -58,7 +58,29 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		Char->GetWeaponComponent()->HideWeapon();
 	}
 
+	// 恢复 RootMotionMode：AN_ToggleRootMotion 可能已切到 IgnoreRootMotion，
+	// 若 GA 被打断时没有对应 AN 去恢复，会全局残留导致后续所有带 root motion 的 montage 失效。
+	// 统一在 GA 结束时强制回默认（Montage 专用 root motion），兜底兜全。
+	// 注意：RootMotionMode 属于 UAnimInstance，而非 CharacterMovementComponent。
+	if (UAnimInstance* AnimInst = GetOwnerAnimInstance())
+	{
+		AnimInst->RootMotionMode = ERootMotionMode::RootMotionFromEverything;
+	}
+
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
+	FOnGameplayAbilityEnded::FDelegate* OnGameplayAbilityEndedDelegate, const FGameplayEventData* TriggerEventData)
+{
+	Super::PreActivate(Handle, ActorInfo, ActivationInfo, OnGameplayAbilityEndedDelegate, TriggerEventData);
+
+	// 移动打断：无需子类在 ActivateAbility 里手动挂载，只要 bEnableMovementCancel 为 true 即在此统一监听。
+	if (bEnableMovementCancel)
+	{
+		SetupMovementCancel();
+	}
 }
 
 void UExtraGameplayAbility::SetupMovementCancel()
@@ -87,6 +109,7 @@ void UExtraGameplayAbility::OnMovementCancelNotifyReceived(FGameplayEventData Pa
 	if (HasMovementInput())
 	{
 		bEndingFromMovement = true;
+		OnMovementCancelTriggered();
 		K2_EndAbility();
 		return;
 	}
@@ -106,13 +129,13 @@ void UExtraGameplayAbility::CheckMovementInputForCancel()
 	{
 		GetWorld()->GetTimerManager().ClearTimer(MovementCheckTimerHandle);
 		bEndingFromMovement = true;
+		OnMovementCancelTriggered();
 		K2_EndAbility();
 	}
 }
 
 bool UExtraGameplayAbility::HasMovementInput() const
 {
-	// 用角色的 bHasMoveInput（输入级信号），而非 GetCurrentAcceleration（物理级，会因空中/落地硬直/时序滞后而为 0）
 	AExtraPlayerCharacter* AvatarChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
 	if (AvatarChar)
 	{

@@ -7,7 +7,7 @@ void UExtraGameAnimInstance::OnFootPlantNotify(EFootPlant Foot)
 {
 	if (!bRequestStop)
 		return;
-
+	
 	PendingStopFoot = Foot;
 	bCanEnterStop = true;
 }
@@ -35,6 +35,7 @@ void UExtraGameAnimInstance::OnStopStateEntered()
 	bCanEnterStop = false;
 	PendingStopFoot = EFootPlant::None;
 }
+
 
 void UExtraGameAnimInstance::OnSprintStateLeft()
 {

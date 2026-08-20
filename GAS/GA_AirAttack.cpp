@@ -19,10 +19,10 @@ UGA_AirAttack::UGA_AirAttack()
 	
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirAttackTag());
 
-	// 启用移动打断（落地动画的 cancel AN 可打断后摇）
+	// 启用移动打断
 	bEnableMovementCancel = true;
 
-	// 通过InputTag触发
+	// 通过InputTag +AirBoneTag触发
 	FAbilityTriggerData LightAttackTrigger;
 	LightAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
 	LightAttackTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetLightAttackInputTag();
@@ -51,14 +51,14 @@ void UGA_AirAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 		return;
 	}
 
-	// 标记本次浮空已触发空中攻击，落地时清除
+	// 标记触发空中攻击，落地时清除
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	if (ASC)
 	{
 		ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetAirAttackTag());
 	}
 
-	// 锁定移动输入
+	// 锁定Start + Loop过程中移动输入
 	if (AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(AvatarChar))
 	{
 		PlayerChar->SetMovementInputLocked(true);
@@ -68,12 +68,6 @@ void UGA_AirAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetOwnerAnimInstance()))
 	{
 		AnimInst->bAirAttacking = true;
-	}
-
-	// 移动打断（基类机制）：监听落地动画 cancel AN 的 ability.cancel 事件
-	if (bEnableMovementCancel)
-	{
-		SetupMovementCancel();
 	}
 
 	CurrentPhase = EAirAttackPhase::None;
@@ -95,8 +89,24 @@ void UGA_AirAttack::PlayStartMontage()
 
 	CurrentPhase = EAirAttackPhase::Start;
 
+	// 从 Start 阶段就监听落地：低空起跳可能 Start 还没播完就已落地，提前捕获以便直接进 Land。
+	if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		AvatarChar->LandedDelegate.AddDynamic(this, &UGA_AirAttack::OnLandDetected);
+	}
+
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			LandCheckTimerHandle,
+			this,
+			&UGA_AirAttack::PollLandCheck,
+			0.08f,
+			true);
+	}
+
 	// 用 PlayMontageAndWait，在 Start 的 BlendOut（开始淡出）时就触发 OnStartMontageBlendOut，
-	// 让 Loop 与 Start 的淡出重叠，避免「完全结束后才播 Loop」造成的真空帧。
+	// 让 Loop 与 Start 的淡出重叠，避免「完全结束后才播 Loop」造成的真空帧导致进入状态机。
 	UAbilityTask_PlayMontageAndWait* PlayStartTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this, NAME_None, AirAttackStartMontage, 1.0f, NAME_None, false, 1.0f);
 	PlayStartTask->OnBlendOut.AddDynamic(this, &UGA_AirAttack::OnStartMontageBlendOut);
@@ -127,27 +137,10 @@ void UGA_AirAttack::PlayLoopMontage()
 	CurrentPhase = EAirAttackPhase::Loop;
 	AnimInst->Montage_PlayWithBlendIn(AirAttackLoopMontage, FAlphaBlend(StartToLoopBlendInTime), 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
 
-	// 强制 section 自循环：不依赖资产 bLoop 是否勾选，确保下砸循环动画播完会跳回自身，
-	// 避免播完一遍后被 AnimBP 状态机接管切到 falling，导致 GA 与动画状态脱节。
+	//section 自循环：不依赖资产 bLoop 是否勾选，确保下砸循环动画播完会跳回自身，
 	if (const FName LoopSection = AnimInst->Montage_GetCurrentSection(AirAttackLoopMontage); LoopSection != NAME_None)
 	{
 		AnimInst->Montage_SetNextSection(LoopSection, LoopSection, AirAttackLoopMontage);
-	}
-
-	// 绑定角色落地事件：落地即切换落地动画
-	if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
-	{
-		AvatarChar->LandedDelegate.AddDynamic(this, &UGA_AirAttack::OnLandDetected);
-	}
-
-	if (GetWorld())
-	{
-		GetWorld()->GetTimerManager().SetTimer(
-			LandCheckTimerHandle,
-			this,
-			&UGA_AirAttack::PollLandCheck,
-			0.05f,
-			true);
 	}
 }
 
@@ -163,7 +156,8 @@ void UGA_AirAttack::PollLandCheck()
 
 void UGA_AirAttack::TryTriggerLand()
 {
-	if (CurrentPhase != EAirAttackPhase::Loop)
+	// Start 阶段也可能落地（低空起跳），因此允许 Start 与 Loop 两阶段触发
+	if (CurrentPhase != EAirAttackPhase::Start && CurrentPhase != EAirAttackPhase::Loop)
 	{
 		return;
 	}
@@ -173,7 +167,7 @@ void UGA_AirAttack::TryTriggerLand()
 	{
 		if (AvatarChar->GetCharacterMovement() && AvatarChar->GetCharacterMovement()->IsFalling())
 		{
-			return; // 仍在空中，忽略本次（Timer 会继续轮询）
+			return;
 		}
 	}
 
@@ -208,6 +202,12 @@ void UGA_AirAttack::PlayLandMontage()
 		return;
 	}
 
+	// Start 阶段就落地时，Start montage 可能仍在播放，一并停掉
+	if (AirAttackStartMontage && AnimInst->Montage_IsPlaying(AirAttackStartMontage))
+	{
+		AnimInst->Montage_Stop(LoopToLandBlendInTime, AirAttackStartMontage);
+	}
+
 	CurrentPhase = EAirAttackPhase::Land;
 	AnimInst->Montage_PlayWithBlendIn(AirAttackLandMontage, FAlphaBlend(LoopToLandBlendInTime), 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
 
@@ -222,6 +222,16 @@ void UGA_AirAttack::StopLoopMontage()
 	if (AnimInst && AirAttackLoopMontage && AnimInst->Montage_IsPlaying(AirAttackLoopMontage))
 	{
 		AnimInst->Montage_Stop(LoopToLandBlendInTime, AirAttackLoopMontage);
+	}
+}
+
+void UGA_AirAttack::OnMovementCancelTriggered()
+{
+	// 立即让 AnimBP 状态机接管：若等 EndAbility 才清 bAirAttacking，
+	// 状态机过渡会晚于 montage 停止一拍，导致移动响应额外延迟。
+	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetOwnerAnimInstance()))
+	{
+		AnimInst->bAirAttacking = false;
 	}
 }
 
@@ -263,20 +273,20 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		PlayerChar->SetMovementInputLocked(false);
 	}
 
-	// 停止可能仍在播放的动画
+	// 停止可能仍在播放的动画（均用 Montage 资产自身配置的 BlendOut 时长，负值触发回退）
 	if (UAnimInstance* AnimInst = GetOwnerAnimInstance())
 	{
 		if (AirAttackLoopMontage && AnimInst->Montage_IsPlaying(AirAttackLoopMontage))
 		{
-			AnimInst->Montage_Stop(0.2f, AirAttackLoopMontage);
+			AnimInst->Montage_Stop(MontageCancelBlendOutTime, AirAttackLoopMontage);
 		}
 		if (AirAttackStartMontage && AnimInst->Montage_IsPlaying(AirAttackStartMontage))
 		{
-			AnimInst->Montage_Stop(0.2f, AirAttackStartMontage);
+			AnimInst->Montage_Stop(MontageCancelBlendOutTime, AirAttackStartMontage);
 		}
 		if (AirAttackLandMontage && AnimInst->Montage_IsPlaying(AirAttackLandMontage))
 		{
-			AnimInst->Montage_Stop(0.2f, AirAttackLandMontage);
+			AnimInst->Montage_Stop(MontageCancelBlendOutTime, AirAttackLandMontage);
 		}
 	}
 

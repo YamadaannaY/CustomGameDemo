@@ -1,8 +1,6 @@
 #include "AN_FootPlant.h"
 #include "ExtractGameCharacter/ExtraGameAnimInstance.h"
 
-
-
 void UAN_FootPlant::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference)
 {
 	Super::Notify(MeshComp, Animation, EventReference);

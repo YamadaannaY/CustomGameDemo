@@ -4,8 +4,6 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
-#include "ExtractGameCharacter/ExtraPlayerCharacter.h"
-#include  "GameFramework/CharacterMovementComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 
 UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
@@ -36,12 +34,6 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 	// 重置跨激活状态（InstancedPerActor 实例复用，避免残留到下一次激活）
 	NextComboName = NAME_None;
-
-	// 移动打断（基类机制）：监听取消事件
-	if (bEnableMovementCancel)
-	{
-		SetupMovementCancel();
-	}
 
 	if (HasAuthorityOrPredictionKey(ActorInfo,&ActivationInfo))
 	{

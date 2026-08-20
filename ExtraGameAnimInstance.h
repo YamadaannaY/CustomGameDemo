@@ -53,40 +53,42 @@ public:
 	UFUNCTION(BlueprintCallable,meta=(BlueprintThreadSafe))
 	FORCEINLINE bool bIsWalking() const {return  bisWalking;}
 	
+	/*
 	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
 	FORCEINLINE  bool IsWalkingMode() const {return bWalkMode;}
+	*/
 
-	// -- 延迟停步系统 --
-	// 玩家已松开移动键，等待下一个 FootPlant Notify 退出
+	// 玩家已松开移动键，锁速度等待下一个 FootPlant Notify 退出
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
 	bool bRequestStop = false;
 
-	// FootPlant Notify 触发且 bRequestStop==true 时设为 true，AnimBP Transition Rule使用
+	// FootPlant Notify 触发且 bRequestStop==true 时设为 true，作为AnimBP Transition Rule进入停步状态机
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
 	bool bCanEnterStop = false;
 
-	// 记录"应该在哪个脚落地时停步"
+	// 记录应该在哪个脚落地时停步
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
 	EFootPlant PendingStopFoot = EFootPlant::None;
 
-	// 请求停步（由 Character 在松开移动键时调用）
+	// 请求停步（由 Character 在松开移动键时调用），开始锁速度并放开进入停步权限
 	void RequestStop();
 
-	// 清除停步请求（新输入 / 跳跃 / 进入 Stop 状态后）
+	// 清除停步请求，重置时使用（新输入 / 跳跃 / 进入 Stop 状态后）
 	void ClearStopRequest();
 
-	// AnimBP 进入 Stop 状态时调用，消费停步请求
+	// AnimBP 进入Stop状态时调用，消费停步请求
 	UFUNCTION(BlueprintCallable,meta=(BlueprintThreadSafe))
 	void OnStopStateEntered();
-
-	// -- AnimBP Transition Rule 辅助 --
+	
+	//进入左停步的过渡条件
 	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
 	FORCEINLINE bool CanEnterLeftStop() const { return bCanEnterStop && PendingStopFoot == EFootPlant::Left; }
 
+	//进入右停步的过渡条件
 	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
 	FORCEINLINE bool CanEnterRightStop() const { return bCanEnterStop && PendingStopFoot == EFootPlant::Right; }
 
-	// -- BlendSpace 驱动参数 --
+	// BlendSpace 驱动参数 
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion")
 	float GroundSpeed = 0.f;
 
@@ -101,9 +103,8 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion")
 	bool bIsMoving = false;
-
-	// -- Sprint 状态 --
-	// AN_EvadeToSprint 截断 Montage 后置为 true，AnimBP 过渡条件
+	
+	// AN_EvadeToSprint 截断 Montage 后置为 true
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Sprint")
 	bool bEvadeToSprint = false;
 

@@ -1,10 +1,14 @@
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "ExtraGameMovementComponent.generated.h"
 
+/*
+ *项目用CMC
+ * -重写了转向逻辑，添加平滑处理
+ *
+ */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class EXTRACTGAMECHARACTER_API UExtraGameMovementComponent : public UCharacterMovementComponent
 {

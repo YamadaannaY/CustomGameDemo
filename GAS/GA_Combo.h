@@ -5,7 +5,7 @@
 #include "GA_Combo.generated.h"
 
 /**
- *
+ * 普攻GA，连段Montage(多段Section，利用SectionName进行跳转)
  */
 UCLASS()
 class  EXTRACTGAMECHARACTER_API UGA_Combo : public UExtraGameplayAbility

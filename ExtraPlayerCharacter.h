@@ -41,6 +41,8 @@ public:
 	// 锁定/解锁移动输入（空中攻击期间由 GA 调用，禁止角色水平移动）
 	void SetMovementInputLocked(bool bLocked) { bMovementInputLocked = bLocked; }
 	FORCEINLINE bool IsMovementInputLocked() const { return bMovementInputLocked; }
+	
+	float LastMoveInputDuration = 0.f;
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	class USpringArmComponent* CamBoom;
@@ -176,7 +178,7 @@ private:
 
 	float TargetDelta=0.0f;
 
-	float LastMoveInputDuration = 0.f;
+
 
 	float MoveInputStartTime = 0.f;
 
@@ -190,11 +192,7 @@ private:
 
 	// 移动输入锁定标志（空中攻击期间为 true，忽略移动输入）
 	bool bMovementInputLocked = false;
-
-	// 停步请求被短输入打断过（Move 检测到 bRequestStop==true 时置位），
-	// 下次松开应重新 RequestStop 而非播急停蒙太奇，否则停步状态机会卡死在 jogging
-	bool bInterruptedStop = false;
-
+	
 	// 记录普攻按下时间，用于点按/长按判定
 	float NormalAttackPressTime = 0.f;
 };

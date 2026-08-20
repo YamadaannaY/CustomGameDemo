@@ -135,24 +135,11 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 	// 检测 无输入→有输入 的跳变，记录按键开始时间
 	if (!bHasMoveInput && !InputVal.IsNearlyZero())
 	{
-		// 清除延迟停步请求（新输入打断停步等待）
 		if (UExtraGameAnimInstance* GameAI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
 		{
-			// 停步请求仍挂着说明玩家在"等待落脚踏入 stop"期间给了新输入，
-			// 记录此事实，下次松开改走 RequestStop 重新建立停步流程
-			bInterruptedStop = GameAI->bRequestStop;
 			GameAI->ClearStopRequest();
 		}
-
-		// 新输入打断急停/转身 montage，短 blend-out 让状态机快速接管
-		if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
-		{
-			AnimInst->Montage_Stop(0.2f, QuickLeftStopMontage);
-			AnimInst->Montage_Stop(0.2f, QuickRightStopMontage);
-			AnimInst->Montage_Stop(0.2f, TurnLeft90Montage);
-			AnimInst->Montage_Stop(0.2f, TurnRight90Montage);
-		}
-
+		
 		MoveInputStartTime = GetWorld()->GetTimeSeconds();
 	}
 	bHasMoveInput = !InputVal.IsNearlyZero();
@@ -216,7 +203,8 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	InputDirection = FVector::ZeroVector;
 	SmoothedInputDirection = FVector::ZeroVector;
 
-	// 只在普通跑步移动时才响应松手停步，避免干扰 Evade / Stop / Turn 等 Montage
+	
+	// 只在普通跑步时才响应松手停步，避免干扰 Evade / QuickStop / Turn 等 Montage
 	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
 	{
 		if (AnimInst->IsAnyMontagePlaying())
@@ -224,25 +212,15 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 			return;
 		}
 	}
-
-	// 停步请求曾被短输入打断（等待落脚踏入 stop 期间给了新输入）：
-	// 重新走 RequestStop 建立停步流程，而不是播急停蒙太奇，
-	// 否则停步状态机会因 bRequestStop/bCanEnterStop 被清空而卡死在 jogging
-	if (bInterruptedStop)
-	{
-		bInterruptedStop = false;
-		if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
-		{
-			AI->RequestStop();
-		}
-		return;
-	}
-
+	
 	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
 	{
 		AnimInst->ClearStopRequest();
 	}
-
+	
+	UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance());
+	AI->RequestStop();
+	
 	// 轻触判定：输入持续时间 < 0.2s
 	if (LastMoveInputDuration > 0.f && LastMoveInputDuration < 0.2f)
 	{
@@ -258,18 +236,17 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 			PlayTurnMontage(bTurnLeft);
 		}
 	}
-	else
-	{
-		if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
-		{
-			AI->RequestStop();
-		}
-	}
 }
 
 void AExtraPlayerCharacter::Jump()
 {
 	Super::Jump();
+
+	// 跳跃打断所有正在激活的GA（走各GA的EndAbility收尾：停Montage、恢复RootMotion、清状态tag等）
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		ASC->CancelAllAbilities(nullptr);
+	}
 
 	// 跳跃时清除停步请求，防止落地后 FootPlant Notify 误触发 Stop
 	if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
@@ -367,7 +344,9 @@ void AExtraPlayerCharacter::TickArmLengthLerp(float Goal)
 
 void AExtraPlayerCharacter::PlayQuickStop()
 {
-	if (TargetDelta < 0.f && QuickLeftStopMontage)
+	// TargetDelta == 0 时角色朝向已与输入方向对齐（急停后静止、再朝原方向短输入最典型），
+	// 左右急停无差别，用 <= 兜底到左停，避免两个分支都不进导致静默失败、无法再次触发急停。
+	if (TargetDelta <= 0.f && QuickLeftStopMontage)
 	{
 		PlayAnimMontage(QuickLeftStopMontage);
 	}
@@ -403,7 +382,7 @@ void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
 }
 
 // ──────────────────────────────────────────────────────────────
-// 武器输入处理（鸣潮风格）
+// 武器输入处理
 // ──────────────────────────────────────────────────────────────
 
 void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& InputActionValue)
@@ -419,6 +398,7 @@ void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& Inp
 	}
 
 	const float Elapsed = GetWorld()->GetTimeSeconds() - NormalAttackPressTime;
+	
 	const FGameplayTag InputTag = (Elapsed >= HeavyAttackHoldTime)
 		? UUExtraAbilitySystemStatic::GetHeavyAttackInputTag()
 		: UUExtraAbilitySystemStatic::GetLightAttackInputTag();

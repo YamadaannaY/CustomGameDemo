@@ -14,7 +14,6 @@
 
 UGA_Evade::UGA_Evade()
 {
-	// 闪避不可重复触发：自身激活期间挂 AbilityTags 并用 BlockAbilitiesWithTag 阻断
 	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
 
@@ -42,7 +41,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	//基于移动加速度（是否有移动输入）判断前/后 Evade
+	//基于移动加速度判断前/后 Evade
 	const FVector Acceleration = AvatarChar->GetCharacterMovement()->GetCurrentAcceleration();
 	const bool bHasMoveInput = Acceleration.Size2D() > 0.f;
 
@@ -53,31 +52,28 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	//初始化
+	//init
 	bTransitionedToSprint = false;
 	bIsPollingForInput = false;
+	bEvadeToSprintTriggered = false;
+	DodgeCount = 1;
 	CurrentEvadeFacingOffset = 0.f;
 
+	//播放Montage
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
-		// 统一用 PlayMontageAndWait（与 GA_Combo / GA_AirAttack 一致），让 GAS 管理复制/预测/取消，
-		// 替代裸 Montage_Play + Montage_SetEndDelegate。
-		// 不绑 OnBlendOut：前冲 Evade 的 Sprint 过渡依赖 Montage_Stop(0.35s) 淡出，若在 BlendOut 开始时
-		// EndAbility，会被 EndAbility 里的 Montage_Stop(0.2f) 截断淡出时间。
-		// OnCompleted / OnInterrupted 即等价于原 OnEvadeMontageEnded 的两种结束路径。
-		UAbilityTask_PlayMontageAndWait* PlayEvadeMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-			this, NAME_None, CurrentPlayingMontage);
-		PlayEvadeMontageTask->OnCompleted.AddDynamic(this, &ThisClass::K2_EndAbility);
-		PlayEvadeMontageTask->OnInterrupted.AddDynamic(this, &ThisClass::K2_EndAbility);
-		PlayEvadeMontageTask->OnCancelled.AddDynamic(this, &ThisClass::K2_EndAbility);
-		PlayEvadeMontageTask->ReadyForActivation();
+		PlayEvadeMontage();
 
 		UAbilityTask_WaitGameplayEvent* WaitToSprintTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, UUExtraAbilitySystemStatic::GetEvadeToSprintTag());
 		WaitToSprintTask->EventReceived.AddDynamic(this, &ThisClass::OnEvadeToSprint);
 		WaitToSprintTask->ReadyForActivation();
 
+		// 监听第二次 Dodge 输入：第0帧~EvadeToSprint 期间可再闪避一次。
+		// 必须延迟到下一帧再挂载监听，否则输入直接触发此InputTask
+		GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ThisClass::SetupWaitDodgeInputPress);
+
 		AExtraPlayerCharacter* PC = Cast<AExtraPlayerCharacter>(AvatarChar);
-		
+
 		//前冲Evade允许基于MWC进行朝向调整，由于RootMotion，需要将InputDirYaw当做前方基准Yaw而非ActorRotYaw
 		if (PC && CurrentPlayingMontage == ForwardEvadeMontage)
 		{
@@ -90,11 +86,78 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 			{
 				EvadeBaseYaw = FRotationMatrix::MakeFromX(InitInput).Rotator().Yaw;
 			}
-			
+
 			//定时器每帧应用MR修改朝向
 			GetWorld()->GetTimerManager().SetTimer(EvadeFacingTimer, this, &UGA_Evade::UpdateEvadeFacing, EvadeFacingUpdateInterval, true);
 		}
 	}
+}
+
+void UGA_Evade::PlayEvadeMontage()
+{
+	UAbilityTask_PlayMontageAndWait* EvadeMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+		this, NAME_None, CurrentPlayingMontage);
+	HandlePlayMontageTaskDelegates(EvadeMontageTask);
+	EvadeMontageTask->ReadyForActivation();
+}
+
+void UGA_Evade::HandlePlayMontageTaskDelegates(UAbilityTask_PlayMontageAndWait* Task)
+{
+	if (!Task)
+	{
+		return;
+	}
+	
+	if (PlayEvadeMontageTask && PlayEvadeMontageTask->IsActive())
+	{
+		PlayEvadeMontageTask->EndTask();
+	}
+	PlayEvadeMontageTask = Task;
+
+	Task->OnCompleted.AddDynamic(this, &ThisClass::K2_EndAbility);
+	Task->OnBlendOut.AddDynamic(this, &ThisClass::K2_EndAbility);
+	Task->OnInterrupted.AddDynamic(this, &ThisClass::K2_EndAbility);
+	Task->OnCancelled.AddDynamic(this, &ThisClass::K2_EndAbility);
+}
+
+void UGA_Evade::SetupWaitDodgeInputPress()
+{
+	UAbilityTask_WaitGameplayEvent* WaitDodgeInputTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, UUExtraAbilitySystemStatic::GetDodgeInputTag(), nullptr, true, false);
+	WaitDodgeInputTask->EventReceived.AddDynamic(this, &ThisClass::HandleDodgeInputPress);
+	WaitDodgeInputTask->ReadyForActivation();
+}
+
+void UGA_Evade::HandleDodgeInputPress(FGameplayEventData EventData)
+{
+	// 与 GA_Combo 一致：先重新挂载监听，形成循环接收后续输入，再由次数守卫决定是否响应
+	SetupWaitDodgeInputPress();
+
+	// 仅在第0帧~EvadeToSprint 通知期间响应，且次数未用尽
+	if (bEvadeToSprintTriggered || DodgeCount >= MaxDodgeCount)
+	{
+		return;
+	}
+
+	if (!CurrentPlayingMontage)
+	{
+		return;
+	}
+
+	ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!AvatarChar)
+	{
+		return;
+	}
+
+	UAnimInstance* AnimInst = AvatarChar->GetMesh()->GetAnimInstance();
+	if (!AnimInst || !AnimInst->Montage_IsPlaying(CurrentPlayingMontage))
+	{
+		return;
+	}
+
+	DodgeCount++;
+	PlayEvadeMontage();
 }
 
 void UGA_Evade::UpdateEvadeFacing()
@@ -153,6 +216,9 @@ void UGA_Evade::OnEvadeToSprint(FGameplayEventData EventData)
 {
 	GetWorld()->GetTimerManager().ClearTimer(EvadeFacingTimer);
 
+	// EvadeToSprint 通知之后不再响应再次闪避
+	bEvadeToSprintTriggered = true;
+
 	if (bTransitionedToSprint || bIsPollingForInput)
 	{
 		return;
@@ -205,7 +271,7 @@ void UGA_Evade::PollMoveInputForSprint()
 	GetWorld()->GetTimerManager().ClearTimer(InputPollTimer);
 	bTransitionedToSprint = true;
 
-	AnimInst->Montage_Stop(SprintTransitionBlendOut, CurrentPlayingMontage);
+	AnimInst->Montage_Stop(MontageCancelBlendOutTime, CurrentPlayingMontage);
 }
 
 void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -225,7 +291,7 @@ void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGamep
 			UAnimInstance* AnimInst = AvatarChar->GetMesh()->GetAnimInstance();
 			if (AnimInst && AnimInst->Montage_IsPlaying(CurrentPlayingMontage))
 			{
-				AnimInst->Montage_Stop(0.2f, CurrentPlayingMontage);
+				AnimInst->Montage_Stop(MontageCancelBlendOutTime, CurrentPlayingMontage);
 			}
 		}
 		CurrentPlayingMontage = nullptr;

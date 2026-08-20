@@ -12,11 +12,6 @@
  *   1. 起手动画 AirAttackStartMontage 播完（OnCompleted）
  *   2. 循环下砸动画 AirAttackLoopMontage，直到落地
  *   3. 落地动画 AirAttackLandMontage，播完结束 GA
- *
- * 约束：
- *   - 一次浮空期间只允许触发一次（ActivationBlockedTags + airattack Tag）
- *   - 激活需要 character.state.airborne Tag（与 GA_Combo 靠 Tag 分流）
- *   - 空中期间锁定水平移动（SetMovementInputLocked）
  */
 UCLASS()
 class EXTRACTGAMECHARACTER_API UGA_AirAttack : public UExtraGameplayAbility
@@ -43,13 +38,12 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
 	float LoopToLandBlendInTime = 0.15f;
 
-	// Start → Loop 的交叉淡化时间（对齐原项目 0.034s）
+	// Start → Loop 的交叉淡化时间
 	// 关键：让 Start 的 blend out 与 Loop 的 blend in 重叠，消除「真空帧」，
 	// 否则真空帧会被状态机 idle/falling 抢占导致瞬变。
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
 	float StartToLoopBlendInTime = 0.034f;
 
-	// ── 回调 ──────────────────────────────────────────────
 	// 起手动画开始淡出（OnBlendOut）→ 立即进入循环下砸，与 Start 淡出重叠
 	UFUNCTION()
 	void OnStartMontageBlendOut();
@@ -66,7 +60,6 @@ private:
 	UFUNCTION()
 	void OnLandMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
-	// ── 辅助 ──────────────────────────────────────────────
 	// 共享的落地处理逻辑（无论来自 delegate 还是 timer）
 	void TryTriggerLand();
 
@@ -80,6 +73,9 @@ private:
 	// 覆写：移动打断时淡出的 Montage（落地动画带 cancel AN）
 	virtual UAnimMontage* GetActiveMontageForCancel() const override { return AirAttackLandMontage; }
 
+	// 命中移动打断瞬间：立即清掉 AnimBP 让位标记，让状态机在 montage 停止的同一帧接管
+	virtual void OnMovementCancelTriggered() override;
+
 	// 记录当前处于哪个阶段，用于 EndAbility 清理
 	enum class EAirAttackPhase : uint8
 	{
@@ -88,6 +84,7 @@ private:
 		Loop,
 		Land
 	};
+	
 	EAirAttackPhase CurrentPhase = EAirAttackPhase::None;
 
 	// 落地检测兜底 Timer 句柄
