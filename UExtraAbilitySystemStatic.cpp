@@ -3,6 +3,7 @@
 // ── Native GameplayTag 定义（静态注册，早于 CDO 构造）──
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack, "ability.basicattack");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Dodge, "ability.dodge");
+UE_DEFINE_GAMEPLAY_TAG(Ability_Skill_01, "ability.Skill.01");
 UE_DEFINE_GAMEPLAY_TAG(State_Airborne, "character.state.airborne");
 UE_DEFINE_GAMEPLAY_TAG(State_AirAttack, "character.state.airattack");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_LightAttack, "InputTag.LightAttack");
@@ -34,6 +35,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetAirborneTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackTag()
 {
 	return State_AirAttack;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetSkill01Tag()
+{
+	return Ability_Skill_01;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetLightAttackInputTag()

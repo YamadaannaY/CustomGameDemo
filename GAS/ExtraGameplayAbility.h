@@ -39,10 +39,10 @@ protected:
 	// 只需在子类构造函数中置 true，基类会在 PreActivate 自动挂载监听，无需在 ActivateAbility 里手动调用。
 	UPROPERTY(EditDefaultsOnly, Category = "Movement Cancel")
 	bool bEnableMovementCancel = false;
-	
+
 	UPROPERTY(EditDefaultsOnly, Category = "Movement Cancel")
-	float MontageCancelBlendOutTime = 0.3f ; 
-	
+	float MontageCancelBlendOutTime = 0.3f ;
+
 	// 开始监听取消事件（由 PreActivate 自动调用，子类无需手动触发）
 	void SetupMovementCancel();
 
@@ -55,18 +55,10 @@ protected:
 	// 取消事件 Tag（默认 "ability.cancel"，子类可覆写）
 	virtual FGameplayTag GetMovementCancelTag() const;
 
-	// 取消事件回调（AnimNotify 发送 GetMovementCancelTag 触发）
+	// 取消事件回调。事件由 AN_CancelWindow 在区间内检测到移动输入时发送，
+	// 到达这里即表示应当打断，无需再轮询输入。
 	UFUNCTION()
 	void OnMovementCancelNotifyReceived(FGameplayEventData Payload);
-
-	// 定时轮询是否有移动输入，命中则打断
-	void CheckMovementInputForCancel();
-
-	// 检查玩家是否有移动输入
-	bool HasMovementInput() const;
-
-	// 定时器句柄
-	FTimerHandle MovementCheckTimerHandle;
 
 	// 是否因移动输入触发 EndAbility（决定是否停止当前 Montage；停止时使用 Montage 自身 BlendOut 时长）
 	bool bEndingFromMovement = false;

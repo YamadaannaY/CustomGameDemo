@@ -25,6 +25,13 @@ UAbilitySystemComponent* AExtraCharacter::GetAbilitySystemComponent() const
 void AExtraCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 把目标跳跃高度换算成起跳初速度：v = sqrt(2 * g * h)（g 取绝对值，单位均为 cm）
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		const float Gravity = FMath::Abs(Movement->GetGravityZ());
+		Movement->JumpZVelocity = FMath::Sqrt(2.f * Gravity * JumpHeight);
+	}
 }
 
 void AExtraCharacter::ServerSideInit()

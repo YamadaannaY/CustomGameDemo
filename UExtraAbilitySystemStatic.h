@@ -36,8 +36,8 @@ public:
 	static FGameplayTag GetBasicAttackAbilityTag();
 	static FGameplayTag GetDodgeAbilityTag();
 	static FGameplayTag GetAirborneTag();
-	// 本次浮空期间已触发过空中攻击的标记 Tag（落地时清除）
 	static FGameplayTag GetAirAttackTag();
+	static FGameplayTag GetSkill01Tag();
 
 	// ── 输入触发 Tag（废弃 InputID，改用 AbilityTriggers + GameplayEvent）──
 	// 武器组 IA 全局固定，换武器只换背后 GA；GA 通过 AbilityTriggers 声明响应哪个 InputTag
