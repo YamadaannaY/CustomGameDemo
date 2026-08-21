@@ -110,8 +110,8 @@ void UGA_AirAttack::PlayStartMontage()
 	UAbilityTask_PlayMontageAndWait* PlayStartTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this, NAME_None, AirAttackStartMontage, 1.0f, NAME_None, false, 1.0f);
 	PlayStartTask->OnBlendOut.AddDynamic(this, &UGA_AirAttack::OnStartMontageBlendOut);
-	PlayStartTask->OnInterrupted.AddDynamic(this, &UGA_AirAttack::K2_EndAbility);
-	PlayStartTask->OnCancelled.AddDynamic(this, &UGA_AirAttack::K2_EndAbility);
+	PlayStartTask->OnInterrupted.AddDynamic(this, &UGA_AirAttack::OnStartMontageInterrupted);
+	PlayStartTask->OnCancelled.AddDynamic(this, &UGA_AirAttack::OnStartMontageInterrupted);
 	PlayStartTask->ReadyForActivation();
 }
 
@@ -123,6 +123,17 @@ void UGA_AirAttack::OnStartMontageBlendOut()
 	}
 
 	PlayLoopMontage();
+}
+
+void UGA_AirAttack::OnStartMontageInterrupted()
+{
+	// 仅 Start 阶段的中断才是外部打断(即起跳montage期间直接落地的少数情况)；Loop/Land 阶段主动停止 Start 是正常流程。
+	if (CurrentPhase != EAirAttackPhase::Start)
+	{
+		return;
+	}
+
+	K2_EndAbility();
 }
 
 void UGA_AirAttack::PlayLoopMontage()
@@ -202,13 +213,16 @@ void UGA_AirAttack::PlayLandMontage()
 		return;
 	}
 
-	// Start 阶段就落地时，Start montage 可能仍在播放，一并停掉
+	// 先切换阶段，再停 Start：停止会触发 OnStartMontageInterrupted，
+	// 此时已是 Land 阶段，回调会直接 return，避免误结束 GA。
+	CurrentPhase = EAirAttackPhase::Land;
+
+	// Start 阶段就落地时，Start montage 可能仍在播放，直接停掉
 	if (AirAttackStartMontage && AnimInst->Montage_IsPlaying(AirAttackStartMontage))
 	{
 		AnimInst->Montage_Stop(LoopToLandBlendInTime, AirAttackStartMontage);
 	}
 
-	CurrentPhase = EAirAttackPhase::Land;
 	AnimInst->Montage_PlayWithBlendIn(AirAttackLandMontage, FAlphaBlend(LoopToLandBlendInTime), 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
 
 	FOnMontageEnded EndDelegate;
@@ -273,7 +287,6 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		PlayerChar->SetMovementInputLocked(false);
 	}
 
-	// 停止可能仍在播放的动画（均用 Montage 资产自身配置的 BlendOut 时长，负值触发回退）
 	if (UAnimInstance* AnimInst = GetOwnerAnimInstance())
 	{
 		if (AirAttackLoopMontage && AnimInst->Montage_IsPlaying(AirAttackLoopMontage))

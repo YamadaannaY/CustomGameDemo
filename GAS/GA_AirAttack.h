@@ -48,6 +48,11 @@ private:
 	UFUNCTION()
 	void OnStartMontageBlendOut();
 
+	// 起手动画被中断：仅在 Start 阶段（真正外部打断）才结束 GA；
+	// 进入 Loop/Land 后主动停止 Start 属于正常流程，不应结束 GA。
+	UFUNCTION()
+	void OnStartMontageInterrupted();
+
 	// 角色落地事件回调（LandedDelegate）
 	UFUNCTION()
 	void OnLandDetected(const FHitResult& Hit);

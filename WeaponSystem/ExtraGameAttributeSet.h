@@ -63,7 +63,6 @@ public:
 	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, MaxStamina);
 
 protected:
-	// 复制回调
 	UFUNCTION()
 	virtual void OnRep_Health(const FGameplayAttributeData& OldHealth);
 	UFUNCTION()
