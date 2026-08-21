@@ -106,7 +106,6 @@ void UGA_Combo::TryCommitCombo()
 	OwnerAnimInst->Montage_JumpToSection(NextComboName, ComboMontage);
 
 	NextComboName=NAME_None;
-	bEndingFromMovement = false;
 }
 
 TSubclassOf<UGameplayEffect> UGA_Combo::GetDamageEffectForCurrentCombo() const

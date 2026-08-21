@@ -32,6 +32,11 @@ public:
 	// GAS 是否已初始化（防止 OnPossess 重复调用）
 	bool bGASInitialized = false;
 
+	// 跳跃高度（cm）。BeginPlay 时按当前重力换算成 JumpZVelocity 写入移动组件，
+	// 便于在编辑器里直接填目标高度而非初速度。默认 90 与引擎默认 JumpZVelocity=420 一致。
+	UPROPERTY(EditDefaultsOnly, Category = "Character Movement (Jumping)", meta = (ClampMin = "0.0"))
+	float JumpHeight = 90.f;
+
 protected:
 	virtual void BeginPlay() override;
 	
