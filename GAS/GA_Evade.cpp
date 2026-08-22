@@ -41,11 +41,15 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	//基于移动加速度判断前/后 Evade
+	//基于移动加速度判断前/后 Evade；空中/地面各有一套 Montage，但选择逻辑一致
 	const FVector Acceleration = AvatarChar->GetCharacterMovement()->GetCurrentAcceleration();
 	const bool bHasMoveInput = Acceleration.Size2D() > 0.f;
+	const bool bAirborne = AvatarChar->GetCharacterMovement()->IsFalling();
 
-	CurrentPlayingMontage = bHasMoveInput ? ForwardEvadeMontage : BackwardEvadeMontage;
+	bPlayingForwardEvade = bHasMoveInput;
+	CurrentPlayingMontage = bAirborne
+		? (bHasMoveInput ? ForwardAirEvadeMontage : BackwardAirEvadeMontage)
+		: (bHasMoveInput ? ForwardEvadeMontage : BackwardEvadeMontage);
 	if (!CurrentPlayingMontage)
 	{
 		K2_EndAbility();
@@ -58,6 +62,13 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	bEvadeToSprintTriggered = false;
 	DodgeCount = 1;
 	CurrentEvadeFacingOffset = 0.f;
+
+	// 空中 Evade：绑定落地委托，落地立即结束 GA。地面 Evade 不绑。
+	bAirborneEvade = bAirborne;
+	if (bAirborneEvade)
+	{
+		AvatarChar->LandedDelegate.AddDynamic(this, &ThisClass::OnAirEvadeLandDetected);
+	}
 
 	//播放Montage
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
@@ -75,7 +86,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		AExtraPlayerCharacter* PC = Cast<AExtraPlayerCharacter>(AvatarChar);
 
 		//前冲Evade允许基于MWC进行朝向调整，由于RootMotion，需要将InputDirYaw当做前方基准Yaw而非ActorRotYaw
-		if (PC && CurrentPlayingMontage == ForwardEvadeMontage)
+		if (PC && bPlayingForwardEvade)
 		{
 			const FVector& InitInput = PC->GetInputDirection();
 			if (InitInput.IsNearlyZero())
@@ -241,6 +252,12 @@ void UGA_Evade::OnEvadeToSprint(FGameplayEventData EventData)
 	GetWorld()->GetTimerManager().SetTimer(InputPollTimer, this, &UGA_Evade::PollMoveInputForSprint, InputPollInterval, true);
 }
 
+void UGA_Evade::OnAirEvadeLandDetected(const FHitResult& Hit)
+{
+	// 落地立即结束 GA；montage 停止由 EndAbility 统一用 MontageCancelBlendOutTime 处理
+	K2_EndAbility();
+}
+
 void UGA_Evade::PollMoveInputForSprint()
 {
 	if (!CurrentPlayingMontage)
@@ -281,6 +298,16 @@ void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGamep
 	{
 		GetWorld()->GetTimerManager().ClearTimer(InputPollTimer);
 		GetWorld()->GetTimerManager().ClearTimer(EvadeFacingTimer);
+	}
+
+	// 空中 Evade：解绑落地委托，避免悬空绑定
+	if (bAirborneEvade)
+	{
+		if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+		{
+			AvatarChar->LandedDelegate.RemoveDynamic(this, &ThisClass::OnAirEvadeLandDetected);
+		}
+		bAirborneEvade = false;
 	}
 
 	if (CurrentPlayingMontage)

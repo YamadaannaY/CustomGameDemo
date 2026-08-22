@@ -28,6 +28,10 @@ public:
 	UFUNCTION()
 	void HandleDodgeInputPress(FGameplayEventData EventData);
 
+	// 空中 Evade 落地回调：落地立即结束 GA（空中闪避最终必然落地，落地时 montage 可能仍未播完）
+	UFUNCTION()
+	void OnAirEvadeLandDetected(const FHitResult& Hit);
+
 private:
 	// 挂载 Dodge 输入监听（GameplayEvent 方式，类似 GA_Combo 循环监听 LightAttack）
 	void SetupWaitDodgeInputPress();
@@ -64,8 +68,20 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Montage")
 	UAnimMontage* BackwardEvadeMontage;
 
+	UPROPERTY(EditDefaultsOnly, Category="Montage|Air")
+	UAnimMontage* ForwardAirEvadeMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Montage|Air")
+	UAnimMontage* BackwardAirEvadeMontage;
+
 	UPROPERTY()
 	TObjectPtr<UAnimMontage> CurrentPlayingMontage;
+
+	// 本次激活选择的是前冲（Forward/ForwardAir），用于朝向调整等前冲专属逻辑
+	bool bPlayingForwardEvade = false;
+
+	// 本次激活为空中 Evade（已绑定 LandedDelegate，EndAbility 时解绑）
+	bool bAirborneEvade = false;
 
 	// 允许的最大连续闪避次数（第0帧算一次，之后到 EvadeToSprint 前可再补一次）
 	UPROPERTY(EditDefaultsOnly, Category="Evade")
