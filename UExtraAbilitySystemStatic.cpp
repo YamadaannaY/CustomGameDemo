@@ -16,6 +16,8 @@ UE_DEFINE_GAMEPLAY_TAG(Combo_Change_End, "ability.combo.change.end");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Damage, "ability.combo.damage");
 UE_DEFINE_GAMEPLAY_TAG(Evade_ToSprint, "Evade.ToSprint");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Cancel, "ability.cancel");
+UE_DEFINE_GAMEPLAY_TAG(Push_Self, "ability.push.self");
+UE_DEFINE_GAMEPLAY_TAG(Ability_Passive_Launch, "ability.passive.launch.activate");
 
 FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 {
@@ -90,4 +92,14 @@ FGameplayTag UUExtraAbilitySystemStatic::GetEvadeToSprintTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetAbilityCancelTag()
 {
 	return Ability_Cancel;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetPushSelfTag()
+{
+	return Push_Self;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetLaunchedAbilityActivationTag()
+{
+	return Ability_Passive_Launch ; 
 }

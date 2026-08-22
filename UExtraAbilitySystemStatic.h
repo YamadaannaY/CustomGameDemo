@@ -23,6 +23,7 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Change_End);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Damage);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Evade_ToSprint);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Cancel);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Push_Self);
 
 /**
  * 
@@ -53,4 +54,8 @@ public:
 	static FGameplayTag GetComboTargetEventTag();       // "ability.combo.damage"
 	static FGameplayTag GetEvadeToSprintTag();          // "Evade.ToSprint"
 	static FGameplayTag GetAbilityCancelTag();          // "ability.cancel"
+	static FGameplayTag GetPushSelfTag();               // "ability.push.self"
+	
+	
+	static FGameplayTag GetLaunchedAbilityActivationTag();
 };
