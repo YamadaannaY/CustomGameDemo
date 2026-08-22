@@ -22,6 +22,9 @@ UGA_AirAttack::UGA_AirAttack()
 	// 启用移动打断
 	bEnableMovementCancel = true;
 
+	// 启用重力缩放（空中攻击期间用 AbilityGravityScale 覆盖 GravityScale）
+	bEnableGravityScale = true;
+
 	// 通过InputTag +AirBoneTag触发
 	FAbilityTriggerData LightAttackTrigger;
 	LightAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
@@ -49,13 +52,6 @@ void UGA_AirAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 	{
 		K2_EndAbility();
 		return;
-	}
-
-	// 应用空中攻击期间的重力缩放（0=无重力，1=默认重力），EndAbility 时恢复
-	if (UCharacterMovementComponent* Movement = AvatarChar->GetCharacterMovement())
-	{
-		OriginalGravityScale = Movement->GravityScale;
-		Movement->GravityScale = AirAttackGravityScale;
 	}
 
 	// 标记触发空中攻击，落地时清除
@@ -274,15 +270,6 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 	if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
 	{
 		AvatarChar->LandedDelegate.RemoveDynamic(this, &UGA_AirAttack::OnLandDetected);
-	}
-
-	// 恢复重力缩放
-	if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
-	{
-		if (UCharacterMovementComponent* Movement = AvatarChar->GetCharacterMovement())
-		{
-			Movement->GravityScale = OriginalGravityScale;
-		}
 	}
 
 	// 清除本次浮空的空中攻击标记（落地后允许下次浮空再触发）

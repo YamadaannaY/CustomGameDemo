@@ -44,11 +44,6 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
 	float StartToLoopBlendInTime = 0.034f;
 
-	// 空中攻击期间的重力缩放：0 = 无重力（下砸后匀速下落），1 = 引擎默认重力（持续加速）。
-	// 只影响下砸过程的竖直加速度，起跳初速度/俯冲速度仍由 AN_AirAttackDive 的 LaunchCharacter 决定。
-	UPROPERTY(EditDefaultsOnly, Category = "Gravity", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float AirAttackGravityScale = 1.0f;
-
 	// 起手动画开始淡出（OnBlendOut）→ 立即进入循环下砸，与 Start 淡出重叠
 	UFUNCTION()
 	void OnStartMontageBlendOut();
@@ -96,9 +91,6 @@ private:
 	};
 	
 	EAirAttackPhase CurrentPhase = EAirAttackPhase::None;
-
-	// 记录激活前移动组件的原始 GravityScale，EndAbility 时恢复
-	float OriginalGravityScale = 1.0f;
 
 	// 落地检测兜底 Timer 句柄
 	FTimerHandle LandCheckTimerHandle;
