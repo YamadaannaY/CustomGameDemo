@@ -43,12 +43,20 @@ public:
 	FORCEINLINE bool IsMovementInputLocked() const { return bMovementInputLocked; }
 	
 	float LastMoveInputDuration = 0.f;
+
+	// 相机组件访问器（供 UCombatCameraComponent 解析写入目标）
+	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CamBoom; }
+	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return ViewCam; }
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	class USpringArmComponent* CamBoom;
 
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	class UCameraComponent* ViewCam;
+
+	// 战斗相机组件：接收 Montage 相机请求，逐帧解算写入 SpringArm/Camera
+	UPROPERTY(VisibleDefaultsOnly,Category="View")
+	class UCombatCameraComponent* CombatCameraComp;
 
 	UPROPERTY(EditDefaultsOnly,Category="Input")
 	UInputMappingContext* GameplayInputMappingContext;
@@ -157,6 +165,9 @@ private:
 	void OnSkillStarted(const FInputActionValue& InputActionValue);
 	void OnUltimateStarted(const FInputActionValue& InputActionValue);
 	void OnDodgeStarted(const FInputActionValue& InputActionValue);
+
+	// 长按达到阈值时触发重击（由定时器回调，不再等松开）
+	void TriggerHeavyAttack();
 	void LerpArmLength(float Goal);
 	void TickArmLengthLerp(float Goal);
 
@@ -192,7 +203,7 @@ private:
 
 	// 移动输入锁定标志（空中攻击期间为 true，忽略移动输入）
 	bool bMovementInputLocked = false;
-	
-	// 记录普攻按下时间，用于点按/长按判定
-	float NormalAttackPressTime = 0.f;
+
+	// 长按重击的阈值定时器（到点触发重击；松开时若仍在计时则取消并判为轻击）
+	FTimerHandle HeavyAttackTimerHandle;
 };

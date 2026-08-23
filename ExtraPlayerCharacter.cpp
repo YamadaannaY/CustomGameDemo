@@ -9,6 +9,7 @@
 #include "WeaponSystem/ExtraGameWeaponTypes.h"
 #include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "ExtractGameCharacter/Camera/UCombatCameraComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 
 
@@ -31,6 +32,8 @@ AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectIni
 	TargetArmLength=CamBoom->TargetArmLength;
 
 	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
+
+	CombatCameraComp = CreateDefaultSubobject<UCombatCameraComponent>(TEXT("CombatCamera"));
 }
 
 // Called when the game starts or when spawned
@@ -387,7 +390,13 @@ void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
 
 void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& InputActionValue)
 {
-	NormalAttackPressTime = GetWorld()->GetTimeSeconds();
+	// 按下即启动阈值定时器：按住达到 HeavyAttackHoldTime 直接触发重击，无需等松开
+	GetWorldTimerManager().SetTimer(
+		HeavyAttackTimerHandle,
+		this,
+		&ThisClass::TriggerHeavyAttack,
+		HeavyAttackHoldTime,
+		false);
 }
 
 void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& InputActionValue)
@@ -397,13 +406,24 @@ void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& Inp
 		return;
 	}
 
-	const float Elapsed = GetWorld()->GetTimeSeconds() - NormalAttackPressTime;
-	
-	const FGameplayTag InputTag = (Elapsed >= HeavyAttackHoldTime)
-		? UUExtraAbilitySystemStatic::GetHeavyAttackInputTag()
-		: UUExtraAbilitySystemStatic::GetLightAttackInputTag();
+	// 若定时器仍在计时（按住未达阈值），取消它并判定为轻击；
+	// 若重击已在按住期间触发，定时器已失效，无需再做任何处理。
+	if (GetWorldTimerManager().IsTimerActive(HeavyAttackTimerHandle))
+	{
+		GetWorldTimerManager().ClearTimer(HeavyAttackTimerHandle);
 
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, InputTag, FGameplayEventData());
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+			this, UUExtraAbilitySystemStatic::GetLightAttackInputTag(), FGameplayEventData());
+	}
+}
+
+void AExtraPlayerCharacter::TriggerHeavyAttack()
+{
+	if (AbilitySystemComponent)
+	{
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+			this, UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(), FGameplayEventData());
+	}
 }
 
 void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionValue)
