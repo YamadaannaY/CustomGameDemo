@@ -60,7 +60,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	bTransitionedToSprint = false;
 	bIsPollingForInput = false;
 	bEvadeToSprintTriggered = false;
-	DodgeCount = 1;
+	bAirborne == true ? DodgeCount = 2 : DodgeCount = 1;
 	CurrentEvadeFacingOffset = 0.f;
 
 	// 空中 Evade：绑定落地委托，落地立即结束 GA。地面 Evade 不绑。
