@@ -46,6 +46,20 @@ struct FCombatCameraRequest
 	// 优先级：同时存在多个请求时，取 Priority 最高者；相同则取最近 Push 的。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	int32 Priority = 0;
+
+	// 偏移参考系是否基于角色面朝方向（正后方），而非跟随镜头朝向。
+	// 开启后相机忽略鼠标旋转，固定在「角色正后方 + 偏移」。
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
+	bool bUseCharacterFacingBasis = false;
+
+	// 切换到角色正后方视角的平滑过渡时间（秒）。仅当 bUseCharacterFacingBasis 时生效。
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta=(EditCondition="bUseCharacterFacingBasis", ClampMin="0.0"))
+	float CharacterFacingTransitionTime = 0.3f;
+
+	// 解锁正后方：勾选后，该镜头激活时退出「固定正后方」模式，恢复自由镜头（允许鼠标旋转）。
+	// 用于在某个 ANS 上主动解除之前某镜头开启的正后方锁定。
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
+	bool bUnlockCharacterFacing = false;
 };
 
 /**
@@ -114,8 +128,20 @@ private:
 	// 无战斗相机时的基准值（首次 PushRequest 时从 SpringArm/Camera 缓存）。
 	float BaseArmLength = 300.f;
 	float BaseFOV = 90.f;
+	
+	//是否已经缓存初始值
 	bool bBaseCached = false;
 
 	// 最近一次 Pop 的请求的 BlendOutTime，用于淡出到基准值。
 	float PendingBlendOutTime = 0.2f;
+
+	// 退出「固定正后方」模式：把 control rotation 同步到角色正后方后再交还鼠标控制，
+	// 使摄像机归位到正后方（而非弹回玩家之前乱转的位置）。
+	void ExitCharacterFacingMode();
+
+	// 是否处于「固定正后方」模式（由某镜头开启，全局持久到所有请求清空后退出）。
+	bool bCharacterFacingMode = false;
+
+	// 进入正后方模式时的平滑过渡速度（= 1/过渡时间）。
+	float CharacterFacingTransitionSpeed = 3.33f;
 };
