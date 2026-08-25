@@ -12,7 +12,10 @@ class UCameraComponent;
  *
  * 约定：LocationOffset / RotationOffset 是相对 SpringArm 末端（USpringArmComponent::SocketName）
  * 的偏移，叠加在原先的ViewCam 上。ArmLength 为绝对目标值，激活期间接管 SpringArm 的 TargetArmLength，
+ * 如果需要基于默认（即摄像机朝向角色正前方，游戏开始时的镜头）进行偏移，则打开bUseCharacterFacingBasis
  * 结束时统一重置
+ * 
+ * 这是一个栈结构，具有Push和Pop功能，激活离当前时间最近且优先级最高的那一个Request
  */
 USTRUCT(BlueprintType)
 struct FCombatCameraRequest
@@ -55,9 +58,8 @@ struct FCombatCameraRequest
 	// 切换到角色正后方视角的平滑过渡时间（秒）。仅当 bUseCharacterFacingBasis 时生效。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta=(EditCondition="bUseCharacterFacingBasis", ClampMin="0.0"))
 	float CharacterFacingTransitionTime = 0.3f;
-
-	// 解锁正后方：勾选后，该镜头激活时退出「固定正后方」模式，恢复自由镜头（允许鼠标旋转）。
-	// 用于在某个 ANS 上主动解除之前某镜头开启的正后方锁定。
+	
+	//使用Basis会锁视角，此时look输入无效，如果要打开锁定，则开启此选项
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	bool bUnlockCharacterFacing = false;
 };

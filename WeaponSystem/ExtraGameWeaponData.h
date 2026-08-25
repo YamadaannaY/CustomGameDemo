@@ -72,9 +72,7 @@ public:
 		}
 		return nullptr;
 	}
-
-	// ── UPrimaryDataAsset 覆写 ────────────────────────────
-
+	
 	virtual FPrimaryAssetId GetPrimaryAssetId() const override
 	{
 		return FPrimaryAssetId(FPrimaryAssetType(TEXT("WeaponData")), GetFName());

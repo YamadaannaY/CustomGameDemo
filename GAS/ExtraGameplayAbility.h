@@ -83,7 +83,7 @@ protected:
 	virtual void OnMovementCancelTriggered() {}
 
 	//根据Vel方向向量参数对单施加一个Push效果
-	void PushTarget(AActor*Target,const FVector& PushVel);
+	static void PushTarget(AActor*Target,const FVector& PushVel);
 	
 	//对群Push效果
 	void PushTargets(const TArray<AActor*>& Targets,const FVector PushVel);

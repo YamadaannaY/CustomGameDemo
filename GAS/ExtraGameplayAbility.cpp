@@ -29,8 +29,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
 	bool bReplicateEndAbility, bool bWasCancelled)
 {
-	// 若因移动输入结束，用 Montage 资产自身配置的 BlendOut 时长停止（而非 0s 硬停），避免动画跳变。
-	// 位移已通过 RootMotion 开关 AN / LayerPerBone 混合与姿势解耦，过渡期间即可移动，无需靠 0s 抢输入。
+	//Cancel机制取消GA时，手动停Montage
 	if (bEndingFromMovement)
 	{
 		if (UAnimMontage* ActiveMontage = GetActiveMontageForCancel())
@@ -48,16 +47,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	{
 		Char->GetWeaponComponent()->HideWeapon();
 	}
-
-	// 恢复 RootMotionMode：AN_ToggleRootMotion 可能已切到 IgnoreRootMotion，
-	// 若 GA 被打断时没有对应 AN 去恢复，会全局残留导致后续所有带 root motion 的 montage 失效。
-	// 统一在 GA 结束时强制回默认（Montage 专用 root motion），兜底兜全。
-	// 注意：RootMotionMode 属于 UAnimInstance，而非 CharacterMovementComponent。
-	if (UAnimInstance* AnimInst = GetOwnerAnimInstance())
-	{
-		AnimInst->RootMotionMode = ERootMotionMode::RootMotionFromEverything;
-	}
-
+	
 	// 恢复重力缩放（若本次激活启用了重力缩放）：永远恢复到引擎默认，而非激活前那一刻的值。
 	if (bEnableGravityScale)
 	{
@@ -79,13 +69,13 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 {
 	Super::PreActivate(Handle, ActorInfo, ActivationInfo, OnGameplayAbilityEndedDelegate, TriggerEventData);
 
-	// 移动打断：无需子类在 ActivateAbility 里手动挂载，只要 bEnableMovementCancel 为 true 即在此统一监听。
+	// 移动打断在此统一监听。由AN_Cancel在动画帧发送
 	if (bEnableMovementCancel)
 	{
 		SetupMovementCancel();
 	}
 
-	// 推力：任何 GA 激活期间统一监听 Push_Self 事件，由 AN_ApplyPush 在动画帧发送。
+	// 推力 任何 GA 激活期间统一监听 Push_Self 事件，由 AN_ApplyPush 在动画帧发送。
 	SetupPushSelfListener();
 
 	// 重力缩放：激活时缓存引擎默认重力（仅首次）并应用 AbilityGravityScale，EndAbility 统一恢复默认。
@@ -112,21 +102,17 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 
 void UExtraGameplayAbility::SetupMovementCancel()
 {
-	// 重置跨激活状态（InstancedPerActor 实例复用）
+	// 重置跨激活状态为PerActorGA实例复用
 	bEndingFromMovement = false;
 
-	UAbilityTask_WaitGameplayEvent* WaitCancelTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, GetMovementCancelTag(), nullptr, false, true);
+	UAbilityTask_WaitGameplayEvent* WaitCancelTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, GetMovementCancelTag());
 	WaitCancelTask->EventReceived.AddDynamic(this, &ThisClass::OnMovementCancelNotifyReceived);
 	WaitCancelTask->ReadyForActivation();
 }
 
 void UExtraGameplayAbility::SetupPushSelfListener()
 {
-	// OnlyTriggerOnce=false：允许同一 GA 期间多次响应（如空中 Evade 二段跳后再补一次）。
-	// 每次激活都会新挂一个监听任务，EndAbility 时随 GA 结束自动回收。
-	UAbilityTask_WaitGameplayEvent* WaitPushTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetPushSelfTag(), nullptr, false, false);
+	UAbilityTask_WaitGameplayEvent* WaitPushTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, UUExtraAbilitySystemStatic::GetPushSelfTag(), nullptr, false, false);
 	WaitPushTask->EventReceived.AddDynamic(this, &ThisClass::OnPushSelfNotifyReceived);
 	WaitPushTask->ReadyForActivation();
 }
@@ -156,8 +142,7 @@ void UExtraGameplayAbility::OnPushSelfNotifyReceived(FGameplayEventData Payload)
 
 void UExtraGameplayAbility::PushSelf(const FVector& PushVel, bool bOverrideXY, bool bOverrideZ)
 {
-	ACharacter* OwningAvatarCharacter=GetOwningAvatarCharacter();
-	if (OwningAvatarCharacter)
+	if (ACharacter* OwningAvatarCharacter=GetOwningAvatarCharacter())
 	{
 		OwningAvatarCharacter->LaunchCharacter(PushVel,bOverrideXY,bOverrideZ);
 	}
@@ -176,7 +161,6 @@ void UExtraGameplayAbility::PushTarget(AActor* Target, const FVector& PushVel)
 	HitData->HitResult=HitResult;
 	EventData.TargetData.Add(HitData);
 
-	//PassiveGA中设置了以GameplayEvent触发
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Target,UUExtraAbilitySystemStatic::GetLaunchedAbilityActivationTag(),EventData);
 }
 
@@ -188,17 +172,15 @@ void UExtraGameplayAbility::PushTargets(const TArray<AActor*>& Targets, const FV
 	}
 }
 
-void UExtraGameplayAbility::PushTargets(const FGameplayAbilityTargetDataHandle& TargetDataHandle,
-	const FVector& PushVel)
+void UExtraGameplayAbility::PushTargets(const FGameplayAbilityTargetDataHandle& TargetDataHandle,const FVector& PushVel)
 {
 	TArray<AActor*> Targets=UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(TargetDataHandle);
 	PushTargets(Targets,PushVel);
 }
 
-void UExtraGameplayAbility::PushTargetsFromLocation(const FGameplayAbilityTargetDataHandle& TargetDataHandle,
-	const FVector& FromLocation, float PushSpeed)
+void UExtraGameplayAbility::PushTargetsFromLocation(const FGameplayAbilityTargetDataHandle& TargetDataHandle,const FVector& FromLocation, float PushSpeed)
 {
-	TArray<AActor*> Targets=UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(TargetDataHandle);
+	const TArray<AActor*> Targets=UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(TargetDataHandle);
 
 	PushTargetsFromLocation(Targets,FromLocation,PushSpeed);
 }
@@ -212,8 +194,7 @@ void UExtraGameplayAbility::PushTargetsFromOwnerLocation(const TArray<AActor*>& 
 	PushTargetsFromLocation(Targets, OwnerAvatarActorLocation, PushSpeed);
 }
 
-void UExtraGameplayAbility::PushTargetsFromLocation(const TArray<AActor*>& Targets, const FVector& FromLocation,
-	float PushSpeed)
+void UExtraGameplayAbility::PushTargetsFromLocation(const TArray<AActor*>& Targets, const FVector& FromLocation,float PushSpeed)
 {
 	for (AActor* Target : Targets)
 	{
@@ -244,6 +225,7 @@ void UExtraGameplayAbility::OnMovementCancelNotifyReceived(FGameplayEventData Pa
 	}
 
 	OnMovementCancelTriggered();
+	
 	K2_EndAbility();
 }
 
