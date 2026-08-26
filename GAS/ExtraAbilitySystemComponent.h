@@ -37,14 +37,17 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Innate")
 	TArray<TSubclassOf<UGameplayEffect>> InitEffects;
 
-	// 属性集类（蓝图可覆盖为子类）
+	// 属性初始值 DataTable（每行一个 Actor 类对应的初始属性数值）
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Innate")
-	TSubclassOf<UExtraGameAttributeSet> AttributeSetClass;
+	class UDataTable* AttributeDataTable;
 
 private:
 	
 	//将属性集添加到ASC中
 	void InitializeBaseAttribute();
+
+	//根据当前角色类型在 DataTable 中查找匹配行并赋值
+	void InitializeAttributeFromDataTable(UExtraGameAttributeSet* AttrSet);
 	
 	//将GE应用到ASC中
 	void ApplyInitialEffects();

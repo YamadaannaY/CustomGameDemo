@@ -2,9 +2,10 @@
 #include "ExtraCharacter.h"
 #include "GAS/ExtraAbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "ExtraPlayerCharacter.h"
 
 
-void AExtraPlayerController::OnPossess(APawn* InPawn)
+ void AExtraPlayerController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
 
@@ -30,3 +31,27 @@ void AExtraPlayerController::OnUnPossess()
 
 	Super::OnUnPossess();
 }
+
+void AExtraPlayerController::AcknowledgePossession(class APawn* P)
+ {
+	 Super::AcknowledgePossession(P);
+	
+	AExtraPlayerCharacter* PC = Cast<AExtraPlayerCharacter>(P);
+ 	if (PC)
+ 	{
+		//在客户端渲染
+		SpawnGameplayWidget();
+ 	}
+ }
+
+void AExtraPlayerController::SpawnGameplayWidget()
+ {
+	if (!IsLocalPlayerController()) return;
+
+	//本地Player拥有的视口UI
+	GameplayWidget=CreateWidget<UGameplayWidget>(this,GameplayWidgetClass);
+	if (GameplayWidget)
+	{
+		GameplayWidget->AddToViewport();
+	}
+ }

@@ -367,7 +367,7 @@ UStaticMeshComponent* UExtraGameWeaponComponent::SpawnWeaponMesh(const FExtraGam
 		return nullptr;
 	}
 
-	// 加载 Mesh 资源 — 当前使用同步加载（武器 DataAsset 配置时通常已加载）
+	// 加载 Mesh 资源 — 当前使用同步加载
 	UStaticMesh* LoadedMesh = Entry.WeaponMesh.LoadSynchronous();
 	if (!LoadedMesh)
 	{
@@ -487,7 +487,6 @@ void UExtraGameWeaponComponent::RemoveGrantedEffects()
 }
 
 // 武器组 GA 全部以 INDEX_NONE 授予，触发方式由 GA 自身的 AbilityTriggers（InputTag）决定。
-// 废弃 InputID 硬映射；换武器 = 换一批已授予的 GA，每个 GA 自带固定 InputTag。
 void UExtraGameWeaponComponent::GrantWeaponGroupAbilities(const FExtraGameWeaponGroup& Group)
 {
 	if (!OwnerASC)

@@ -24,21 +24,48 @@ void UExtraGameAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, AttackPower, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, Stamina, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, MaxStamina, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, Shield, COND_None, REPNOTIFY_Always);
 }
 
 void UExtraGameAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
+	
+	if (bProcessingShieldAbsorption)
+	{
+		if (Attribute == GetHealthAttribute())
+		{
+			NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
+		}
+		if (Attribute == GetShieldAttribute())
+		{
+			NewValue = FMath::Max(NewValue, 0.f);
+		}
+		return;
+	}
 
-	// Clamp Health 到 [0, MaxHealth]
 	if (Attribute == GetHealthAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 0.f, MaxHealth.GetCurrentValue());
-	}
-	// Clamp Stamina 到 [0, MaxStamina]
-	else if (Attribute == GetStaminaAttribute())
-	{
-		NewValue = FMath::Clamp(NewValue, 0.f, MaxStamina.GetCurrentValue());
+		const float OldHealth = GetHealth();
+		const float CurrentShield = GetShield();
+
+		if (NewValue < OldHealth && CurrentShield > 0.f)
+		{
+			const float DamageTaken = OldHealth - NewValue;
+			const float Absorbed = FMath::Min(DamageTaken, CurrentShield);
+			// 活跃 GE 对 Shield 的 Modifier = CurrentValue - BaseValue
+			// SetShield() 会设 BaseValue=入参，导致 CurrentValue=BaseValue+GEModifier（叠加而非减少）
+			// 正确做法：直接扣减 BaseValue
+			const float ActiveGEModifier = CurrentShield - Shield.GetBaseValue();
+			const float NewBaseValue = Shield.GetBaseValue() - Absorbed;
+
+			Shield.SetBaseValue(NewBaseValue);
+			Shield.SetCurrentValue(FMath::Max(0.f, NewBaseValue + ActiveGEModifier));
+
+			NewValue = OldHealth - (DamageTaken - Absorbed);
+		}
+
+		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
 	}
 }
 
@@ -82,4 +109,9 @@ void UExtraGameAttributeSet::OnRep_Stamina(const FGameplayAttributeData& OldStam
 void UExtraGameAttributeSet::OnRep_MaxStamina(const FGameplayAttributeData& OldMaxStamina)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UExtraGameAttributeSet, MaxStamina, OldMaxStamina);
+}
+
+void UExtraGameAttributeSet::OnRep_Shield(const FGameplayAttributeData& OldShield)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UExtraGameAttributeSet, Shield, OldShield);
 }

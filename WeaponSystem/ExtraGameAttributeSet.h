@@ -5,7 +5,10 @@
 #include "CoreMinimal.h"
 #include "AttributeSet.h"
 #include "AbilitySystemComponent.h"
+#include "Engine/DataTable.h"
 #include "ExtraGameAttributeSet.generated.h"
+
+class AActor;
 
 // 属性访问宏（简写）
 #define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
@@ -61,6 +64,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat", ReplicatedUsing = OnRep_MaxStamina)
 	FGameplayAttributeData MaxStamina;
 	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, MaxStamina);
+	
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat", ReplicatedUsing = OnRep_Shield)
+	FGameplayAttributeData Shield;
+	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, Shield);
 
 protected:
 	UFUNCTION()
@@ -73,4 +80,38 @@ protected:
 	virtual void OnRep_Stamina(const FGameplayAttributeData& OldStamina);
 	UFUNCTION()
 	virtual void OnRep_MaxStamina(const FGameplayAttributeData& OldMaxStamina);
+	UFUNCTION()
+	virtual void OnRep_Shield(const FGameplayAttributeData& OldShield);
+	
+	
+	bool bProcessingShieldAbsorption=false;
+};
+
+// DataTable 行结构：每个 Actor 类对应一行初始属性值
+USTRUCT(BlueprintType)
+struct FExtraCharacterAttributeRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	// 使用此行的 Actor 类（当前角色是其子类/实例时匹配）
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
+	TSubclassOf<AActor> CharacterClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
+	float Health = 100.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
+	float MaxHealth = 100.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
+	float AttackPower = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
+	float Stamina = 100.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
+	float MaxStamina = 100.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
+	float Shield = 0.f;
 };

@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "UI/GameplayWidget.h"
 #include "ExtraPlayerController.generated.h"
 
 class UExtraAbilitySystemComponent;
@@ -20,4 +21,15 @@ class EXTRACTGAMECHARACTER_API AExtraPlayerController : public APlayerController
 protected:
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
+	
+	virtual void AcknowledgePossession(class APawn* P) override;
+	
+	UPROPERTY()
+	UGameplayWidget* GameplayWidget;
+	
+	UPROPERTY(EditDefaultsOnly,Category="UI")
+	TSubclassOf<class UGameplayWidget> GameplayWidgetClass;
+	
+	//在本地Player的视口内渲染UI
+	void SpawnGameplayWidget();
 };

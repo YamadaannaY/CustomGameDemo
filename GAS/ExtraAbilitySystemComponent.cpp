@@ -2,6 +2,7 @@
 #include "ExtraGameplayAbility.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "GameplayEffect.h"
+#include "GameFramework/Actor.h"
 
 
 void UExtraAbilitySystemComponent::ServerSideInit()
@@ -34,16 +35,62 @@ void UExtraAbilitySystemComponent::RemoveInnateAbilities()
 
 void UExtraAbilitySystemComponent::InitializeBaseAttribute()
 {
-	if (!AttributeSetClass)
+	// 直接注册基类属性集（不再使用 AttributeSetClass 子类方案）
+	UExtraGameAttributeSet* AttrSet = NewObject<UExtraGameAttributeSet>(GetOwner());
+	if (AttrSet)
+	{
+		AddAttributeSetSubobject<UExtraGameAttributeSet>(AttrSet);
+		InitializeAttributeFromDataTable(AttrSet);
+	}
+}
+
+void UExtraAbilitySystemComponent::InitializeAttributeFromDataTable(UExtraGameAttributeSet* AttrSet)
+{
+	if (!AttributeDataTable || !AttrSet)
 	{
 		return;
 	}
 
-	UExtraGameAttributeSet* AttrSet = NewObject<UExtraGameAttributeSet>(GetOwner(), AttributeSetClass);
-	if (AttrSet)
+	const FExtraCharacterAttributeRow* BestRow = nullptr;
+	int32 BestDistance = MAX_int32;
+
+	const UClass* OwnerClass = GetOwner()->GetClass();
+
+	for (const FName& RowName : AttributeDataTable->GetRowNames())
 	{
-		AddAttributeSetSubobject<UExtraGameAttributeSet>(AttrSet);
+		const FExtraCharacterAttributeRow* Row = AttributeDataTable->FindRow<FExtraCharacterAttributeRow>(RowName, TEXT("AttributeInit"));
+		if (!Row || !Row->CharacterClass)
+		{
+			continue;
+		}
+
+		// 计算当前角色类到该行 CharacterClass 的继承距离（0 = 精确匹配）
+		int32 Distance = 0;
+		const UClass* Cur = OwnerClass;
+		while (Cur && Cur != Row->CharacterClass)
+		{
+			Cur = Cur->GetSuperClass();
+			++Distance;
+		}
+
+		if (Cur == Row->CharacterClass && Distance < BestDistance)
+		{
+			BestDistance = Distance;
+			BestRow = Row;
+		}
 	}
+
+	if (!BestRow)
+	{
+		return;
+	}
+
+	AttrSet->SetHealth(BestRow->Health);
+	AttrSet->SetMaxHealth(BestRow->MaxHealth);
+	AttrSet->SetAttackPower(BestRow->AttackPower);
+	AttrSet->SetStamina(BestRow->Stamina);
+	AttrSet->SetMaxStamina(BestRow->MaxStamina);
+	AttrSet->SetShield(BestRow->Shield);
 }
 
 void UExtraAbilitySystemComponent::ApplyInitialEffects()
