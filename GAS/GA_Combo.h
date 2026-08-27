@@ -45,6 +45,23 @@ private:
 	UFUNCTION()
 	void DoDamage(FGameplayEventData Data);
 
+	// 进入最后一段 section 时回调：累计「打满」次数（ComboCount +1，封顶 3）
+	UFUNCTION()
+	void OnLastSectionEntered(FGameplayEventData EventData);
+
+	// 最后一段切入帧 Notify 回调：ComboCount 已满 3 且按住攻击键时，触发重击并结束当前 GA
+	UFUNCTION()
+	void OnHeavyTransitionFrame(FGameplayEventData EventData);
+
+	// 攻击键是否仍按住（读取 Character 的 bHoldingAttack）
+	bool IsHoldingAttack() const;
+
+	// 本次按下是否已长按达到重击阈值（读取 Character 的 bLongPressed）
+	bool IsLongPressed() const;
+
+	// 重击所需连段次数（读取 Character 的 HeavyComboCount）
+	float GetRequiredComboCount() const;
+
 	//DamageGE
 	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
 	TSubclassOf<UGameplayEffect> DefaultDamageEffect;

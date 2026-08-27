@@ -2,6 +2,7 @@
 
 // ── Native GameplayTag 定义（静态注册，早于 CDO 构造）──
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack, "ability.basicattack");
+UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack_Light, "ability.basicattack.light");
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack_Heavy, "ability.basicattack.heavy");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Dodge, "ability.dodge");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Skill_01, "ability.Skill.01");
@@ -15,6 +16,8 @@ UE_DEFINE_GAMEPLAY_TAG(InputTag_Dodge, "InputTag.Dodge");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Change, "ability.combo.change");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Change_End, "ability.combo.change.end");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Damage, "ability.combo.damage");
+UE_DEFINE_GAMEPLAY_TAG(Combo_LastSection, "ability.combo.lastsection");
+UE_DEFINE_GAMEPLAY_TAG(Combo_HeavyTransition, "ability.combo.heavytransition");
 UE_DEFINE_GAMEPLAY_TAG(Evade_ToSprint, "Evade.ToSprint");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Cancel, "ability.cancel");
 UE_DEFINE_GAMEPLAY_TAG(Push_Self, "ability.push.self");
@@ -22,7 +25,7 @@ UE_DEFINE_GAMEPLAY_TAG(Ability_Passive_Launch, "ability.passive.launch.activate"
 
 FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 {
-	return Ability_BasicAttack;
+	return Ability_BasicAttack_Light;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetDodgeAbilityTag()
@@ -88,6 +91,16 @@ FGameplayTag UUExtraAbilitySystemStatic::GetComboChangedEventEndTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetComboTargetEventTag()
 {
 	return Combo_Damage;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetComboLastSectionTag()
+{
+	return Combo_LastSection;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetComboHeavyTransitionTag()
+{
+	return Combo_HeavyTransition;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetEvadeToSprintTag()

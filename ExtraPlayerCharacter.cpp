@@ -9,6 +9,7 @@
 #include "WeaponSystem/ExtraGameWeaponTypes.h"
 #include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "ExtractGameCharacter/Camera/UCombatCameraComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 
@@ -390,36 +391,51 @@ void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
 
 void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& InputActionValue)
 {
-	// 按下即启动阈值定时器：按住达到 HeavyAttackHoldTime 直接触发重击，无需等松开
-	GetWorldTimerManager().SetTimer(
-		HeavyAttackTimerHandle,
-		this,
-		&ThisClass::TriggerHeavyAttack,
-		HeavyAttackHoldTime,
-		false);
-}
-
-void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& InputActionValue)
-{
 	if (!AbilitySystemComponent)
 	{
 		return;
 	}
 
-	// 若定时器仍在计时（按住未达阈值），取消它并判定为轻击；
-	// 若重击已在按住期间触发，定时器已失效，无需再做任何处理。
-	if (GetWorldTimerManager().IsTimerActive(HeavyAttackTimerHandle))
-	{
-		GetWorldTimerManager().ClearTimer(HeavyAttackTimerHandle);
+	bHoldingAttack = true;
+	bLongPressed = false;
 
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-			this, UUExtraAbilitySystemStatic::GetLightAttackInputTag(), FGameplayEventData());
+	// 启动重击长按阈值定时器：按住达到 HeavyAttackHoldTime 才进入「长按重击」判定
+	GetWorldTimerManager().SetTimer(
+		HeavyAttackHoldTimerHandle,
+		this,
+		&ThisClass::OnReachHeavyThreshold,
+		HeavyAttackHoldTime,
+		false);
+
+	// 按下即发送轻击输入，触发/继续连段（连段是否自动衔接由 GA 内的按住判定决定）
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+		this, UUExtraAbilitySystemStatic::GetLightAttackInputTag(), FGameplayEventData());
+}
+
+void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& InputActionValue)
+{
+	bHoldingAttack = false;
+	bLongPressed = false;
+
+	// 若未达阈值即松开（点按），取消定时器：本次判定为轻击，不触发重击
+	if (GetWorldTimerManager().IsTimerActive(HeavyAttackHoldTimerHandle))
+	{
+		GetWorldTimerManager().ClearTimer(HeavyAttackHoldTimerHandle);
 	}
 }
 
-void AExtraPlayerCharacter::TriggerHeavyAttack()
+void AExtraPlayerCharacter::OnReachHeavyThreshold()
 {
-	if (AbilitySystemComponent)
+	bLongPressed = true;
+
+	if (!AbilitySystemComponent)
+	{
+		return;
+	}
+
+	// 长按达到阈值时段数已满 3，立即重击；未满则由 GA 内切入帧在连段满 3 后触发
+	const float ComboCount = AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
+	if (ComboCount >= HeavyComboCount)
 	{
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 			this, UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(), FGameplayEventData());

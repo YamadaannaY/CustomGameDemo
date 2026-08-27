@@ -13,6 +13,8 @@ UExtraGameAttributeSet::UExtraGameAttributeSet()
 	AttackPower = 10.f;
 	Stamina = 100.f;
 	MaxStamina = 100.f;
+	Shield = 0.f;
+	ComboCount = 0.f;
 }
 
 void UExtraGameAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

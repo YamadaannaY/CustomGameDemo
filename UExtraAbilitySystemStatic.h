@@ -21,6 +21,8 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Dodge);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Change);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Change_End);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Damage);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_LastSection);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_HeavyTransition);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Evade_ToSprint);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Cancel);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Push_Self);
@@ -53,6 +55,8 @@ public:
 	static FGameplayTag GetComboChangedEventTag();      // "ability.combo.change"
 	static FGameplayTag GetComboChangedEventEndTag();   // "ability.combo.change.end"
 	static FGameplayTag GetComboTargetEventTag();       // "ability.combo.damage"
+	static FGameplayTag GetComboLastSectionTag();       // "ability.combo.lastsection"
+	static FGameplayTag GetComboHeavyTransitionTag();   // "ability.combo.heavytransition"
 	static FGameplayTag GetEvadeToSprintTag();          // "Evade.ToSprint"
 	static FGameplayTag GetAbilityCancelTag();          // "ability.cancel"
 	static FGameplayTag GetPushSelfTag();               // "ability.push.self"

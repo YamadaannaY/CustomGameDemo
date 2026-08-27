@@ -41,6 +41,15 @@ public:
 	// 锁定/解锁移动输入（空中攻击期间由 GA 调用，禁止角色水平移动）
 	void SetMovementInputLocked(bool bLocked) { bMovementInputLocked = bLocked; }
 	FORCEINLINE bool IsMovementInputLocked() const { return bMovementInputLocked; }
+
+	// 攻击键是否处于按住状态（供 GA 判断「按住 = 连续轻击」自动连段）
+	FORCEINLINE bool IsHoldingAttack() const { return bHoldingAttack; }
+
+	// 本次按下是否已长按达到重击阈值（区分「长按重击」与「高频点按轻击」）
+	FORCEINLINE bool IsLongPressed() const { return bLongPressed; }
+
+	// 重击所需的连段次数（编辑器可配，默认 3）
+	FORCEINLINE float GetHeavyComboCount() const { return HeavyComboCount; }
 	
 	float LastMoveInputDuration = 0.f;
 
@@ -49,10 +58,13 @@ public:
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return ViewCam; }
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
-	class USpringArmComponent* CamBoom;
+	USpringArmComponent* CamBoom;
 
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
-	class UCameraComponent* ViewCam;
+	UCameraComponent* ViewCam;
+	
+	UPROPERTY(EditDefaultsOnly,Category="Attack | HeavyAttack")
+	float HeavyComboCount = 3.f ; 
 
 	// 战斗相机组件：接收 Montage 相机请求，逐帧解算写入 SpringArm/Camera
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
@@ -166,8 +178,9 @@ private:
 	void OnUltimateStarted(const FInputActionValue& InputActionValue);
 	void OnDodgeStarted(const FInputActionValue& InputActionValue);
 
-	// 长按达到阈值时触发重击（由定时器回调，不再等松开）
-	void TriggerHeavyAttack();
+	// 按住达到重击阈值时回调：进入长按状态，若段数已满则立即触发重击
+	void OnReachHeavyThreshold();
+
 	void LerpArmLength(float Goal);
 	void TickArmLengthLerp(float Goal);
 
@@ -204,6 +217,12 @@ private:
 	// 移动输入锁定标志（空中攻击期间为 true，忽略移动输入）
 	bool bMovementInputLocked = false;
 
-	// 长按重击的阈值定时器（到点触发重击；松开时若仍在计时则取消并判为轻击）
-	FTimerHandle HeavyAttackTimerHandle;
+	// 攻击键按住状态（按住时连续轻击连段，直到满足重击条件）
+	bool bHoldingAttack = false;
+
+	// 本次按下是否已长按达到重击阈值（区分「长按重击」与「高频点按轻击」）
+	bool bLongPressed = false;
+
+	// 重击长按阈值定时器
+	FTimerHandle HeavyAttackHoldTimerHandle;
 };
