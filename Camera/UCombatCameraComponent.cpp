@@ -2,6 +2,7 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
 #include "HAL/IConsoleManager.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 
@@ -165,6 +166,14 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		bCharacterFacingMode = true;
 		const float TransitionTime = ActiveReq->CharacterFacingTransitionTime;
 		CharacterFacingTransitionSpeed = (TransitionTime > KINDA_SMALL_NUMBER) ? (1.f / TransitionTime) : 1000.f;
+
+		// 进入瞬间先把 SpringArm 对齐到当前相机实际朝向（ViewRotation）。
+		// 否则 bUsePawnControlRotation 期间 GetComponentQuat() 返回的是「角色朝向」，与目标相等，
+		// QInterpTo 会无过渡直接跳变。对齐后，下方插值才会从「当前视角」平滑转到正后方。
+		if (APawn* OwningPawn = Cast<APawn>(GetOwner()))
+		{
+			CameraBoom->SetWorldRotation(OwningPawn->GetViewRotation());
+		}
 	}
 
 	if (bCharacterFacingMode)
@@ -236,6 +245,13 @@ void UCombatCameraComponent::ExitCharacterFacingMode()
 
 	if (CameraBoom)
 	{
+		// 先把 ControlRotation 同步到 SpringArm 当前世界旋转（正后方），再恢复 bUsePawnControlRotation。
+		// 否则恢复自由镜头瞬间，SpringArm 会采用玩家「进入锁定前」的旧 ControlRotation，镜头跳回旧视角。
+		if (APlayerController* PC = Cast<APlayerController>(GetOwner()->GetInstigatorController()))
+		{
+			PC->SetControlRotation(CameraBoom->GetComponentRotation());
+		}
+
 		CameraBoom->bUsePawnControlRotation = true;
 	}
 }
