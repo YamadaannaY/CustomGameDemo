@@ -25,6 +25,9 @@ private:
 	
 	UPROPERTY(meta=(BindWidget))
 	UValueGauge* StaminaBar;
+
+	UPROPERTY(meta=(BindWidget))
+	class UCountGauge* ComboGauge;
 	
 	UPROPERTY()
 	UExtraAbilitySystemComponent* OwnerAbilitySystemComponent;

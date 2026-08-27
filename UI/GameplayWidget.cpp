@@ -2,6 +2,7 @@
 
 #include "GameplayWidget.h"
 #include "ExtractGameCharacter/UI/ValueGauge.h"
+#include "ExtractGameCharacter/UI/CountGauge.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 
@@ -17,6 +18,7 @@ void UGameplayWidget::NativeConstruct()
 		HealthBar->SetAndBoundToShieldAttribute(OwnerAbilitySystemComponent);
 		HealthBar->SetShieldFillColor(FLinearColor(1.0f, 0.8f, 0.0f));  // 金色护盾
 		StaminaBar->SetAndBoundToGameplayAttribute(OwnerAbilitySystemComponent,UExtraGameAttributeSet::GetStaminaAttribute(),UExtraGameAttributeSet::GetMaxStaminaAttribute());
+		ComboGauge->SetAndBoundToComboCount(OwnerAbilitySystemComponent);
 	}
 	
 	SetShowMouseCursor(false);

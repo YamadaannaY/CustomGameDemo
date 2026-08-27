@@ -51,7 +51,7 @@ private:
 	float CacheShieldValue = 0.f;
 
 	UPROPERTY(EditAnywhere,Category="Visual")
-	FLinearColor BarColor;
+	FLinearColor BarColor = FLinearColor::White;
 
 	UPROPERTY(EditAnywhere,Category="Visual")
 	FSlateFontInfo ValueTextFont;

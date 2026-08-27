@@ -12,6 +12,9 @@ void UValueGauge::NativePreConstruct()
 
 	ProgressBar->SetVisibility(bProgressBarVisible ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
 
+	// 应用 BarColor（SetFillColor 内部白化Style的绿色Tint，使编辑器里设置的颜色真正生效）
+	SetFillColor(BarColor);
+
 	// ShieldBar 默认隐藏，等绑定后根据 Shield 值决定是否显示
 	// 设置为从右向左填充（RightToLeft），使金色条从血条右端向左增长，
 	// 从而与 LeftToRight 的绿色 HealthBar 形成互补：重叠部分显示金色，未重叠部分各自独立
@@ -109,7 +112,11 @@ void UValueGauge::SetFillColor(FLinearColor NewColor)
 	BarColor = NewColor;
 	if (ProgressBar)
 	{
+		// 白化 Style 的 FillImage Tint：进度条默认 Tint 为绿色，
+		// 会与 FillColorAndOpacity 相乘，导致自定义颜色被绿色滤镜压盖。
+		ProgressBar->SetFillColorAndOpacity(FLinearColor::White);
 		ProgressBar->SetFillColorAndOpacity(NewColor);
+		ProgressBar->SynchronizeProperties();
 	}
 }
 
@@ -117,7 +124,9 @@ void UValueGauge::SetShieldFillColor(FLinearColor NewColor)
 {
 	if (ShieldBar)
 	{
+		ShieldBar->SetFillColorAndOpacity(FLinearColor::White);
 		ShieldBar->SetFillColorAndOpacity(NewColor);
+		ShieldBar->SynchronizeProperties();
 	}
 }
 
