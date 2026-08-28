@@ -128,12 +128,6 @@ void AExtraPlayerCharacter::PawnClientRestart()
 
 void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 {
-	// 空中攻击期间锁定移动输入：不更新方向/不 AddMovementInput
-	if (bMovementInputLocked)
-	{
-		return;
-	}
-
 	FVector2D InputVal=InputActionValue.Get<FVector2d>();
 
 	// 检测 无输入→有输入 的跳变，记录按键开始时间
@@ -143,10 +137,16 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		{
 			GameAI->ClearStopRequest();
 		}
-		
+
 		MoveInputStartTime = GetWorld()->GetTimeSeconds();
 	}
 	bHasMoveInput = !InputVal.IsNearlyZero();
+
+	// 锁定移动输入：仍更新Input标志（供 Evade 打断时判断前/后空翻），但不产生移动
+	if (bMovementInputLocked)
+	{
+		return;
+	}
 
 	if (Controller != nullptr)
 	{
