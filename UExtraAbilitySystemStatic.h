@@ -10,7 +10,6 @@
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_BasicAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Dodge);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Airborne);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_AirAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_LightAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_HeavyAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Skill);
@@ -26,6 +25,8 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_HeavyTransition);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Evade_ToSprint);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Cancel);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Push_Self);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Uninterruptible);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Uninterruptible_End);
 
 /**
  * 
@@ -37,11 +38,11 @@ class EXTRACTGAMECHARACTER_API UUExtraAbilitySystemStatic : public UBlueprintFun
 	
 public:
 	static FGameplayTag GetBasicAttackAbilityTag();
+	static FGameplayTag GetHeavyAttackAbilityTag();
+	static FGameplayTag GetAirAttackAbilityTag();
 	static FGameplayTag GetDodgeAbilityTag();
 	static FGameplayTag GetAirborneTag();
-	static FGameplayTag GetAirAttackTag();
 	static FGameplayTag GetSkill01Tag();
-	static FGameplayTag GetHeavyAttackTag();
 
 	// ── 输入触发 Tag（废弃 InputID，改用 AbilityTriggers + GameplayEvent）──
 	// 武器组 IA 全局固定，换武器只换背后 GA；GA 通过 AbilityTriggers 声明响应哪个 InputTag
@@ -60,6 +61,8 @@ public:
 	static FGameplayTag GetEvadeToSprintTag();          // "Evade.ToSprint"
 	static FGameplayTag GetAbilityCancelTag();          // "ability.cancel"
 	static FGameplayTag GetPushSelfTag();               // "ability.push.self"
+	static FGameplayTag GetUninterruptibleTag();        // "State.Uninterruptible"
+	static FGameplayTag GetUninterruptibleEndTag();     // "ability.uninterruptible.end"
 	
 	
 	static FGameplayTag GetLaunchedAbilityActivationTag();

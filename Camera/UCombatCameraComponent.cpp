@@ -261,7 +261,8 @@ const FCombatCameraRequest* UCombatCameraComponent::FindActiveRequest() const
 	const FCombatCameraRequest* Result = nullptr;
 	int32 BestPriority = TNumericLimits<int32>::Min();
 	int32 BestId = TNumericLimits<int32>::Min();
-
+	
+	//遍历找到最高优先级且最近加入的那一个镜头并调出栈
 	for (const TPair<int32, FCombatCameraRequest>& Pair : ActiveRequests)
 	{
 		const FCombatCameraRequest& Req = Pair.Value;
@@ -272,6 +273,7 @@ const FCombatCameraRequest* UCombatCameraComponent::FindActiveRequest() const
 			BestPriority = Req.Priority;
 			BestId = Pair.Key;
 			Result = &Req;
+			
 		}
 	}
 

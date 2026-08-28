@@ -2,12 +2,12 @@
 
 // ── Native GameplayTag 定义（静态注册，早于 CDO 构造）──
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack, "ability.basicattack");
+UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack_AirAttack, "ability.basicattack.airattack");
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack_Light, "ability.basicattack.light");
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack_Heavy, "ability.basicattack.heavy");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Dodge, "ability.dodge");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Skill_01, "ability.Skill.01");
 UE_DEFINE_GAMEPLAY_TAG(State_Airborne, "character.state.airborne");
-UE_DEFINE_GAMEPLAY_TAG(State_AirAttack, "character.state.airattack");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_LightAttack, "InputTag.LightAttack");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_HeavyAttack, "InputTag.HeavyAttack");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_Skill, "InputTag.Skill");
@@ -22,6 +22,8 @@ UE_DEFINE_GAMEPLAY_TAG(Evade_ToSprint, "Evade.ToSprint");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Cancel, "ability.cancel");
 UE_DEFINE_GAMEPLAY_TAG(Push_Self, "ability.push.self");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Passive_Launch, "ability.passive.launch.activate");
+UE_DEFINE_GAMEPLAY_TAG(State_Uninterruptible, "State.Uninterruptible");
+UE_DEFINE_GAMEPLAY_TAG(Uninterruptible_End, "ability.uninterruptible.end");
 
 FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 {
@@ -38,9 +40,9 @@ FGameplayTag UUExtraAbilitySystemStatic::GetAirborneTag()
 	return State_Airborne;
 }
 
-FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackTag()
+FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackAbilityTag()
 {
-	return State_AirAttack;
+	return Ability_BasicAttack_AirAttack;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetSkill01Tag()
@@ -48,7 +50,7 @@ FGameplayTag UUExtraAbilitySystemStatic::GetSkill01Tag()
 	return Ability_Skill_01;
 }
 
-FGameplayTag UUExtraAbilitySystemStatic::GetHeavyAttackTag()
+FGameplayTag UUExtraAbilitySystemStatic::GetHeavyAttackAbilityTag()
 {
 	return Ability_BasicAttack_Heavy;
 }
@@ -116,6 +118,16 @@ FGameplayTag UUExtraAbilitySystemStatic::GetAbilityCancelTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetPushSelfTag()
 {
 	return Push_Self;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetUninterruptibleTag()
+{
+	return State_Uninterruptible;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetUninterruptibleEndTag()
+{
+	return Uninterruptible_End;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetLaunchedAbilityActivationTag()

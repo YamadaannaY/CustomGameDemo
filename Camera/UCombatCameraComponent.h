@@ -138,7 +138,7 @@ private:
 	float PendingBlendOutTime = 0.2f;
 
 	// 退出「固定正后方」模式：把 control rotation 同步到角色正后方后再交还鼠标控制，
-	// 使摄像机归位到正后方（而非弹回玩家之前乱转的位置）。
+	// 使摄像机归位到正后方（而非弹回玩家重置之前的位置）。
 	void ExitCharacterFacingMode();
 
 	// 是否处于「固定正后方」模式（由某镜头开启，全局持久到所有请求清空后退出）。
