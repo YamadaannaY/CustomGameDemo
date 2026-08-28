@@ -124,8 +124,34 @@ protected:
 
 	// 引擎默认重力是否已缓存（实例复用 + 只在第一次GA被调用前读取一次）
 	bool bGravityDefaultCached = false;
-	
-	
+
+	// 是否启用霸体窗口：激活时以 loose tag 形式把 UninterruptibleTag 加入 ASC owned tags（表现动画段），
+	// 后摇段由 AN_EndUninterruptible 发送事件移除，从而放开其他 GA 通过 CancelAbilitiesWithTag 打断后摇。
+	// 子类只需在构造函数里置 bEnableUninterruptible = true，其余由基类在 PreActivate / EndAbility 统一处理。
+	UPROPERTY(EditDefaultsOnly, Category = "Uninterruptible")
+	bool bEnableUninterruptible = false;
+
+	// 霸体 tag（默认 State.Uninterruptible，作为 ActivationBlockedTags 供被打断方阻断用）
+	UPROPERTY(EditDefaultsOnly, Category = "Uninterruptible", meta = (EditCondition = "bEnableUninterruptible"))
+	FGameplayTag UninterruptibleTag;
+
+	// 本次激活是否已挂载霸体 tag（防止后摇已放开后 EndAbility 兜底重复 Remove 造成负计数）
+	bool bUninterruptibleActive = false;
+
+	// 以 loose tag 形式挂载霸体 tag 到 ASC（PreActivate 自动调用）
+	void ApplyUninterruptibleTag();
+
+	// 移除 loose tag（由 AN_EndUninterruptible 事件触发，或 EndAbility 兜底清理）
+	void ReleaseUninterruptible();
+
+	// 监听霸体结束事件（PreActivate 自动调用）
+	void SetupUninterruptibleReleaseListener();
+
+	// 霸体结束事件回调：移除 loose tag，放开后摇打断
+	UFUNCTION()
+	void OnUninterruptibleReleaseReceived(FGameplayEventData Payload);
+
+
 	//获得AvatarCharacter，即Push对象
 	AExtraPlayerCharacter* GetOwningAvatarCharacter();
 private:

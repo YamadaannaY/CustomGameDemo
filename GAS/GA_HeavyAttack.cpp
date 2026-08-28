@@ -6,10 +6,14 @@
 
 UGA_HeavyAttack::UGA_HeavyAttack()
 {
-	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetHeavyAttackTag());
-	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetHeavyAttackTag());
+	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetHeavyAttackAbilityTag());
+	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetHeavyAttackAbilityTag());
 	// 重击激活时取消正在连段的轻击 GA（避免两套 Montage 叠加）
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
+
+	// 霸体期间（SkillGA 表现段）不可激活；后摇段放开后，激活时取消 SkillGA 打断其后摇。
+	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetUninterruptibleTag());
+	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 
 	FAbilityTriggerData HeavyAttackTrigger;
 	HeavyAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;

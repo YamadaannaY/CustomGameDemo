@@ -15,6 +15,9 @@ UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirborneTag());
 
+	// 霸体期间（SkillGA 表现段）不可激活；后摇段放开后，激活时取消 SkillGA 打断其后摇。
+	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
+	
 	// 启用移动打断（基类机制）
 	bEnableMovementCancel = true;
 

@@ -6,7 +6,10 @@ UGA_Skill_01::UGA_Skill_01()
 {
 	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
-	
+
+	// 窗口：表现动画段挂 State.Uninterruptible，后摇段由 AN_EndUninterruptible 放开。
+	bEnableUninterruptible = true;
+
 	FAbilityTriggerData SkillTrigger;
 	SkillTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
 	SkillTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetSkillInputTag();

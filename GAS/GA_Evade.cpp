@@ -17,6 +17,9 @@ UGA_Evade::UGA_Evade()
 	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
 
+	// 霸体期间（SkillGA 表现段）不可激活；后摇段放开后，激活时取消 SkillGA 打断其后摇。
+	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
+
 	// 通过 InputTag 触发（废弃 InputID）
 	FAbilityTriggerData DodgeTrigger;
 	DodgeTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
@@ -41,10 +44,10 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	//基于移动加速度判断前/后 Evade；空中/地面各有一套 Montage，但选择逻辑一致
-	const FVector Acceleration = AvatarChar->GetCharacterMovement()->GetCurrentAcceleration();
-	const bool bHasMoveInput = Acceleration.Size2D() > 0.f;
+	//基于增强输入的移动标志判断前/后 Evade（不再用加速度：空中攻击锁定输入期间加速度恒为 0，会误判为无输入→后空翻）
 	const bool bAirborne = AvatarChar->GetCharacterMovement()->IsFalling();
+	const AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(AvatarChar);
+	const bool bHasMoveInput = PlayerChar && PlayerChar->HasMoveInput();
 
 	bPlayingForwardEvade = bHasMoveInput;
 	CurrentPlayingMontage = bAirborne

@@ -13,11 +13,11 @@
 
 UGA_AirAttack::UGA_AirAttack()
 {
-	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
-	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
+	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
+	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
 	ActivationRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetAirborneTag());
 	
-	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirAttackTag());
+	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
 
 	// 启用移动打断
 	bEnableMovementCancel = true;
@@ -58,7 +58,7 @@ void UGA_AirAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	if (ASC)
 	{
-		ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetAirAttackTag());
+		ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
 	}
 
 	// 锁定Start + Loop过程中移动输入
@@ -275,7 +275,7 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 	// 清除本次浮空的空中攻击标记（落地后允许下次浮空再触发）
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		ASC->RemoveLooseGameplayTag(UUExtraAbilitySystemStatic::GetAirAttackTag());
+		ASC->RemoveLooseGameplayTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
 	}
 
 	// 清除 AnimBP 的空中攻击标记，让状态机恢复正常

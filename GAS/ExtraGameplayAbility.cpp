@@ -13,6 +13,10 @@ UExtraGameplayAbility::UExtraGameplayAbility()
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ClientOrServer;
+
+	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetUninterruptibleTag());
+	
+	UninterruptibleTag = UUExtraAbilitySystemStatic::GetUninterruptibleTag();
 }
 
 UAnimInstance* UExtraGameplayAbility::GetOwnerAnimInstance() const
@@ -60,6 +64,12 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		}
 	}
 
+	// 兜底清理霸体 tag
+	if (bEnableUninterruptible)
+	{
+		ReleaseUninterruptible();
+	}
+
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
@@ -77,6 +87,13 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 
 	// 推力 任何 GA 激活期间统一监听 Push_Self 事件，由 AN_ApplyPush 在动画帧发送。
 	SetupPushSelfListener();
+
+	// 霸体窗口：激活即挂载 State.Uninterruptible，后摇段由 AN_EndUninterruptible 发送事件放开。
+	if (bEnableUninterruptible)
+	{
+		ApplyUninterruptibleTag();
+		SetupUninterruptibleReleaseListener();
+	}
 
 	// 重力缩放：激活时缓存引擎默认重力（仅首次）并应用 AbilityGravityScale，EndAbility 统一恢复默认。
 	if (bEnableGravityScale)
@@ -115,6 +132,48 @@ void UExtraGameplayAbility::SetupPushSelfListener()
 	UAbilityTask_WaitGameplayEvent* WaitPushTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, UUExtraAbilitySystemStatic::GetPushSelfTag(), nullptr, false, false);
 	WaitPushTask->EventReceived.AddDynamic(this, &ThisClass::OnPushSelfNotifyReceived);
 	WaitPushTask->ReadyForActivation();
+}
+
+void UExtraGameplayAbility::ApplyUninterruptibleTag()
+{
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC)
+	{
+		return;
+	}
+
+	ASC->AddLooseGameplayTag(UninterruptibleTag);
+	bUninterruptibleActive = true;
+}
+
+void UExtraGameplayAbility::ReleaseUninterruptible()
+{
+	if (!bUninterruptibleActive)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC)
+	{
+		return;
+	}
+
+	ASC->RemoveLooseGameplayTag(UninterruptibleTag);
+	bUninterruptibleActive = false;
+}
+
+void UExtraGameplayAbility::SetupUninterruptibleReleaseListener()
+{
+	UAbilityTask_WaitGameplayEvent* WaitUninterruptibleTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, UUExtraAbilitySystemStatic::GetUninterruptibleEndTag(), nullptr, false, false);
+	WaitUninterruptibleTask->EventReceived.AddDynamic(this, &ThisClass::OnUninterruptibleReleaseReceived);
+	WaitUninterruptibleTask->ReadyForActivation();
+}
+
+void UExtraGameplayAbility::OnUninterruptibleReleaseReceived(FGameplayEventData Payload)
+{
+	ReleaseUninterruptible();
 }
 
 void UExtraGameplayAbility::OnPushSelfNotifyReceived(FGameplayEventData Payload)
