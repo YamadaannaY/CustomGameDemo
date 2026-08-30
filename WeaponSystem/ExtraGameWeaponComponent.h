@@ -7,6 +7,7 @@
 #include "GameplayTagContainer.h"
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
+#include "Engine/EngineTypes.h"
 #include "ExtraGameWeaponTypes.h"
 #include "ExtraGameWeaponComponent.generated.h"
 
@@ -15,6 +16,7 @@ class UAbilitySystemComponent;
 class UExtraGameplayAbility;
 class UGameplayEffect;
 class UStaticMeshComponent;
+class AActor;
 struct FExtraGameWeaponGroup;
 
 // 武器组变化委托
@@ -121,6 +123,32 @@ public:
 	// 在 ASC 初始化后调用（由 Character::ServerSideInit 触发）
 	void OnASCInitialized();
 
+	// ── 轨迹伤害扫描（由 ANS_WeaponTrace 驱动） ─────────────────
+	// 攻击窗口开始：收集当前武器组参与扫描的 Socket 并清空窗口状态
+	void BeginWeaponTrace();
+
+	// 每动画帧推进：记录各 Socket 世界坐标，对 prev→cur 做球体扫描
+	void TickWeaponTrace();
+
+	// 攻击窗口结束：把本窗口命中集合封装为 TargetData 事件发出
+	void EndWeaponTrace();
+
+	// 是否处于攻击扫描窗口内
+	bool IsTraceActive() const { return bTraceActive; }
+
+	// ── 轨迹扫描配置 ───────────────────────────────────────────
+	// 武器扫描使用的碰撞通道（需在项目设置 Collision 中配置其响应）
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
+	TEnumAsByte<ECollisionChannel> WeaponTraceChannel = ECC_GameTraceChannel1;
+
+	// 命中事件 Tag（窗口结束时发送给 Owner；默认走连段伤害事件，见构造函数）
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
+	FGameplayTag TraceEventTag;
+
+	// 调试：绘制扫描线段与球体
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace|Debug")
+	bool bDrawWeaponTraceDebug = false;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -179,4 +207,24 @@ private:
 
 	// ── 内部辅助 ────────────────────────────────────────────
 	void CacheOwnerASC();
+
+	// ── 轨迹扫描状态 ────────────────────────────────────────
+	bool bTraceActive = false;
+	// 本窗口参与扫描的 Socket 名称
+	TArray<FName> ActiveTraceSockets;
+	// 本窗口使用的扫描配置（取当前组内主武器的 TraceConfig）
+	FExtraGameWeaponTraceConfig ActiveTraceConfig;
+	// Socket 名称 → 负责该 Socket 的武器 Mesh 组件
+	TMap<FName, TObjectPtr<UStaticMeshComponent>> ActiveTraceSocketToMesh;
+	// Socket 名称 → 上一帧世界坐标（首帧不扫描）
+	TMap<FName, FVector> TraceSocketPrevLocations;
+	// 本窗口已命中 Actor（同一窗口内去重）
+	TSet<TWeakObjectPtr<AActor>> TraceHitActors;
+
+	// 从当前武器组收集参与扫描的 Socket 与配置
+	bool GatherTraceSocketsFromCurrentGroup();
+	// 对单个 Socket 做 prev→cur 球体扫描（子步细分 + 去重）
+	void TraceSocketSegment(const FName SocketName, const FVector& Prev, const FVector& Curr);
+	// 窗口结束时封装命中集合为 TargetData 事件发出
+	void SendTraceHitEvent();
 };

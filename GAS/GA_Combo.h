@@ -41,9 +41,13 @@ private:
 	UFUNCTION()
 	void ComboChangedEventReceived(FGameplayEventData InPayLoad);
 
-	//实现伤害逻辑
+	// 实现伤害逻辑
 	UFUNCTION()
 	void DoDamage(FGameplayEventData Data);
+
+	// 服务器端收到客户端跳段通知（Server_NotifyComboCommit）后执行同一蒙太奇跳段
+	UFUNCTION()
+	void OnComboCommitReceived(FGameplayEventData InPayLoad);
 
 	// 进入最后一段 section 时回调：累计「打满」次数（ComboCount +1，封顶 3）
 	UFUNCTION()
@@ -69,6 +73,10 @@ private:
 	//对不同Section对应的Montage触发的DamageGE进行不同的设置
 	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
 	TMap<FName,TSubclassOf<UGameplayEffect>> DamageEffectMap;
+
+	// SetByCaller 伤害 Tag：DoDamage 将攻击者攻击力写入该 Tag，供 GE 的 Modifier 读取
+	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
+	FGameplayTag DamageSetByCallerTag;
 
 	//包含所有ComboAnimationSequence的Montage
 	UPROPERTY(EditDefaultsOnly,Category="Animation")

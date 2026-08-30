@@ -3,7 +3,11 @@
 #include "ExtraGameWeaponComponent.h"
 #include "ExtraGameWeaponData.h"
 #include "ExtractGameCharacter/GAS/ExtraGameplayAbility.h"
+#include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "CollisionQueryParams.h"
+#include "DrawDebugHelpers.h"
 #include "GameFramework/Character.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -12,6 +16,9 @@
 UExtraGameWeaponComponent::UExtraGameWeaponComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+
+	// 默认命中事件走连段伤害事件（GA_Combo 在服务端监听该 Tag）
+	TraceEventTag = UUExtraAbilitySystemStatic::GetComboTargetEventTag();
 }
 
 void UExtraGameWeaponComponent::BeginPlay()
@@ -555,4 +562,241 @@ void UExtraGameWeaponComponent::UpdateCharacterTags(const FExtraGameWeaponGroup*
 	{
 		OwnerASC->AddLooseGameplayTags(NewGroup->AdditionalTags);
 	}
+}
+
+// ──────────────────────────────────────────────────────────────
+// 轨迹伤害扫描（由 ANS_WeaponTrace 驱动）
+// ──────────────────────────────────────────────────────────────
+
+void UExtraGameWeaponComponent::BeginWeaponTrace()
+{
+	// 直接重置并开启：即使上一次窗口因蒙太奇异常终止而未正常关闭，也不会卡死后续扫描
+	if (!GatherTraceSocketsFromCurrentGroup())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] BeginWeaponTrace: current weapon group has no valid trace sockets."));
+		return;
+	}
+
+	bTraceActive = true;
+	TraceSocketPrevLocations.Empty();
+	TraceHitActors.Empty();
+
+	// 立即记录各 Socket 起始位置，使首个 NotifyTick 就能开始扫描（不浪费窗口第一帧）
+	for (const FName& SocketName : ActiveTraceSockets)
+	{
+		if (UStaticMeshComponent* MeshComp = ActiveTraceSocketToMesh.FindRef(SocketName))
+		{
+			TraceSocketPrevLocations.Add(SocketName, MeshComp->GetSocketLocation(SocketName));
+		}
+	}
+}
+
+void UExtraGameWeaponComponent::TickWeaponTrace()
+{
+	if (!bTraceActive)
+	{
+		return;
+	}
+
+	for (const FName& SocketName : ActiveTraceSockets)
+	{
+		UStaticMeshComponent* MeshComp = ActiveTraceSocketToMesh.FindRef(SocketName);
+		if (!MeshComp)
+		{
+			continue;
+		}
+
+		const FVector Curr = MeshComp->GetSocketLocation(SocketName);
+
+		FVector* PrevPtr = TraceSocketPrevLocations.Find(SocketName);
+		if (!PrevPtr)
+		{
+			// 首帧：仅记录起点，不扫描（避免从原点拉出整条射线）
+			TraceSocketPrevLocations.Add(SocketName, Curr);
+			continue;
+		}
+
+		TraceSocketSegment(SocketName, *PrevPtr, Curr);
+		*PrevPtr = Curr;
+	}
+}
+
+void UExtraGameWeaponComponent::EndWeaponTrace()
+{
+	if (!bTraceActive)
+	{
+		return;
+	}
+
+	bTraceActive = false;
+
+	SendTraceHitEvent();
+
+	ActiveTraceSockets.Empty();
+	ActiveTraceSocketToMesh.Empty();
+	TraceSocketPrevLocations.Empty();
+	TraceHitActors.Empty();
+}
+
+bool UExtraGameWeaponComponent::GatherTraceSocketsFromCurrentGroup()
+{
+	ActiveTraceSockets.Empty();
+	ActiveTraceSocketToMesh.Empty();
+
+	const FExtraGameWeaponGroup* Group = GetCurrentWeaponGroup();
+	if (!Group)
+	{
+		return false;
+	}
+
+	bool bFoundConfig = false;
+
+	for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
+	{
+		if (Entry.TraceSockets.Num() == 0)
+		{
+			continue;
+		}
+
+		UStaticMeshComponent* MeshComp = GetWeaponMeshByTag(Entry.WeaponTag);
+		if (!MeshComp)
+		{
+			continue;
+		}
+
+		// 组内第一把有 TraceSocket 的武器决定本窗口扫描配置
+		if (!bFoundConfig)
+		{
+			ActiveTraceConfig = Entry.TraceConfig;
+			bFoundConfig = true;
+		}
+
+		for (const FName& SocketName : Entry.TraceSockets)
+		{
+			if (SocketName == NAME_None)
+			{
+				continue;
+			}
+
+			if (!MeshComp->DoesSocketExist(SocketName))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] TraceSocket '%s' not found on weapon '%s'."),
+					*SocketName.ToString(), *Entry.WeaponTag.ToString());
+				continue;
+			}
+
+			ActiveTraceSockets.Add(SocketName);
+			ActiveTraceSocketToMesh.Add(SocketName, MeshComp);
+		}
+	}
+
+	return ActiveTraceSockets.Num() > 0;
+}
+
+void UExtraGameWeaponComponent::TraceSocketSegment(const FName SocketName, const FVector& Prev, const FVector& Curr)
+{
+	const FVector Delta = Curr - Prev;
+	const float Distance = Delta.Size();
+	if (Distance < KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	// 帧间位移过大时细分为多个子步，避免高速挥动直接穿过命中体
+	const int32 Steps = FMath::Clamp(
+		FMath::CeilToInt(Distance / FMath::Max(ActiveTraceConfig.MaxStepDistance, 1.f)),
+		1, FMath::Max(ActiveTraceConfig.MaxSubSteps, 1));
+	const FVector StepVec = Delta / static_cast<float>(Steps);
+	const float TraceRadius = FMath::Max(ActiveTraceConfig.TraceRadius, 0.1f);
+
+	AActor* Owner = GetOwner();
+
+	FCollisionQueryParams QueryParams(TEXT("WeaponTrace"), /*bTraceComplex*/ false);
+	if (Owner)
+	{
+		QueryParams.AddIgnoredActor(Owner);
+	}
+	// 忽略本组件生成的全部武器 Mesh，防止命中自身武器
+	for (const auto& Pair : SpawnedWeaponMeshes)
+	{
+		if (Pair.Value)
+		{
+			QueryParams.AddIgnoredComponent(Pair.Value.Get());
+		}
+	}
+
+	const FCollisionShape Sphere = FCollisionShape::MakeSphere(TraceRadius);
+	const ECollisionChannel Channel = WeaponTraceChannel.GetValue();
+
+	for (int32 i = 0; i < Steps; ++i)
+	{
+		const FVector SegStart = Prev + StepVec * static_cast<float>(i);
+		const FVector SegEnd = Prev + StepVec * static_cast<float>(i + 1);
+
+		TArray<FHitResult> Hits;
+		if (!GetWorld())
+		{
+			return;
+		}
+		GetWorld()->SweepMultiByChannel(Hits, SegStart, SegEnd, FQuat::Identity, Channel, Sphere, QueryParams);
+
+		if (bDrawWeaponTraceDebug)
+		{
+			DrawDebugLine(GetWorld(), SegStart, SegEnd, FColor::Red, false, 0.05f);
+			DrawDebugSphere(GetWorld(), SegEnd, TraceRadius, 8, FColor::Orange, false, 0.05f);
+		}
+
+		for (const FHitResult& Hit : Hits)
+		{
+			AActor* HitActor = Hit.GetActor();
+			if (HitActor && !TraceHitActors.Contains(TWeakObjectPtr<AActor>(HitActor)))
+			{
+				TraceHitActors.Add(TWeakObjectPtr<AActor>(HitActor));
+			}
+		}
+	}
+}
+
+void UExtraGameWeaponComponent::SendTraceHitEvent()
+{
+	if (TraceHitActors.Num() == 0)
+	{
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	FGameplayTag EventTag = TraceEventTag;
+	if (!EventTag.IsValid())
+	{
+		EventTag = UUExtraAbilitySystemStatic::GetComboTargetEventTag();
+	}
+
+	FGameplayAbilityTargetData_ActorArray* ActorArray = new FGameplayAbilityTargetData_ActorArray();
+	for (const TWeakObjectPtr<AActor>& WeakActor : TraceHitActors)
+	{
+		if (AActor* Actor = WeakActor.Get())
+		{
+			ActorArray->TargetActorArray.Add(Actor);
+		}
+	}
+
+	if (ActorArray->TargetActorArray.Num() == 0)
+	{
+		delete ActorArray;
+		return;
+	}
+
+	FGameplayAbilityTargetDataHandle TargetData;
+	TargetData.Add(ActorArray);
+
+	FGameplayEventData EventData;
+	EventData.Instigator = Owner;
+	EventData.TargetData = TargetData;
+
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Owner, EventTag, EventData);
 }

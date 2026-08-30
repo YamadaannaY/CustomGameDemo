@@ -10,6 +10,28 @@ class UExtraGameplayAbility;
 class UGameplayEffect;
 
 /**
+ * 武器轨迹扫描配置（Sweep-based，用于伤害判定）
+ * 攻击窗口内对 TraceSockets 逐帧做 prev→cur 球体扫描，帧间位移过大时细分。
+ */
+USTRUCT(BlueprintType)
+struct EXTRACTGAMECHARACTER_API FExtraGameWeaponTraceConfig
+{
+	GENERATED_BODY()
+
+	// 单个 Socket 的扫描球半径（近似剑刃有效宽度的一半）
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
+	float TraceRadius = 4.f;
+
+	// 帧间位移超过该值时将线段细分为多个子步，防止高速挥动穿模
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
+	float MaxStepDistance = 20.f;
+
+	// 单帧最大子步数（位移极小时不细分）
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
+	int32 MaxSubSteps = 4;
+};
+
+/**
  * 单个武器 Mesh 的视觉配置（纯视觉，不含 GAS 数据）
  * 一个武器组可包含多个 WeaponEntry，各自独立显隐。
  */
@@ -39,6 +61,15 @@ struct EXTRACTGAMECHARACTER_API FExtraGameWeaponEntry
 	// 相对 Socket 的偏移
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Visual")
 	FTransform RelativeTransform = FTransform::Identity;
+
+	// ── 轨迹扫描 ────────────────────────────────────────────────
+	// 参与伤害扫描的武器 Socket（如 柄部/中段/剑尖，在 StaticMesh 资源中定义）
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
+	TArray<FName> TraceSockets;
+
+	// 该武器的轨迹扫描配置（球半径 / 子步细分）
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
+	FExtraGameWeaponTraceConfig TraceConfig;
 };
 
 /**
