@@ -5,9 +5,18 @@
 
 void UExtraGameAnimInstance::OnFootPlantNotify(EFootPlant Foot)
 {
-	if (!bRequestStop)
+	// 本地：松手（bRequestStop）等待 FootPlant 进入停步状态。
+	// 模拟端（其他客户端看到的角色）没有 bRequestStop（只在拥有客户端的输入回调里设置），
+	// 若不处理永远进不了左右停步、卡在跑步态回不到 idle。
+	// 模拟端改为：速度降到 SimProxyStopSpeedThreshold 以下时同样响应 FootPlant，进入停步状态。
+	const bool bSimProxyStopping = OwnerCharacter && OwnerCharacter->GetLocalRole() == ROLE_SimulatedProxy
+		&& OwnerMovementComp && OwnerMovementComp->Velocity.Size2D() < SimProxyStopSpeedThreshold;
+
+	if (!bRequestStop && !bSimProxyStopping)
+	{
 		return;
-	
+	}
+
 	PendingStopFoot = Foot;
 	bCanEnterStop = true;
 }
@@ -31,9 +40,21 @@ void UExtraGameAnimInstance::ClearStopRequest()
 
 void UExtraGameAnimInstance::OnStopStateEntered()
 {
-	bRequestStop = false;
-	bCanEnterStop = false;
-	PendingStopFoot = EFootPlant::None;
+	ClearStopAndVelocity();
+}
+
+void UExtraGameAnimInstance::ClearStopAndVelocity()
+{
+	ClearStopRequest();
+
+	// 停步/转身到位：清零残留速度。松手后 NativeUpdateAnimation 的 bRequestStop 分支
+	// 会把 Velocity 恒锁在 CacheVelocity（松手速度），若不在此清零，
+	// CharacterMovement 会继续用残留速度滑行，表现为「停步/转身后 idle 仍向前移动」。
+	CacheVelocity = FVector::ZeroVector;
+	if (OwnerMovementComp)
+	{
+		OwnerMovementComp->Velocity = FVector::ZeroVector;
+	}
 }
 
 
@@ -67,7 +88,18 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 		MovementMode = OwnerMovementComp->MovementMode;
 
-		Acceleration = OwnerMovementComp->GetCurrentAcceleration().Length();
+		// 模拟端（其他客户端看到的角色）没有本地输入，加速度依赖服务器复制；
+		// 若复制不可用或为 0，但仍有速度，说明在移动——用速度兜底为有加速度，
+		// 保证 AnimBP 的 HasAcceleration() 过渡条件在远端也能成立（不会以 idle 状态移动）。
+		float AccelLen = OwnerMovementComp->GetCurrentAcceleration().Length();
+		if (OwnerCharacter && OwnerCharacter->GetLocalRole() == ROLE_SimulatedProxy)
+		{
+			if (AccelLen < KINDA_SMALL_NUMBER && !OwnerMovementComp->Velocity.IsNearlyZero())
+			{
+				AccelLen = 1.f;
+			}
+		}
+		Acceleration = AccelLen;
 	}
 
 	if (bisFalling || bisJumping)
@@ -91,6 +123,9 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		}
 		else
 		{
+			// 停步锁速：松手后速度保持 CacheVelocity，等待 FootPlant 进入停步状态机。
+			// 注意：这是客户端独有状态，服务器端 bRequestStop 恒为 false 不会锁速——
+			// 但角色位置以服务器权威为准，锁速只影响本地动画表现，不参与网络位置裁决。
 			OwnerMovementComp->Velocity = CacheVelocity;
 		}
 		bIsMoving = GroundSpeed > 3.f && OwnerMovementComp->IsMovingOnGround();

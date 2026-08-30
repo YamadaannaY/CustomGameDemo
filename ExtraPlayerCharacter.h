@@ -53,6 +53,11 @@ public:
 	
 	float LastMoveInputDuration = 0.f;
 
+	// 客户端→服务器：通知服务器端蒙太奇跳段（Combo 后续段仅在客户端本地 JumpToSection 不复制，
+	// 服务器不跳段则其他客户端看不到）。public：供 GA_Combo 在跳段时调用。
+	UFUNCTION(Server, Reliable)
+	void Server_NotifyComboCommit(FName SectionName);
+
 	// 相机组件访问器（供 UCombatCameraComponent 解析写入目标）
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CamBoom; }
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return ViewCam; }
@@ -124,10 +129,13 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Turn")
 	UAnimMontage* TurnRight90Montage;
+	
+	UPROPERTY(EditDefaultsOnly,Category="Animation | Turn")
+	float TurnSharpAngel=110.f;
 
-	// 转身 Montage 播放速率（>1 更快）
-	UPROPERTY(EditDefaultsOnly, Category="Animation|Turn")
-	float TurnMontagePlayRate = 1.2f;
+	// 停步 Montage 被移动输入打断时的 BlendOut 时长（秒）
+	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
+	float StopMontageBlendOutTime = 0.15f;
 
 	// 急停时 Capsule 旋转到目标朝向的插值时间（秒）
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
@@ -165,6 +173,12 @@ private:
 	void StopMoveInput(const FInputActionValue& InputActionValue);
 	void Look(const FInputActionValue& InputActionValue);
 
+	// 客户端→服务器：同步输入状态（服务器端 GA 读取前/后判断、Evade 朝向等用）。
+	// Move() 是本地函数，服务器端没有输入回调，若不同步则服务器端 bHasMoveInput/
+	// ForwardDirectionInput/InputDirection 恒为默认值，导致 Evade 等方向误判。
+	UFUNCTION(Server, Unreliable)
+	void Server_SetInputState(bool bInHasMoveInput, float InForwardInput, const FVector& InInputDir);
+
 	friend class UGA_Evade;
 
 	void HandleCameraZoomInput(const FInputActionValue& InputActionValue);
@@ -190,6 +204,13 @@ private:
 	// 90转身 montage + MotionWarping（abs(TargetDelta) > 110）
 	void PlayTurnMontage(bool bTurnLeft);
 
+	// 停步 Montage 正在播放时，收到移动输入即打断（停掉 rootmotion Montage 回到跑步）
+	void CancelStopMontageIfPlaying();
+
+	// 停步/转身 montage 结束（正常播完或被打断）回调：清停步请求 + 清零残留速度
+	UFUNCTION()
+	void OnStopMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
 	// 平滑后的输入方向（逐帧 VInterpTo 插值），用于 AddMovementInput
 	FVector SmoothedInputDirection = FVector::ZeroVector;
 
@@ -201,9 +222,7 @@ private:
 	bool bHasMoveInput=false;
 
 	float TargetDelta=0.0f;
-
-
-
+	
 	float MoveInputStartTime = 0.f;
 
 	float ForwardDirectionInput;

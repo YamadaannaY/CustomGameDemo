@@ -16,6 +16,7 @@ UE_DEFINE_GAMEPLAY_TAG(InputTag_Dodge, "InputTag.Dodge");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Change, "ability.combo.change");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Change_End, "ability.combo.change.end");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Damage, "ability.combo.damage");
+UE_DEFINE_GAMEPLAY_TAG(Combo_Commit, "ability.combo.commit");
 UE_DEFINE_GAMEPLAY_TAG(Combo_LastSection, "ability.combo.lastsection");
 UE_DEFINE_GAMEPLAY_TAG(Combo_HeavyTransition, "ability.combo.heavytransition");
 UE_DEFINE_GAMEPLAY_TAG(Evade_ToSprint, "Evade.ToSprint");
@@ -24,6 +25,7 @@ UE_DEFINE_GAMEPLAY_TAG(Push_Self, "ability.push.self");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Passive_Launch, "ability.passive.launch.activate");
 UE_DEFINE_GAMEPLAY_TAG(State_Uninterruptible, "State.Uninterruptible");
 UE_DEFINE_GAMEPLAY_TAG(Uninterruptible_End, "ability.uninterruptible.end");
+UE_DEFINE_GAMEPLAY_TAG(Data_Damage, "Data.Damage");
 
 FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 {
@@ -95,6 +97,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetComboTargetEventTag()
 	return Combo_Damage;
 }
 
+FGameplayTag UUExtraAbilitySystemStatic::GetComboCommitEventTag()
+{
+	return Combo_Commit;
+}
+
 FGameplayTag UUExtraAbilitySystemStatic::GetComboLastSectionTag()
 {
 	return Combo_LastSection;
@@ -128,6 +135,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetUninterruptibleTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetUninterruptibleEndTag()
 {
 	return Uninterruptible_End;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetDamageSetByCallerTag()
+{
+	return Data_Damage;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetLaunchedAbilityActivationTag()

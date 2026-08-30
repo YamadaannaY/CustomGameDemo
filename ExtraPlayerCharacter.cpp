@@ -138,6 +138,8 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 			GameAI->ClearStopRequest();
 		}
 
+		CancelStopMontageIfPlaying();
+
 		MoveInputStartTime = GetWorld()->GetTimeSeconds();
 	}
 	bHasMoveInput = !InputVal.IsNearlyZero();
@@ -156,7 +158,7 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		RightDirectionInput = InputVal.X;
 
 		// 每帧用「当前朝向 vs 当前输入方向」重算 TargetDelta，而非只在首帧算一次：
-		// 角色用 bOrientRotationToMovement 逐帧转向，松手瞬间的 TargetDelta 应是
+		// 用 bOrientRotationToMovement 逐帧转向，松手瞬间的 TargetDelta 应是
 		// 最新的剩余角度差（转向到位→小角度→急停；快速反向还没转到位→大角度→转身 montage）。
 		// 旧的 HasCalTargetDelta 只在首帧计算，转身后松手仍用初始值，导致左右判断错乱。
 		CalculateTargetDelta(ForwardDirectionInput, RightDirectionInput);
@@ -194,6 +196,9 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		InputDirection = SmoothedInputDirection;
 
 		AddMovementInput(SmoothedInputDirection, FMath::Min(InputMagnitude, 1.0f));
+
+		// 输入状态同步到服务器（服务器端 GA 读取前/后判断、Evade 朝向等用）
+		Server_SetInputState(bHasMoveInput, ForwardDirectionInput, InputDirection);
 	}
 }
 
@@ -207,6 +212,9 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	InputDirection = FVector::ZeroVector;
 	SmoothedInputDirection = FVector::ZeroVector;
 
+	// 输入清零同步到服务器
+	Server_SetInputState(false, 0.f, FVector::ZeroVector);
+
 	
 	// 只在普通跑步时才响应松手停步，避免干扰 Evade / QuickStop / Turn 等 Montage
 	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
@@ -216,29 +224,59 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 			return;
 		}
 	}
-	
-	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
-	{
-		AnimInst->ClearStopRequest();
-	}
-	
-	UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance());
-	AI->RequestStop();
-	
+
 	// 轻触判定：输入持续时间 < 0.2s
 	if (LastMoveInputDuration > 0.f && LastMoveInputDuration < 0.2f)
 	{
 		const float AbsTargetDelta = FMath::Abs(TargetDelta);
 
-		if (AbsTargetDelta < 110.f)
+		if (AbsTargetDelta < TurnSharpAngel)
 		{
+			// 急停：轻触 + 小角度差，由 rootmotion 自行减速到停，不锁速 
 			PlayQuickStop();
 		}
 		else
 		{
+			// 转身：轻触 + 大角度差（快速反向还没转到位），由 MotionWarping 转向，不锁速
 			const bool bTurnLeft = (TargetDelta < 0.f);
 			PlayTurnMontage(bTurnLeft);
 		}
+	}
+	else
+	{
+		// 普通停步：锁速等待 FootPlant 进入停步状态机。
+		// 锁速只用于非 rootmotion 的普通停步；QuickStop / Turn 是 rootmotion，
+		// 若也锁速会每帧覆盖 rootmotion 的速度并把 GroundSpeed 冻结，导致「原地跑步」。
+		if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
+		{
+			AI->ClearStopRequest();
+			AI->RequestStop();
+		}
+	}
+}
+
+void AExtraPlayerCharacter::Server_SetInputState_Implementation(bool bInHasMoveInput, float InForwardInput, const FVector& InInputDir)
+{
+	// 服务器端只有这一处更新输入状态（Move 不在此执行）
+	bHasMoveInput = bInHasMoveInput;
+	ForwardDirectionInput = InForwardInput;
+	InputDirection = InInputDir;
+}
+
+void AExtraPlayerCharacter::Server_NotifyComboCommit_Implementation(FName SectionName)
+{
+	if (SectionName.IsNone())
+	{
+		return;
+	}
+
+	// 服务器端广播本地事件，服务器端 GA_Combo 监听后对同一蒙太奇执行跳段
+	const FString TagStr = FString::Printf(TEXT("%s.%s"),
+		*UUExtraAbilitySystemStatic::GetComboCommitEventTag().ToString(), *SectionName.ToString());
+	const FGameplayTag CommitTag = FGameplayTag::RequestGameplayTag(FName(*TagStr), false);
+	if (CommitTag.IsValid())
+	{
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, CommitTag, FGameplayEventData());
 	}
 }
 
@@ -358,6 +396,12 @@ void AExtraPlayerCharacter::PlayQuickStop()
 	{
 		PlayAnimMontage(QuickRightStopMontage);
 	}
+
+	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
+	{
+		AnimInst->OnMontageEnded.RemoveAll(this);
+		AnimInst->OnMontageEnded.AddDynamic(this, &AExtraPlayerCharacter::OnStopMontageEnded);
+	}
 }
 
 void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
@@ -382,7 +426,50 @@ void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
 		MotionWarpingComp->AddOrUpdateWarpTarget(WarpTarget);
 	}
 
-	PlayAnimMontage(MontageToPlay, TurnMontagePlayRate);
+	PlayAnimMontage(MontageToPlay);
+
+	// 转身 montage 结束（播完/被打断）时清零停步请求与残留速度，
+	// 否则 StopMoveInput 里先 RequestStop() 锁的速度会在 montage 播完后残留，导致 idle 滑行。
+	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
+	{
+		AnimInst->OnMontageEnded.RemoveAll(this);
+		AnimInst->OnMontageEnded.AddDynamic(this, &AExtraPlayerCharacter::OnStopMontageEnded);
+	}
+}
+
+void AExtraPlayerCharacter::OnStopMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != QuickLeftStopMontage &&
+		Montage != QuickRightStopMontage &&
+		Montage != TurnLeft90Montage &&
+		Montage != TurnRight90Montage)
+	{
+		return;
+	}
+
+	if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
+	{
+		AI->ClearStopAndVelocity();
+	}
+}
+
+void AExtraPlayerCharacter::CancelStopMontageIfPlaying()
+{
+	UAnimInstance* AnimInst = GetMesh()->GetAnimInstance();
+	if (!AnimInst)
+	{
+		return;
+	}
+
+	// 停步 Montage（急停/转身）都带 rootmotion，输入恢复时直接打断进入跑步
+	UAnimMontage* ActiveMontage = AnimInst->GetCurrentActiveMontage();
+	if (ActiveMontage == QuickLeftStopMontage ||
+		ActiveMontage == QuickRightStopMontage ||
+		ActiveMontage == TurnLeft90Montage ||
+		ActiveMontage == TurnRight90Montage)
+	{
+		AnimInst->StopAllMontages(StopMontageBlendOutTime);
+	}
 }
 
 // ──────────────────────────────────────────────────────────────

@@ -45,14 +45,15 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	}
 
 	//基于增强输入的移动标志判断前/后 Evade（不再用加速度：空中攻击锁定输入期间加速度恒为 0，会误判为无输入→后空翻）
+	//仅前向输入触发前空翻；后向输入与无输入一致，均为后空翻
 	const bool bAirborne = AvatarChar->GetCharacterMovement()->IsFalling();
 	const AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(AvatarChar);
-	const bool bHasMoveInput = PlayerChar && PlayerChar->HasMoveInput();
+	const bool bForwardInput = PlayerChar && PlayerChar->HasForwardInput();
 
-	bPlayingForwardEvade = bHasMoveInput;
+	bPlayingForwardEvade = bForwardInput;
 	CurrentPlayingMontage = bAirborne
-		? (bHasMoveInput ? ForwardAirEvadeMontage : BackwardAirEvadeMontage)
-		: (bHasMoveInput ? ForwardEvadeMontage : BackwardEvadeMontage);
+		? (bForwardInput ? ForwardAirEvadeMontage : BackwardAirEvadeMontage)
+		: (bForwardInput ? ForwardEvadeMontage : BackwardEvadeMontage);
 	if (!CurrentPlayingMontage)
 	{
 		K2_EndAbility();

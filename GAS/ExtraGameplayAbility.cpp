@@ -51,6 +51,12 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	{
 		Char->GetWeaponComponent()->HideWeapon();
 	}
+
+	// 兜底：即使蒙太奇异常终止未触发 ANS 的 NotifyEnd，GA 结束也强制关闭轨迹扫描窗口（幂等）
+	if (Char && Char->GetWeaponComponent())
+	{
+		Char->GetWeaponComponent()->EndWeaponTrace();
+	}
 	
 	// 恢复重力缩放（若本次激活启用了重力缩放）：永远恢复到引擎默认，而非激活前那一刻的值。
 	if (bEnableGravityScale)

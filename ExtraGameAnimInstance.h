@@ -76,6 +76,10 @@ public:
 	// 清除停步请求，重置时使用（新输入 / 跳跃 / 进入 Stop 状态后）
 	void ClearStopRequest();
 
+	// 清停步请求并清零残留速度（停步状态机进入 / 转身动画结束时调用，
+	// 防止锁速结束或 montage 播完后残留速度导致角色停步后仍滑行）
+	void ClearStopAndVelocity();
+
 	// AnimBP 进入Stop状态时调用，消费停步请求
 	UFUNCTION(BlueprintCallable,meta=(BlueprintThreadSafe))
 	void OnStopStateEntered();
@@ -119,6 +123,11 @@ public:
 	// AnimBP 退出 Sprint 状态时调用
 	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
 	void OnSprintStateLeft();
+
+	// 模拟端停步触发速度阈值：模拟端（其他客户端看到的角色）没有 bRequestStop（只在拥有客户端设置），
+	// 无法进入左右停步状态；速度降到该阈值以下时同样响应 FootPlant，让停步状态机能进入、能回到 idle。
+	UPROPERTY(EditDefaultsOnly, Category = "Locomotion|Stop")
+	float SimProxyStopSpeedThreshold = 200.f;
 
 	// ── 空中攻击标记 ────────────────────────────────────────
 	// GA_AirAttack 激活期间为 true，AnimBP 的 falling 过渡条件用它来「让位」，
