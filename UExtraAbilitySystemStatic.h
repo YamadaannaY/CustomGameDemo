@@ -20,7 +20,6 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Dodge);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Change);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Change_End);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Damage);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Commit);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_LastSection);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_HeavyTransition);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Evade_ToSprint);
@@ -58,7 +57,6 @@ public:
 	static FGameplayTag GetComboChangedEventTag();      // "ability.combo.change"
 	static FGameplayTag GetComboChangedEventEndTag();   // "ability.combo.change.end"
 	static FGameplayTag GetComboTargetEventTag();       // "ability.combo.damage"
-	static FGameplayTag GetComboCommitEventTag();       // "ability.combo.commit"（客户端跳段通知服务器）
 	static FGameplayTag GetComboLastSectionTag();       // "ability.combo.lastsection"
 	static FGameplayTag GetComboHeavyTransitionTag();   // "ability.combo.heavytransition"
 	static FGameplayTag GetEvadeToSprintTag();          // "Evade.ToSprint"

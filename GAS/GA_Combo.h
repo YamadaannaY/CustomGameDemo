@@ -45,10 +45,6 @@ private:
 	UFUNCTION()
 	void DoDamage(FGameplayEventData Data);
 
-	// 服务器端收到客户端跳段通知（Server_NotifyComboCommit）后执行同一蒙太奇跳段
-	UFUNCTION()
-	void OnComboCommitReceived(FGameplayEventData InPayLoad);
-
 	// 进入最后一段 section 时回调：累计「打满」次数（ComboCount +1，封顶 3）
 	UFUNCTION()
 	void OnLastSectionEntered(FGameplayEventData EventData);

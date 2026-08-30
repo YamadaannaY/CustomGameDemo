@@ -36,10 +36,6 @@ public:
 	// GAS 是否已初始化（防止 OnPossess 重复调用）
 	bool bGASInitialized = false;
 
-	// 强制开启服务器→模拟端加速度复制：AnimBP 用 HasAcceleration() 判断移动状态，
-	// 若不复制，模拟端 GetCurrentAcceleration() 退化为单位向量，移动过渡条件失真导致角色以 idle 移动。
-	virtual bool ShouldReplicateAcceleration() const override { return true; }
-
 	// 跳跃高度（cm）。BeginPlay 时按当前重力换算成 JumpZVelocity 写入移动组件，
 	// 便于在编辑器里直接填目标高度而非初速度。默认 90 与引擎默认 JumpZVelocity=420 一致。
 	UPROPERTY(EditDefaultsOnly, Category = "Character Movement (Jumping)", meta = (ClampMin = "0.0"))

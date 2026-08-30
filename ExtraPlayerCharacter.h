@@ -53,11 +53,6 @@ public:
 	
 	float LastMoveInputDuration = 0.f;
 
-	// 客户端→服务器：通知服务器端蒙太奇跳段（Combo 后续段仅在客户端本地 JumpToSection 不复制，
-	// 服务器不跳段则其他客户端看不到）。public：供 GA_Combo 在跳段时调用。
-	UFUNCTION(Server, Reliable)
-	void Server_NotifyComboCommit(FName SectionName);
-
 	// 相机组件访问器（供 UCombatCameraComponent 解析写入目标）
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CamBoom; }
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return ViewCam; }
@@ -172,12 +167,6 @@ private:
 	void Move(const FInputActionValue& InputActionValue);
 	void StopMoveInput(const FInputActionValue& InputActionValue);
 	void Look(const FInputActionValue& InputActionValue);
-
-	// 客户端→服务器：同步输入状态（服务器端 GA 读取前/后判断、Evade 朝向等用）。
-	// Move() 是本地函数，服务器端没有输入回调，若不同步则服务器端 bHasMoveInput/
-	// ForwardDirectionInput/InputDirection 恒为默认值，导致 Evade 等方向误判。
-	UFUNCTION(Server, Unreliable)
-	void Server_SetInputState(bool bInHasMoveInput, float InForwardInput, const FVector& InInputDir);
 
 	friend class UGA_Evade;
 

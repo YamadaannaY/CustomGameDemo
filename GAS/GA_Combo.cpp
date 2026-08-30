@@ -77,11 +77,6 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		WaitTargetEventTask->EventReceived.AddDynamic(this,&ThisClass::DoDamage);
 		WaitTargetEventTask->ReadyForActivation();
 
-		//监听客户端跳段通知（Server_NotifyComboCommit 在服务器端广播），同步蒙太奇 Section
-		UAbilityTask_WaitGameplayEvent* WaitCommitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-			this, UUExtraAbilitySystemStatic::GetComboCommitEventTag(), nullptr, false, true);
-		WaitCommitTask->EventReceived.AddDynamic(this, &ThisClass::OnComboCommitReceived);
-		WaitCommitTask->ReadyForActivation();
 	}
 
 	//处理第一次输入
@@ -129,15 +124,6 @@ void UGA_Combo::TryCommitCombo()
 	OwnerAnimInst->Montage_SetNextSection(OwnerAnimInst->Montage_GetCurrentSection(ComboMontage),NextComboName,ComboMontage);
 	OwnerAnimInst->Montage_JumpToSection(NextComboName, ComboMontage);
 
-	// 通知服务器端蒙太奇同步跳段（否则后续段只在客户端播放，其他客户端看不到；仅拥有客户端调用 RPC）
-	if (AExtraPlayerCharacter* PC = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo()))
-	{
-		if (PC->GetLocalRole() == ROLE_AutonomousProxy)
-		{
-			PC->Server_NotifyComboCommit(NextComboName);
-		}
-	}
-
 	NextComboName=NAME_None;
 }
 
@@ -175,27 +161,6 @@ void UGA_Combo::ComboChangedEventReceived(FGameplayEventData InPayLoad)
 	{
 		TryCommitCombo();
 	}
-}
-
-void UGA_Combo::OnComboCommitReceived(FGameplayEventData InPayLoad)
-{
-	// 服务器端执行与客户端相同的跳段，保证蒙太奇后续段在两端同步复制
-	TArray<FName> TagNames;
-	UGameplayTagsManager::Get().SplitGameplayTagFName(InPayLoad.EventTag, TagNames);
-	const FName SectionName = TagNames.Last();
-	if (SectionName.IsNone())
-	{
-		return;
-	}
-
-	UAnimInstance* OwnerAnimInst = GetOwnerAnimInstance();
-	if (!OwnerAnimInst || !ComboMontage)
-	{
-		return;
-	}
-
-	OwnerAnimInst->Montage_SetNextSection(OwnerAnimInst->Montage_GetCurrentSection(ComboMontage), SectionName, ComboMontage);
-	OwnerAnimInst->Montage_JumpToSection(SectionName, ComboMontage);
 }
 
 void UGA_Combo::DoDamage(FGameplayEventData Data)

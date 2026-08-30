@@ -58,31 +58,36 @@ public:
 	FORCEINLINE  bool IsWalkingMode() const {return bWalkMode;}
 	*/
 
+	// -- 延迟停步系统 --
+	// 玩家已松开移动键，等待下一个 FootPlant Notify 退出
 	// 玩家已松开移动键，锁速度等待下一个 FootPlant Notify 退出
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
 	bool bRequestStop = false;
 
+	// FootPlant Notify 触发且 bRequestStop==true 时设为 true，AnimBP Transition Rule使用
 	// FootPlant Notify 触发且 bRequestStop==true 时设为 true，作为AnimBP Transition Rule进入停步状态机
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
 	bool bCanEnterStop = false;
 
+	// 记录"应该在哪个脚落地时停步"
 	// 记录应该在哪个脚落地时停步
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
 	EFootPlant PendingStopFoot = EFootPlant::None;
 
+	// 请求停步（由 Character 在松开移动键时调用）
 	// 请求停步（由 Character 在松开移动键时调用），开始锁速度并放开进入停步权限
 	void RequestStop();
 
+	// 清除停步请求（新输入 / 跳跃 / 进入 Stop 状态后）
 	// 清除停步请求，重置时使用（新输入 / 跳跃 / 进入 Stop 状态后）
 	void ClearStopRequest();
 
-	// 清停步请求并清零残留速度（停步状态机进入 / 转身动画结束时调用，
-	// 防止锁速结束或 montage 播完后残留速度导致角色停步后仍滑行）
-	void ClearStopAndVelocity();
-
+	// AnimBP 进入 Stop 状态时调用，消费停步请求
 	// AnimBP 进入Stop状态时调用，消费停步请求
 	UFUNCTION(BlueprintCallable,meta=(BlueprintThreadSafe))
 	void OnStopStateEntered();
+
+	// -- AnimBP Transition Rule 辅助 --
 	
 	//进入左停步的过渡条件
 	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
@@ -92,6 +97,7 @@ public:
 	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
 	FORCEINLINE bool CanEnterRightStop() const { return bCanEnterStop && PendingStopFoot == EFootPlant::Right; }
 
+	// -- BlendSpace 驱动参数 --
 	// BlendSpace 驱动参数 
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion")
 	float GroundSpeed = 0.f;
@@ -107,6 +113,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion")
 	bool bIsMoving = false;
+
+	// -- Sprint 状态 --
+	// AN_EvadeToSprint 截断 Montage 后置为 true，AnimBP 过渡条件
 	
 	// AN_EvadeToSprint 截断 Montage 后置为 true
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Sprint")
@@ -123,11 +132,6 @@ public:
 	// AnimBP 退出 Sprint 状态时调用
 	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
 	void OnSprintStateLeft();
-
-	// 模拟端停步触发速度阈值：模拟端（其他客户端看到的角色）没有 bRequestStop（只在拥有客户端设置），
-	// 无法进入左右停步状态；速度降到该阈值以下时同样响应 FootPlant，让停步状态机能进入、能回到 idle。
-	UPROPERTY(EditDefaultsOnly, Category = "Locomotion|Stop")
-	float SimProxyStopSpeedThreshold = 200.f;
 
 	// ── 空中攻击标记 ────────────────────────────────────────
 	// GA_AirAttack 激活期间为 true，AnimBP 的 falling 过渡条件用它来「让位」，
@@ -194,3 +198,4 @@ private:
 	int32 PickNextIdleAction();
 	// ─────────────────────────────────────────────────────────────
 };
+

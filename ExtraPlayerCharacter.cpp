@@ -196,9 +196,6 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		InputDirection = SmoothedInputDirection;
 
 		AddMovementInput(SmoothedInputDirection, FMath::Min(InputMagnitude, 1.0f));
-
-		// 输入状态同步到服务器（服务器端 GA 读取前/后判断、Evade 朝向等用）
-		Server_SetInputState(bHasMoveInput, ForwardDirectionInput, InputDirection);
 	}
 }
 
@@ -211,9 +208,6 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	RightDirectionInput = 0.f;
 	InputDirection = FVector::ZeroVector;
 	SmoothedInputDirection = FVector::ZeroVector;
-
-	// 输入清零同步到服务器
-	Server_SetInputState(false, 0.f, FVector::ZeroVector);
 
 	
 	// 只在普通跑步时才响应松手停步，避免干扰 Evade / QuickStop / Turn 等 Montage
@@ -252,31 +246,6 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 			AI->ClearStopRequest();
 			AI->RequestStop();
 		}
-	}
-}
-
-void AExtraPlayerCharacter::Server_SetInputState_Implementation(bool bInHasMoveInput, float InForwardInput, const FVector& InInputDir)
-{
-	// 服务器端只有这一处更新输入状态（Move 不在此执行）
-	bHasMoveInput = bInHasMoveInput;
-	ForwardDirectionInput = InForwardInput;
-	InputDirection = InInputDir;
-}
-
-void AExtraPlayerCharacter::Server_NotifyComboCommit_Implementation(FName SectionName)
-{
-	if (SectionName.IsNone())
-	{
-		return;
-	}
-
-	// 服务器端广播本地事件，服务器端 GA_Combo 监听后对同一蒙太奇执行跳段
-	const FString TagStr = FString::Printf(TEXT("%s.%s"),
-		*UUExtraAbilitySystemStatic::GetComboCommitEventTag().ToString(), *SectionName.ToString());
-	const FGameplayTag CommitTag = FGameplayTag::RequestGameplayTag(FName(*TagStr), false);
-	if (CommitTag.IsValid())
-	{
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, CommitTag, FGameplayEventData());
 	}
 }
 
@@ -449,7 +418,13 @@ void AExtraPlayerCharacter::OnStopMontageEnded(UAnimMontage* Montage, bool bInte
 
 	if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
 	{
-		AI->ClearStopAndVelocity();
+		AI->ClearStopRequest();
+
+		// 清零残留速度（原 ClearStopAndVelocity 职责）：防止停步/转身 montage 播完后角色仍滑行
+		if (UCharacterMovementComponent* CMC = GetCharacterMovement())
+		{
+			CMC->Velocity = FVector::ZeroVector;
+		}
 	}
 }
 
