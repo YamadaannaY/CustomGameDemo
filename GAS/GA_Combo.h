@@ -70,10 +70,6 @@ private:
 	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
 	TMap<FName,TSubclassOf<UGameplayEffect>> DamageEffectMap;
 
-	// SetByCaller 伤害 Tag：DoDamage 将攻击者攻击力写入该 Tag，供 GE 的 Modifier 读取
-	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
-	FGameplayTag DamageSetByCallerTag;
-
 	//包含所有ComboAnimationSequence的Montage
 	UPROPERTY(EditDefaultsOnly,Category="Animation")
 	UAnimMontage* ComboMontage;

@@ -6,7 +6,9 @@
 
 UGA_HeavyAttack::UGA_HeavyAttack()
 {
-	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetHeavyAttackAbilityTag());
+	FGameplayTagContainer AssetTags;
+	AssetTags.AddTag(UUExtraAbilitySystemStatic::GetHeavyAttackAbilityTag());
+	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetHeavyAttackAbilityTag());
 	// 重击激活时取消正在连段的轻击 GA（避免两套 Montage 叠加）
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());

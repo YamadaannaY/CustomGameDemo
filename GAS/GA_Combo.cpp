@@ -10,11 +10,10 @@
 
 UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
 {
-	// 伤害 SetByCaller 默认 Tag（可在 GA BP 中覆盖）
-	DamageSetByCallerTag = UUExtraAbilitySystemStatic::GetDamageSetByCallerTag();
-
 	//为了在GA内不重复触发GA，且在空中时不激活地面 Combo
-	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
+	FGameplayTagContainer AssetTags;
+	AssetTags.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
+	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirborneTag());
 
@@ -184,40 +183,18 @@ void UGA_Combo::DoDamage(FGameplayEventData Data)
 	}
 
 	const TSubclassOf<UGameplayEffect> DamageEffect = GetDamageEffectForCurrentCombo();
-	if (!DamageEffect)
-	{
-		return;
-	}
-
-	// 伤害数值取攻击者当前攻击力，经 SetByCaller 写入 GE
-	const float DamageMagnitude = SourceASC->GetNumericAttribute(UExtraGameAttributeSet::GetAttackPowerAttribute());
-
+	
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddInstigator(Avatar, Avatar);
 	Context.AddSourceObject(Avatar);
-
 	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffect, GetAbilityLevel(), Context);
-	if (!SpecHandle.IsValid())
-	{
-		return;
-	}
+	
+	// 伤害数值由 GE 自身配置（字面量 / AttributeBased / Execution），不在此注入 SetByCaller
+	const TArray<AActor*> HitActors = UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(Data.TargetData);
 
-	if (FGameplayEffectSpec* MutableSpec = SpecHandle.Data.Get())
-	{
-		if (DamageSetByCallerTag.IsValid())
-		{
-			MutableSpec->SetSetByCallerMagnitude(DamageSetByCallerTag, DamageMagnitude);
-		}
-	}
-
-	for (AActor* HitActor : UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(Data.TargetData))
+	for (AActor* HitActor : HitActors)
 	{
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
-		if (!TargetASC)
-		{
-			continue;
-		}
-
 		SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
 	}
 }
@@ -236,7 +213,7 @@ void UGA_Combo::OnLastSectionEntered(FGameplayEventData EventData)
 
 void UGA_Combo::OnHeavyTransitionFrame(FGameplayEventData EventData)
 {
-	// 重击需「长按达到阈值」：高频点按即使段数满也不触发
+	// 「长按达到重击阈值」
 	if (!IsLongPressed())
 	{
 		return;

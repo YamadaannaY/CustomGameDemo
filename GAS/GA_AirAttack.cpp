@@ -13,7 +13,9 @@
 
 UGA_AirAttack::UGA_AirAttack()
 {
-	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
+	FGameplayTagContainer AssetTags;
+	AssetTags.AddTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
+	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
 	ActivationRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetAirborneTag());
 	

@@ -4,7 +4,9 @@
 
 UGA_Skill_01::UGA_Skill_01()
 {
-	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
+	FGameplayTagContainer AssetTags;
+	AssetTags.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
+	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 
 	// 窗口：表现动画段挂 State.Uninterruptible，后摇段由 AN_EndUninterruptible 放开。
