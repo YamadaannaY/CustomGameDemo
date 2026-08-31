@@ -14,13 +14,15 @@
 
 UGA_Evade::UGA_Evade()
 {
-	AbilityTags.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
+	FGameplayTagContainer AssetTags;
+	AssetTags.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
+	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
 
-	// 霸体期间（SkillGA 表现段）不可激活；后摇段放开后，激活时取消 SkillGA 打断其后摇。
+	// 不可打断Tag存在期间（SkillGA 表现段）不可激活；后摇段放开后，激活时取消 SkillGA 打断其后摇。
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 
-	// 通过 InputTag 触发（废弃 InputID）
+	// 通过 InputTag 触发
 	FAbilityTriggerData DodgeTrigger;
 	DodgeTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
 	DodgeTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetDodgeInputTag();
@@ -44,11 +46,21 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	//基于增强输入的移动标志判断前/后 Evade（不再用加速度：空中攻击锁定输入期间加速度恒为 0，会误判为无输入→后空翻）
-	//仅前向输入触发前空翻；后向输入与无输入一致，均为后空翻
+	// 以角色朝向为"前"判定前/后 Evade：
 	const bool bAirborne = AvatarChar->GetCharacterMovement()->IsFalling();
 	const AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(AvatarChar);
-	const bool bForwardInput = PlayerChar && PlayerChar->HasForwardInput();
+
+	bool bBackwardInput = true;
+	if (PlayerChar && PlayerChar->HasMoveInput())
+	{
+		const FVector& InputDir = PlayerChar->GetInputDirection();
+		if (!InputDir.IsNearlyZero())
+		{
+			bBackwardInput = FVector::DotProduct(AvatarChar->GetActorForwardVector(), InputDir) < 0.f;
+		}
+	}
+
+	const bool bForwardInput = !bBackwardInput;
 
 	bPlayingForwardEvade = bForwardInput;
 	CurrentPlayingMontage = bAirborne
