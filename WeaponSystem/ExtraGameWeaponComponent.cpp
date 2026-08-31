@@ -579,7 +579,7 @@ void UExtraGameWeaponComponent::BeginWeaponTrace()
 
 	bTraceActive = true;
 	TraceSocketPrevLocations.Empty();
-	TraceHitActors.Empty();
+	AlreadyHitActors.Empty();
 
 	// 立即记录各 Socket 起始位置，使首个 NotifyTick 就能开始扫描（不浪费窗口第一帧）
 	for (const FName& SocketName : ActiveTraceSockets)
@@ -630,12 +630,11 @@ void UExtraGameWeaponComponent::EndWeaponTrace()
 
 	bTraceActive = false;
 
-	SendTraceHitEvent();
-
+	// 即时结算模式下，NotifyEnd 只负责清空黑名单，等待下一次攻击窗口重新累计
+	AlreadyHitActors.Empty();
 	ActiveTraceSockets.Empty();
 	ActiveTraceSocketToMesh.Empty();
 	TraceSocketPrevLocations.Empty();
-	TraceHitActors.Empty();
 }
 
 bool UExtraGameWeaponComponent::GatherTraceSocketsFromCurrentGroup()
@@ -653,6 +652,11 @@ bool UExtraGameWeaponComponent::GatherTraceSocketsFromCurrentGroup()
 
 	for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
 	{
+		if (HiddenWeaponEntries.Contains(Entry.WeaponTag))
+		{
+			continue;
+		}
+		
 		if (Entry.TraceSockets.Num() == 0)
 		{
 			continue;
@@ -689,7 +693,6 @@ bool UExtraGameWeaponComponent::GatherTraceSocketsFromCurrentGroup()
 			ActiveTraceSocketToMesh.Add(SocketName, MeshComp);
 		}
 	}
-
 	return ActiveTraceSockets.Num() > 0;
 }
 
@@ -703,6 +706,7 @@ void UExtraGameWeaponComponent::TraceSocketSegment(const FName SocketName, const
 	}
 
 	// 帧间位移过大时细分为多个子步，避免高速挥动直接穿过命中体
+	//获取走完这段距离需要的步进数，进而获取每个步进的具体向量值
 	const int32 Steps = FMath::Clamp(
 		FMath::CeilToInt(Distance / FMath::Max(ActiveTraceConfig.MaxStepDistance, 1.f)),
 		1, FMath::Max(ActiveTraceConfig.MaxSubSteps, 1));
@@ -749,23 +753,23 @@ void UExtraGameWeaponComponent::TraceSocketSegment(const FName SocketName, const
 		for (const FHitResult& Hit : Hits)
 		{
 			AActor* HitActor = Hit.GetActor();
-			if (HitActor && !TraceHitActors.Contains(TWeakObjectPtr<AActor>(HitActor)))
+			if (!HitActor || AlreadyHitActors.Contains(TWeakObjectPtr<AActor>(HitActor)))
 			{
-				TraceHitActors.Add(TWeakObjectPtr<AActor>(HitActor));
+				continue;
 			}
+
+			// 命中即结算：当帧加入黑名单并立即发事件，GA 收到后当帧应用 GE；
+			// 同一窗口内重复扫到同一目标被黑名单拦下，不重复结算。
+			AlreadyHitActors.Add(TWeakObjectPtr<AActor>(HitActor));
+			SendHitEventForActor(HitActor);
 		}
 	}
 }
 
-void UExtraGameWeaponComponent::SendTraceHitEvent()
+void UExtraGameWeaponComponent::SendHitEventForActor(AActor* HitActor)
 {
-	if (TraceHitActors.Num() == 0)
-	{
-		return;
-	}
-
 	AActor* Owner = GetOwner();
-	if (!Owner)
+	if (!Owner || !HitActor)
 	{
 		return;
 	}
@@ -777,19 +781,7 @@ void UExtraGameWeaponComponent::SendTraceHitEvent()
 	}
 
 	FGameplayAbilityTargetData_ActorArray* ActorArray = new FGameplayAbilityTargetData_ActorArray();
-	for (const TWeakObjectPtr<AActor>& WeakActor : TraceHitActors)
-	{
-		if (AActor* Actor = WeakActor.Get())
-		{
-			ActorArray->TargetActorArray.Add(Actor);
-		}
-	}
-
-	if (ActorArray->TargetActorArray.Num() == 0)
-	{
-		delete ActorArray;
-		return;
-	}
+	ActorArray->TargetActorArray.Add(HitActor);
 
 	FGameplayAbilityTargetDataHandle TargetData;
 	TargetData.Add(ActorArray);

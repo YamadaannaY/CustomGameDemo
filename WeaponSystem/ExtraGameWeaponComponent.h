@@ -30,6 +30,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWeaponGroupChanged, FGameplayTag
  * - 武器组切换：旧组全部隐藏 + 移除 GA/GE → 新组全部显示 + 授予 GA/GE
  * - 逐武器显隐：组内的单个 Weapon Mesh 可独立 Show/Hide
  * - GAS 管理：GA/GE/Tags 以武器组为单位进行授予和移除
+ * – 处理攻击窗口下武器轨迹插值扫描
  */
 UCLASS(ClassGroup=(Weapon), meta=(BlueprintSpawnableComponent))
 class EXTRACTGAMECHARACTER_API UExtraGameWeaponComponent : public UActorComponent
@@ -43,8 +44,7 @@ public:
 	// 武器 DataAsset（在角色蓝图中配置）
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Config")
 	TObjectPtr<UExtraGameWeaponData> WeaponDataAsset;
-
-	// ── 运行时状态 ──────────────────────────────────────────
+	
 	// 当前装备的武器组 Tag
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon|Runtime")
 	FGameplayTag CurrentGroupTag;
@@ -67,7 +67,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Group")
 	bool SwitchWeaponGroup(FGameplayTag NewGroupTag);
 	
-	/** 显示当前武器组所有 Mesh（过场后恢复显示等） */
+	/** 显示当前武器组所有 Mesh（不包括手动隐藏的对象，过场后恢复显示等） */
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
 	void ShowWeapon();
 
@@ -218,13 +218,13 @@ private:
 	TMap<FName, TObjectPtr<UStaticMeshComponent>> ActiveTraceSocketToMesh;
 	// Socket 名称 → 上一帧世界坐标（首帧不扫描）
 	TMap<FName, FVector> TraceSocketPrevLocations;
-	// 本窗口已命中 Actor（同一窗口内去重）
-	TSet<TWeakObjectPtr<AActor>> TraceHitActors;
+	// 已命中黑名单：本窗口内已结算过的 Actor，重复扫到不再结算；窗口结束清空
+	TSet<TWeakObjectPtr<AActor>> AlreadyHitActors;
 
 	// 从当前武器组收集参与扫描的 Socket 与配置
 	bool GatherTraceSocketsFromCurrentGroup();
 	// 对单个 Socket 做 prev→cur 球体扫描（子步细分 + 去重）
 	void TraceSocketSegment(const FName SocketName, const FVector& Prev, const FVector& Curr);
-	// 窗口结束时封装命中集合为 TargetData 事件发出
-	void SendTraceHitEvent();
+	// 命中即时结算：把单个 Actor 封装为 TargetData 事件发出（GA 收到后当帧应用 GE）
+	void SendHitEventForActor(AActor* HitActor);
 };
