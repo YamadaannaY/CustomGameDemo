@@ -1,6 +1,7 @@
 #include "ExtraCharacter.h"
 #include "ExtraGameMovementComponent.h"
 #include "Components/WidgetComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "WeaponSystem/ExtraGameWeaponComponent.h"
 #include "GAS/ExtraAbilitySystemComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -14,6 +15,10 @@ AExtraCharacter::AExtraCharacter(const FObjectInitializer& ObjectInitializer)
 	PrimaryActorTick.bCanEverTick = true;
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::Type::NoCollision);
 
+	// 允许被武器轨迹扫描（SweepMultiByChannel ECC_GameTraceChannel1）命中；
+	// 玩家自身由扫描代码 AddIgnoredActor(Owner) 免疫，队友命中需后续按 Team 过滤。
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
+
 	// ── GAS ──
 	AbilitySystemComponent = CreateDefaultSubobject<UExtraAbilitySystemComponent>(TEXT("ASC"));
 
@@ -24,7 +29,7 @@ AExtraCharacter::AExtraCharacter(const FObjectInitializer& ObjectInitializer)
 	OverHeadWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("OverHeadWidget"));
 	OverHeadWidgetComponent->SetupAttachment(GetMesh());
 	OverHeadWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen);
-	OverHeadWidgetComponent->SetDrawSize(FVector2D(120.f, 24.f));
+	OverHeadWidgetComponent->SetDrawSize(FVector2D(OverHeadGaugeXSize, OverHeadGaugeYSize));
 	OverHeadWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 190.f));
 	OverHeadWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	OverHeadWidgetComponent->SetHiddenInGame(true);

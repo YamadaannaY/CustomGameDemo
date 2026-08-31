@@ -1,17 +1,16 @@
+#include "AbilitySystemBlueprintLibrary.h"
+#include "Camera/CameraComponent.h"
 #include "ExtraPlayerCharacter.h"
 #include "EnhancedInputSubsystems.h"
-#include "Camera/CameraComponent.h"
 #include "EnhancedInputComponent.h"
 #include "ExtractGameCharacter.h"
 #include "ExtraGameAnimInstance.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "GameFramework/SpringArmComponent.h"
-#include "WeaponSystem/ExtraGameWeaponTypes.h"
 #include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
-#include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "ExtractGameCharacter/Camera/UCombatCameraComponent.h"
-#include "AbilitySystemBlueprintLibrary.h"
+#include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/SpringArmComponent.h"
 
 
 AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectInitializer)
@@ -37,13 +36,11 @@ AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectIni
 	CombatCameraComp = CreateDefaultSubobject<UCombatCameraComponent>(TEXT("CombatCamera"));
 }
 
-// Called when the game starts or when spawned
 void AExtraPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 }
 
-// Called every frame
 void AExtraPlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -53,22 +50,14 @@ void AExtraPlayerCharacter::Tick(float DeltaTime)
 		GetCharacterMovement()->Velocity = SprintTransitionVelocity;
 		SprintTransitionVelocity = FVector::ZeroVector;
 	}
+	
+	const float TargetMaxSpeed = bIsSprinting
+		? RunSpeed * SprintSpeedMultiplier
+		: (bWalkMode ? WalkSpeed : RunSpeed);
+	GetCharacterMovement()->MaxWalkSpeed = FMath::FInterpTo(
+		GetCharacterMovement()->MaxWalkSpeed, TargetMaxSpeed, DeltaTime, 5.f);
 
-	// Sprint 时调高 MaxWalkSpeed，退出时恢复默认
-	if (bIsSprinting)
-	{
-		float SprintMax = GetCharacterMovement()->MaxWalkSpeed * SprintSpeedMultiplier;
-		GetCharacterMovement()->MaxWalkSpeed = FMath::FInterpTo(
-			GetCharacterMovement()->MaxWalkSpeed, SprintMax, DeltaTime, 5.f);
-	}
-	else
-	{
-		float DefaultMax = 600.f;
-		GetCharacterMovement()->MaxWalkSpeed = FMath::FInterpTo(
-			GetCharacterMovement()->MaxWalkSpeed, DefaultMax, DeltaTime, 5.f);
-	}
-
-	// 维护空中的 GameplayTag（用于 GA activation 过滤）
+	// 维护空中状态的 GameplayTag
 	if (AbilitySystemComponent)
 	{
 		const bool bAirborne = GetCharacterMovement()->IsFalling();
@@ -97,10 +86,9 @@ void AExtraPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		InputComp->BindAction(MoveAction,ETriggerEvent::Completed,this,&ThisClass::StopMoveInput);
 		InputComp->BindAction(LookAction,ETriggerEvent::Triggered,this,&ThisClass::Look);
 		InputComp->BindAction(CameraZoomInputAction,ETriggerEvent::Triggered,this,&ThisClass::HandleCameraZoomInput);
-		InputComp->BindAction(CtrlInputAction,ETriggerEvent::Triggered,this,&ThisClass::ChangeWalkMode);
+		InputComp->BindAction(WalkRunSwitchInputAction, ETriggerEvent::Started, this, &ThisClass::ChangeWalkMode);
 
 		// -- 武器输入绑定 --
-		// 普攻：点按→轻击 / 长按→重击（通过 Started + Completed 区分时长）
 		InputComp->BindAction(NormalAttackAction, ETriggerEvent::Started, this, &ThisClass::OnNormalAttackStarted);
 		InputComp->BindAction(NormalAttackAction, ETriggerEvent::Completed, this, &ThisClass::OnNormalAttackCompleted);
 		InputComp->BindAction(SkillAction, ETriggerEvent::Started, this, &ThisClass::OnSkillStarted);
@@ -142,9 +130,10 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 
 		MoveInputStartTime = GetWorld()->GetTimeSeconds();
 	}
+	
 	bHasMoveInput = !InputVal.IsNearlyZero();
-
-	// 锁定移动输入：仍更新Input标志（供 Evade 打断时判断前/后空翻），但不产生移动
+	
+	// 锁定移动输入判断
 	if (bMovementInputLocked)
 	{
 		return;
@@ -157,10 +146,10 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		ForwardDirectionInput = InputVal.Y;
 		RightDirectionInput = InputVal.X;
 
-		// 每帧用「当前朝向 vs 当前输入方向」重算 TargetDelta，而非只在首帧算一次：
+		// 每帧用「当前朝向 vs 当前输入方向」重算 TargetDelta
 		// 用 bOrientRotationToMovement 逐帧转向，松手瞬间的 TargetDelta 应是
 		// 最新的剩余角度差（转向到位→小角度→急停；快速反向还没转到位→大角度→转身 montage）。
-		// 旧的 HasCalTargetDelta 只在首帧计算，转身后松手仍用初始值，导致左右判断错乱。
+		
 		CalculateTargetDelta(ForwardDirectionInput, RightDirectionInput);
 		const FVector Forward = FRotationMatrix(YawRot).GetUnitAxis(EAxis::X);
 		const FVector Right = FRotationMatrix(YawRot).GetUnitAxis(EAxis::Y);
@@ -208,7 +197,6 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	RightDirectionInput = 0.f;
 	InputDirection = FVector::ZeroVector;
 	SmoothedInputDirection = FVector::ZeroVector;
-
 	
 	// 只在普通跑步时才响应松手停步，避免干扰 Evade / QuickStop / Turn 等 Montage
 	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
@@ -226,21 +214,20 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 
 		if (AbsTargetDelta < TurnSharpAngel)
 		{
-			// 急停：轻触 + 小角度差，由 rootmotion 自行减速到停，不锁速 
-			PlayQuickStop();
+			// 急停
+			PlayQuickStopMontage();
 		}
 		else
 		{
-			// 转身：轻触 + 大角度差（快速反向还没转到位），由 MotionWarping 转向，不锁速
+			// 转身
 			const bool bTurnLeft = (TargetDelta < 0.f);
 			PlayTurnMontage(bTurnLeft);
 		}
 	}
+	//移动超过0.2s
 	else
 	{
-		// 普通停步：锁速等待 FootPlant 进入停步状态机。
-		// 锁速只用于非 rootmotion 的普通停步；QuickStop / Turn 是 rootmotion，
-		// 若也锁速会每帧覆盖 rootmotion 的速度并把 GroundSpeed 冻结，导致「原地跑步」。
+		// 停步：锁速等待 FootPlant 进入停步状态机。
 		if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
 		{
 			AI->ClearStopRequest();
@@ -259,7 +246,7 @@ void AExtraPlayerCharacter::Jump()
 		ASC->CancelAllAbilities(nullptr);
 	}
 
-	// 跳跃时清除停步请求，防止落地后 FootPlant Notify 误触发 Stop
+	// 跳跃时清除停步请求，防止落地后误触发 Stop
 	if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
 	{
 		AI->ClearStopRequest();
@@ -313,10 +300,10 @@ void AExtraPlayerCharacter::CalculateTargetDelta(float ForwardInput,float RightI
 	FVector DesiredDirection = (ForwardVector * ForwardInput) + (RightVector * RightInput);
 	if (DesiredDirection.IsNearlyZero())
 	{
-		// 无明确输入方向（摇杆回中边缘），保留上一次的 TargetDelta：
-		// 零向量的 Rotation().Yaw 恒为 0，直接计算会把 TargetDelta 污染成「朝向 vs 世界 0°」。
+		// 无明确输入方向则保留上一次的 TargetDelta
 		return;
 	}
+	
 	DesiredDirection.Normalize();
 
 	FRotator ActorRot = GetActorRotation();
@@ -353,7 +340,7 @@ void AExtraPlayerCharacter::TickArmLengthLerp(float Goal)
 }
 
 
-void AExtraPlayerCharacter::PlayQuickStop()
+void AExtraPlayerCharacter::PlayQuickStopMontage()
 {
 	// TargetDelta == 0 时角色朝向已与输入方向对齐（急停后静止、再朝原方向短输入最典型），
 	// 左右急停无差别，用 <= 兜底到左停，避免两个分支都不进导致静默失败、无法再次触发急停。
@@ -420,7 +407,7 @@ void AExtraPlayerCharacter::OnStopMontageEnded(UAnimMontage* Montage, bool bInte
 	{
 		AI->ClearStopRequest();
 
-		// 清零残留速度（原 ClearStopAndVelocity 职责）：防止停步/转身 montage 播完后角色仍滑行
+		// 清零残留速度防止停步/转身 montage 播完后角色仍滑行
 		if (UCharacterMovementComponent* CMC = GetCharacterMovement())
 		{
 			CMC->Velocity = FVector::ZeroVector;
@@ -469,7 +456,7 @@ void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& Input
 		HeavyAttackHoldTime,
 		false);
 
-	// 按下即发送轻击输入，触发/继续连段（连段是否自动衔接由 GA 内的按住判定决定）
+	// 按下即发送轻击输入
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 		this, UUExtraAbilitySystemStatic::GetLightAttackInputTag(), FGameplayEventData());
 }

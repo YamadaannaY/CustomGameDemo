@@ -53,6 +53,12 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	float OverHeadGaugeXSize = 300.f;
+	
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	float OverHeadGaugeYSize = 30.f;
 	
 	// ── GAS ────────────────────────────────────────────────────
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "GAS")
@@ -68,7 +74,7 @@ protected:
 	
 	//Gauge可视组件
 	UPROPERTY(VisibleAnywhere, Category="UI")
-	class UWidgetComponent* OverHeadWidgetComponent;
+	class UWidgetComponent*OverHeadWidgetComponent;
 
 	//头顶血条 Widget 类（蓝图里配置为 OverHeadStatsGauge 的蓝图子类）
 	UPROPERTY(EditDefaultsOnly, Category="UI")
