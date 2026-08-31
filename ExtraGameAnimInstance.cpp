@@ -1,7 +1,7 @@
 #include "ExtraGameAnimInstance.h"
 #include "ExtraGameMovementComponent.h"
+#include "Curves/CurveFloat.h"
 #include "ExtraPlayerCharacter.h"
-
 
 void UExtraGameAnimInstance::OnFootPlantNotify(EFootPlant Foot)
 {
@@ -14,12 +14,11 @@ void UExtraGameAnimInstance::OnFootPlantNotify(EFootPlant Foot)
 
 void UExtraGameAnimInstance::RequestStop()
 {
+	if (bWalkMode == true) return ; 
+	
 	bRequestStop = true;
 	bCanEnterStop = false;
 	PendingStopFoot = EFootPlant::None;
-
-	// 停步时退出 Sprint 状态
-	bIsSprinting = false;
 }
 
 void UExtraGameAnimInstance::ClearStopRequest()
@@ -39,7 +38,6 @@ void UExtraGameAnimInstance::OnStopStateEntered()
 
 void UExtraGameAnimInstance::OnSprintStateLeft()
 {
-	bIsSprinting = false;
 	bEvadeToSprint = false;
 }
 
@@ -64,12 +62,11 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		bisWalking = OwnerMovementComp->IsWalking();
 		bisJumping = OwnerMovementComp->IsFalling() && OwnerCharacter->JumpCurrentCount > 0 ;
 		bWalkMode =OwnerCharacter->GetWalkMode();
-
-		MovementMode = OwnerMovementComp->MovementMode;
-
+		
 		Acceleration = OwnerMovementComp->GetCurrentAcceleration().Length();
 	}
 
+	//进入空中立刻清理停步
 	if (bisFalling || bisJumping)
 	{
 		ClearStopRequest();
@@ -77,51 +74,29 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 	if (OwnerCharacter && OwnerMovementComp)
 	{
+		bIsMoving = GroundSpeed > 3.f && OwnerMovementComp->IsMovingOnGround();
+		
+		//缓存速度用来处理停步
 		if (!bRequestStop)
 		{
 			CacheVelocity = OwnerCharacter->GetVelocity();
 			GroundSpeed = CacheVelocity.Size2D();
 		}
+		//停步且Sprint
 		else if (bEvadeToSprint)
 		{
 			CacheVelocity = OwnerCharacter->GetVelocity();
 			GroundSpeed = CacheVelocity.Size2D();
-			bIsSprinting = true;
 			bEvadeToSprint = false;
 		}
+		//停步
 		else
 		{
 			OwnerMovementComp->Velocity = CacheVelocity;
 		}
-		bIsMoving = GroundSpeed > 3.f && OwnerMovementComp->IsMovingOnGround();
-		
-		if (!bRequestStop)
-		{
-			const float MaxSpeed = bIsSprinting
-				? OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed * 2.f
-				: OwnerMovementComp->MaxWalkSpeed;
-			Stride = (MaxSpeed > 0.f) ? FMath::Clamp(GroundSpeed * StrideCoefficient / MaxSpeed, 0.f, 1.f) : 0.f;
-		}
-
-		WalkRunBlend = bIsSprinting ? 1.f : 0.f;
-
-		if (bIsMoving)
-		{
-			const FRotator ActorRot = OwnerCharacter->GetActorRotation();
-			const FVector VelDir = CacheVelocity.GetSafeNormal2D();
-			const FVector ForwardDir = ActorRot.Vector().GetSafeNormal2D();
-			const FVector RightDir = FRotationMatrix(ActorRot).GetScaledAxis(EAxis::Y);
-
-			const float DotForward = FVector::DotProduct(ForwardDir, VelDir);
-			const float DotRight = FVector::DotProduct(RightDir, VelDir);
-			MoveDirection = FMath::RadiansToDegrees(FMath::Atan2(DotRight, DotForward));
-		}
-		else
-		{
-			MoveDirection = 0.f;
-		}
 	}
 
+	//待机动作更新
 	UpdateIdleActionSystem(DeltaSeconds);
 }
 
@@ -132,11 +107,12 @@ void UExtraGameAnimInstance::NativeThreadSafeUpdateAnimation(float DeltaSeconds)
 
 int32 UExtraGameAnimInstance::PickNextIdleAction()
 {
+	//当前总待机动画数量
 	const int32 N = IdleActionEntries.Num();
 	if (N == 0) return 0;
-
 	if (N == 1) return 1;
 
+	//数组内随机找一个和上一个播放待机动画不同的进行更新
 	int32 RandomIdx = FMath::RandRange(0, N - 2);
 	if (RandomIdx >= PrevIdleActionIndex)
 	{
@@ -144,7 +120,23 @@ int32 UExtraGameAnimInstance::PickNextIdleAction()
 	}
 
 	PrevIdleActionIndex = RandomIdx;
+	
 	return RandomIdx + 1;
+}
+
+float UExtraGameAnimInstance::CalculateStrideBlend() const
+{
+	// 步幅曲线：把 GroundSpeed 映射到步幅系数，缩放脚步位移使其匹配移动速度。
+	const float CurveTime = GroundSpeed / GetOwningComponent()->GetComponentScale().Z;
+	
+	// Gait 判断：bWalkMode = walk 用 Walk 曲线 ; run 用 Run 曲线。 （Walk=0 ， Run=1 , Sprint=2），Clamp限制
+	const float GaitBlend = bWalkMode ? 0.f : 1.f;
+	const float ClampedGait = FMath::Clamp(GaitBlend,0.f,1.f);
+	//获取曲线上对应步幅的值并返回
+	const float LerpStrideBlend =
+		FMath::Lerp(StrideBlend_N_Walk->GetFloatValue(CurveTime), StrideBlend_N_Run->GetFloatValue(CurveTime),ClampedGait);
+	
+	return LerpStrideBlend;
 }
 
 void UExtraGameAnimInstance::UpdateIdleActionSystem(float DeltaSeconds)
@@ -181,10 +173,11 @@ void UExtraGameAnimInstance::UpdateIdleActionSystem(float DeltaSeconds)
 	}
 	else
 	{
+		//默认20s
 		const int32 ArrayIdx = IdleActionIndex - 1;
 		const float ActionDuration = IdleActionEntries.IsValidIndex(ArrayIdx)
 			? IdleActionEntries[ArrayIdx].Duration
-			: 10.0f;
+			: 20.0f;
 
 		if (IdlePhaseTimer >= ActionDuration)
 		{
