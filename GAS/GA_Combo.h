@@ -20,8 +20,6 @@ public:
 	static FGameplayTag GetComboChangedEventTag();
 	//获得ComboChange下的endTag
 	static FGameplayTag GetComboChangedEventEndTag();
-	//获得TargetEvent对应的DamageTag
-	static FGameplayTag GetComboTargetEventTag();
 
 private:
 	//实现一个WaitGameplayEvent，监听 LightAttack InputTag，触发回调 HandleInputPress
@@ -34,16 +32,9 @@ private:
 	//输入后，若NextComboName存在，则设置NextSection为这个Name对应的Section
 	void TryCommitCombo();
 
-	//找到当前Section对应的DamageGE
-	TSubclassOf<UGameplayEffect> GetDamageEffectForCurrentCombo() const ;
-
 	//EventReceived的回调函数，找到下一个Tag的后缀，即NextComboName
 	UFUNCTION()
 	void ComboChangedEventReceived(FGameplayEventData InPayLoad);
-
-	// 实现伤害逻辑
-	UFUNCTION()
-	void DoDamage(FGameplayEventData Data);
 
 	// 进入最后一段 section 时回调：累计「打满」次数（ComboCount +1，封顶 3）
 	UFUNCTION()
@@ -62,11 +53,8 @@ private:
 	// 重击所需连段次数（读取 Character 的 HeavyComboCount）
 	float GetRequiredComboCount() const;
 
-	//DamageGE
-	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
-	TSubclassOf<UGameplayEffect> DefaultDamageEffect;
-
 	//对不同Section对应的Montage触发的DamageGE进行不同的设置
+	//（Fallback到基类 DefaultDamageEffect，见 GetDamageEffect 覆写）
 	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
 	TMap<FName,TSubclassOf<UGameplayEffect>> DamageEffectMap;
 
@@ -80,4 +68,7 @@ private:
 protected:
 	// 覆写：返回当前可被移动打断的 Montage（即 ComboMontage）
 	virtual UAnimMontage* GetActiveMontageForCancel() const override { return ComboMontage; }
+
+	// 覆写：按当前 Section 选择伤害 GE（未命中 map 时 fallback 到基类 DefaultDamageEffect）
+	virtual TSubclassOf<UGameplayEffect> GetDamageEffect() const override;
 };

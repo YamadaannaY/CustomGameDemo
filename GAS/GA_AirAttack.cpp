@@ -1,15 +1,14 @@
 #include "GA_AirAttack.h"
 #include "AbilitySystemComponent.h"
-#include "GameplayTagContainer.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Engine/World.h"
-#include "TimerManager.h"
+#include "ExtractGameCharacter/ExtraPlayerCharacter.h"
+#include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "GameplayTagContainer.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "ExtractGameCharacter/ExtraPlayerCharacter.h"
-#include "ExtractGameCharacter/ExtraGameAnimInstance.h"
-#include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "TimerManager.h"
 
 UGA_AirAttack::UGA_AirAttack()
 {
@@ -26,6 +25,12 @@ UGA_AirAttack::UGA_AirAttack()
 
 	// 启用重力缩放（空中攻击期间用 AbilityGravityScale 覆盖 GravityScale）
 	bEnableGravityScale = true;
+
+	// 启用通用武器碰撞伤害（基类机制）：服务端监听命中事件并应用 DefaultDamageEffect
+	bEnableWeaponDamage = true;
+
+	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
+	bRotateToLockTarget = true;
 
 	// 通过InputTag +AirBoneTag触发
 	FAbilityTriggerData LightAttackTrigger;
@@ -68,13 +73,7 @@ void UGA_AirAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 	{
 		PlayerChar->SetMovementInputLocked(true);
 	}
-
-	// 标记空中攻击中：让 AnimBP 状态机在攻击期间不让 falling 抢占动画输出
-	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetOwnerAnimInstance()))
-	{
-		AnimInst->bAirAttacking = true;
-	}
-
+	
 	CurrentPhase = EAirAttackPhase::None;
 
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
@@ -246,12 +245,7 @@ void UGA_AirAttack::StopLoopMontage()
 
 void UGA_AirAttack::OnMovementCancelTriggered()
 {
-	// 立即让 AnimBP 状态机接管：若等 EndAbility 才清 bAirAttacking，
-	// 状态机过渡会晚于 montage 停止一拍，导致移动响应额外延迟。
-	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetOwnerAnimInstance()))
-	{
-		AnimInst->bAirAttacking = false;
-	}
+	UE_LOG(LogTemp,Warning,TEXT("GA_AirAttack : Movement Cancel Trigger"));
 }
 
 void UGA_AirAttack::OnLandMontageEnded(UAnimMontage* Montage, bool bInterrupted)
@@ -279,13 +273,7 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 	{
 		ASC->RemoveLooseGameplayTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
 	}
-
-	// 清除 AnimBP 的空中攻击标记，让状态机恢复正常
-	if (UExtraGameAnimInstance* AnimInst = Cast<UExtraGameAnimInstance>(GetOwnerAnimInstance()))
-	{
-		AnimInst->bAirAttacking = false;
-	}
-
+	
 	// 解锁移动输入
 	if (AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo()))
 	{

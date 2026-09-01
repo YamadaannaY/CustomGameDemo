@@ -1,6 +1,6 @@
+#include "ExtraPlayerCharacter.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Camera/CameraComponent.h"
-#include "ExtraPlayerCharacter.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
 #include "ExtractGameCharacter.h"
@@ -8,6 +8,7 @@
 #include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/Camera/UCombatCameraComponent.h"
+#include "ExtractGameCharacter/LockOn/ULockOnComponent.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -34,6 +35,13 @@ AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectIni
 	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 
 	CombatCameraComp = CreateDefaultSubobject<UCombatCameraComponent>(TEXT("CombatCamera"));
+
+	LockOnComponent = CreateDefaultSubobject<ULockOnComponent>(TEXT("LockOn"));
+}
+
+AActor* AExtraPlayerCharacter::GetLockTarget() const
+{
+	return LockOnComponent ? LockOnComponent->GetLockTarget() : nullptr;
 }
 
 void AExtraPlayerCharacter::BeginPlay()
@@ -344,14 +352,26 @@ void AExtraPlayerCharacter::PlayQuickStopMontage()
 {
 	// TargetDelta == 0 时角色朝向已与输入方向对齐（急停后静止、再朝原方向短输入最典型），
 	// 左右急停无差别，用 <= 兜底到左停，避免两个分支都不进导致静默失败、无法再次触发急停。
-	if (TargetDelta <= 0.f && QuickLeftStopMontage)
+	UAnimMontage* MontageToPlay = (TargetDelta <= 0.f) ? QuickLeftStopMontage : QuickRightStopMontage;
+	if (!MontageToPlay)
 	{
-		PlayAnimMontage(QuickLeftStopMontage);
+		return;
 	}
-	else if (TargetDelta > 0.f && QuickRightStopMontage)
+
+	// 松手瞬间 TargetDelta 仍是「当前朝向 → 触发方向」的剩余转角。用MW旋转让急停动画精确落在触发朝向，避免角色停在半转的中间朝向。
+	const FRotator CurrentRot = GetActorRotation();
+	const FRotator TargetRot(CurrentRot.Pitch, CurrentRot.Yaw + TargetDelta, CurrentRot.Roll);
+
+	if (MotionWarpingComp)
 	{
-		PlayAnimMontage(QuickRightStopMontage);
+		FMotionWarpingTarget WarpTarget;
+		WarpTarget.Name = FName("QuickStopTarget");
+		WarpTarget.Location = GetActorLocation();
+		WarpTarget.Rotation = TargetRot;
+		MotionWarpingComp->AddOrUpdateWarpTarget(WarpTarget);
 	}
+
+	PlayAnimMontage(MontageToPlay);
 
 	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
 	{

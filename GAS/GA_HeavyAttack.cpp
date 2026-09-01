@@ -17,6 +17,12 @@ UGA_HeavyAttack::UGA_HeavyAttack()
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetUninterruptibleTag());
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 
+	// 启用通用武器碰撞伤害（基类机制）：服务端监听命中事件并应用 DefaultDamageEffect
+	bEnableWeaponDamage = true;
+
+	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
+	bRotateToLockTarget = true;
+
 	FAbilityTriggerData HeavyAttackTrigger;
 	HeavyAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
 	HeavyAttackTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetHeavyAttackInputTag();

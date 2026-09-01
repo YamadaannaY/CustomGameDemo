@@ -55,6 +55,12 @@ public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CamBoom; }
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return ViewCam; }
 
+	// 锁定组件访问器（攻击 GA 经此读取锁定目标）
+	FORCEINLINE class ULockOnComponent* GetLockOnComponent() const { return LockOnComponent; }
+
+	// 当前锁定目标（转发到锁定组件，无组件/无目标时为空）
+	AActor* GetLockTarget() const;
+
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	USpringArmComponent* CamBoom;
@@ -68,6 +74,10 @@ private:
 	// 战斗相机组件：接收 Montage 相机请求，逐帧解算写入 SpringArm/Camera 进行摄像机更新
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	class UCombatCameraComponent* CombatCameraComp;
+
+	// 自动锁定最近敌方单位组件（本地检测）
+	UPROPERTY(VisibleDefaultsOnly, Category = "LockOn")
+	class ULockOnComponent* LockOnComponent;
 
 	UPROPERTY(EditDefaultsOnly,Category="Input")
 	UInputMappingContext* GameplayInputMappingContext;

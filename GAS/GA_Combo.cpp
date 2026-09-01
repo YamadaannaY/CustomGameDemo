@@ -23,6 +23,12 @@ UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
 	// 启用移动打断（基类机制）
 	bEnableMovementCancel = true;
 
+	// 启用通用武器碰撞伤害（基类机制）：服务端监听命中事件并按 Section 应用 GE
+	bEnableWeaponDamage = true;
+
+	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
+	bRotateToLockTarget = true;
+
 	// 通过 InputTag 触发
 	FAbilityTriggerData LightAttackTrigger;
 	LightAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
@@ -69,15 +75,6 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 	}
 
-	//在服务端实现Damage逻辑
-	if (K2_HasAuthority())
-	{
-		UAbilityTask_WaitGameplayEvent* WaitTargetEventTask=UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,GetComboTargetEventTag());
-		WaitTargetEventTask->EventReceived.AddDynamic(this,&ThisClass::DoDamage);
-		WaitTargetEventTask->ReadyForActivation();
-
-	}
-
 	//处理第一次输入
 	SetupWaitComboInputPress();
 }
@@ -90,11 +87,6 @@ FGameplayTag UGA_Combo::GetComboChangedEventTag()
 FGameplayTag UGA_Combo::GetComboChangedEventEndTag()
 {
 	return UUExtraAbilitySystemStatic::GetComboChangedEventEndTag();
-}
-
-FGameplayTag UGA_Combo::GetComboTargetEventTag()
-{
-	return UUExtraAbilitySystemStatic::GetComboTargetEventTag();
 }
 
 void UGA_Combo::HandleInputPress(FGameplayEventData EventData)
@@ -126,7 +118,7 @@ void UGA_Combo::TryCommitCombo()
 	NextComboName=NAME_None;
 }
 
-TSubclassOf<UGameplayEffect> UGA_Combo::GetDamageEffectForCurrentCombo() const
+TSubclassOf<UGameplayEffect> UGA_Combo::GetDamageEffect() const
 {
 	if (UAnimInstance* OwnerAnimInst=GetOwnerAnimInstance())
 	{
@@ -137,7 +129,7 @@ TSubclassOf<UGameplayEffect> UGA_Combo::GetDamageEffectForCurrentCombo() const
 			return *FoundEffectPtr;
 		}
 	}
-	return DefaultDamageEffect;
+	return DefaultWeaponDamageEffect;
 }
 
 void UGA_Combo::ComboChangedEventReceived(FGameplayEventData InPayLoad)
@@ -159,43 +151,6 @@ void UGA_Combo::ComboChangedEventReceived(FGameplayEventData InPayLoad)
 	if (IsHoldingAttack())
 	{
 		TryCommitCombo();
-	}
-}
-
-void UGA_Combo::DoDamage(FGameplayEventData Data)
-{
-	// 伤害判定只在服务端执行（来源：武器轨迹扫描经 GameplayEvent 发送的 TargetData）
-	if (!K2_HasAuthority())
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
-	if (!SourceASC)
-	{
-		return;
-	}
-
-	AActor* Avatar = GetAvatarActorFromActorInfo();
-	if (!Avatar)
-	{
-		return;
-	}
-
-	const TSubclassOf<UGameplayEffect> DamageEffect = GetDamageEffectForCurrentCombo();
-	
-	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
-	Context.AddInstigator(Avatar, Avatar);
-	Context.AddSourceObject(Avatar);
-	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffect, GetAbilityLevel(), Context);
-	
-	// 伤害数值由 GE 自身配置（字面量 / AttributeBased / Execution），不在此注入 SetByCaller
-	const TArray<AActor*> HitActors = UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(Data.TargetData);
-
-	for (AActor* HitActor : HitActors)
-	{
-		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
-		SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
 	}
 }
 
