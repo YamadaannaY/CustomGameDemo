@@ -9,6 +9,7 @@
 
 class UAnimMontage;
 class UCharacterMovementComponent;
+class UGameplayEffect;
 
 // 携带「推力」参数的 TargetData：AN_ApplyPush 通过 GameplayEvent 把推力向量 + 覆盖标志进行发送
 USTRUCT()
@@ -152,11 +153,62 @@ protected:
 	void OnUninterruptibleReleaseReceived(FGameplayEventData Payload);
 
 
+	// ── 锁定目标转向（MR）───────────────────────────────────
+	// 激活时对攻击 Montage 设置朝向锁定目标的 MotionWarping warp target，
+	// 动画内由 AnimNotifyState_MotionWarping 区间完成平滑转向。
+	// 子类只需在构造函数置 true，其余由基类在 PreActivate / EndAbility 统一处理。
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn")
+	bool bRotateToLockTarget = false;
+
+	// warp target 名称，须与攻击 Montage 里 AnimNotifyState_MotionWarping 的 WarpTargetName 一致
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (EditCondition = "bRotateToLockTarget"))
+	FName LockOnWarpTargetName = TEXT("AttackFacing");
+
+	// 激活期间刷新 warp target 的周期（秒），使朝向在动画区间内跟随锁定目标移动
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (EditCondition = "bRotateToLockTarget", ClampMin = "0.01"))
+	float LockOnWarpRefreshInterval = 0.1f;
+
+	// 计算锁定目标方向并写入 MotionWarping,注意：只改朝向，Loc保持角色原位置，即MR不开Transition
+	void UpdateLockOnWarpTarget();
+
+	// 激活期间周期刷新 warp target 的定时器句柄（EndAbility 清理）
+	FTimerHandle LockOnWarpRefreshTimerHandle;
+
+
+	// ── 通用武器碰撞伤害 ──────────────────────────────────────
+	// 是否启用武器碰撞伤害响应：开启后，服务端监听 GetDamageEventTag() 的命中事件，
+	// 对 TargetData 中每个目标应用 GetDamageEffect() 选出的 GE。
+	// 攻击 GA 只需在构造函数置 true 即可获得通用伤害；非攻击 GA（如 Evade）保持 false。
+	UPROPERTY(EditDefaultsOnly, Category = "Gameplay Effect")
+	bool bEnableWeaponDamage = false;
+
+	// 通用伤害 GE（子类蓝图默认值配置；若需按上下文选 GE，覆写 GetDamageEffect）
+	UPROPERTY(EditDefaultsOnly, Category = "Gameplay Effect")
+	TSubclassOf<UGameplayEffect> DefaultWeaponDamageEffect;
+
+	// 挂载武器伤害监听（由 PreActivate 自动调用，子类无需手动触发）
+	void SetupDamageListener();
+
+	// 当前 GA 响应的伤害事件 Tag（默认通用 ability.damage，子类可覆写为专属 Tag）
+	virtual FGameplayTag GetDamageEventTag() const;
+
+	// 本次伤害使用的 GE（默认 DefaultDamageEffect，子类可覆写按上下文选择）
+	virtual TSubclassOf<UGameplayEffect> GetDamageEffect() const;
+
+	// 对碰撞目标批量应用伤害（通用实现）。
+	// 子类如需追加独有逻辑（击飞/附加效果），先调用 Super::DoDamage(Data) 再补充。
+	virtual void DoDamage(const FGameplayEventData& Data);
+
+
 	//获得AvatarCharacter，即Push对象
 	AExtraPlayerCharacter* GetOwningAvatarCharacter();
 private:
 	UPROPERTY(EditDefaultsOnly,Category="Debug")
 	bool bShouldDrawDebug=false;
+
+	// 武器伤害事件回调（动态委托目标，转发到 virtual DoDamage 供子类覆写）
+	UFUNCTION()
+	void OnDamageEventReceived(FGameplayEventData Data);
 
 	UPROPERTY()
 	TObjectPtr<AExtraPlayerCharacter> AvatarCharacter;

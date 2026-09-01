@@ -16,6 +16,7 @@ class UAbilitySystemComponent;
 class UExtraGameplayAbility;
 class UGameplayEffect;
 class UStaticMeshComponent;
+class UMaterialInstanceDynamic;
 class AActor;
 struct FExtraGameWeaponGroup;
 
@@ -53,6 +54,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Weapon|Runtime")
 	bool bWeaponVisible = true;
 
+	// ── 显隐 Fade 配置（材质 FadeAmount 驱动） ──────────────
+	// 武器材质中控制透明度的标量参数名（-1 = 不透明，1 = 完全透明）
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Fade")
+	FName FadeParameterName = TEXT("FadeAmount");
+
+	// 淡入 / 淡出时长（秒）
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Fade")
+	float WeaponFadeDuration = 0.3f;
+
 	// ── 武器组级操作 ────────────────────────────────────────
 
 	/** 装备武器组（生成 Mesh → 应用 GE → 授予 GA） */
@@ -67,7 +77,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Group")
 	bool SwitchWeaponGroup(FGameplayTag NewGroupTag);
 	
-	/** 显示当前武器组所有 Mesh（不包括手动隐藏的对象，过场后恢复显示等） */
+	/** 显示当前武器组所有 Mesh，不包括手动隐藏的对象，用于特定情况后恢复原本显示配置（如果要显示所有武器，调用ShowAllWeapons）*/
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
 	void ShowWeapon();
 
@@ -117,8 +127,10 @@ public:
 	TArray<UStaticMeshComponent*> GetCurrentGroupMeshes() const;
 
 	// ── 事件 ─────────────────────────────────────────────────
-	UPROPERTY(BlueprintAssignable, Category = "Weapon|Events")
 	FOnWeaponGroupChanged OnWeaponGroupChanged;
+	
+	UFUNCTION()
+	void WeaponGroupChangeDebug(FGameplayTag OldGroupTag , FGameplayTag NewGroupTag);
 
 	// 在 ASC 初始化后调用（由 Character::ServerSideInit 触发）
 	void OnASCInitialized();
@@ -152,6 +164,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
 	// ── Mesh 管理 ────────────────────────────────────────────
@@ -178,6 +191,29 @@ private:
 
 	// 隐藏指定武器组中所有 Mesh
 	void HideGroupWeaponMeshes(FGameplayTag GroupTag);
+
+	// ── 显隐 Fade（材质 FadeAmount 驱动） ────────────────────
+	// 单武器 Fade 运行时状态（非反射，无需序列化）
+	struct FExtraWeaponFadeState
+	{
+		float CurrentFade = -1.f;  // 当前材质参数值（-1 不透明 → 1 全透明）
+		float TargetFade = -1.f;   // 目标值
+	};
+
+	// 每武器 Fade 状态（淡出完成后保留为 {1,1}，供重复 Show/Hide 判断已到位）
+	TMap<FGameplayTag, FExtraWeaponFadeState> WeaponFadeStates;
+
+	// 每武器缓存的全部 Material Slot 动态实例（在 SpawnWeaponMesh 时创建）
+	TMap<FGameplayTag, TArray<TObjectPtr<UMaterialInstanceDynamic>>> WeaponDynamicMIs;
+
+	// 请求渐变淡入/淡出（用户级显隐入口调用；bFadeIn=true 淡入到不透明）
+	void RequestWeaponFade(FGameplayTag WeaponTag, bool bFadeIn);
+
+	// 瞬时设置 Fade 到位（生成 / 装备 / 切换时用，无动画）
+	void InitWeaponFade(FGameplayTag WeaponTag, bool bVisible);
+
+	// 把 Fade 值写入该武器全部缓存的 DMI
+	void SetWeaponFadeValue(FGameplayTag WeaponTag, float Value);
 
 	// ── GAS 状态管理 ─────────────────────────────────────────
 	// 缓存的 ASC 引用

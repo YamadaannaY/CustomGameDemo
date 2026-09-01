@@ -20,6 +20,7 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Dodge);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Change);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Change_End);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Damage);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Damage);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_LastSection);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_HeavyTransition);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Evade_ToSprint);
@@ -67,6 +68,9 @@ public:
 
 	// 伤害 SetByCaller Tag（GE 的伤害 Modifier 通过此 Tag 读取攻击者攻击力）
 	static FGameplayTag GetDamageSetByCallerTag();      // "Data.Damage"
+
+	// 通用武器碰撞伤害事件 Tag（武器扫描命中后发给 Owner，攻击 GA 基类统一监听）
+	static FGameplayTag GetAbilityDamageEventTag();     // "ability.damage"
 	
 	
 	static FGameplayTag GetLaunchedAbilityActivationTag();

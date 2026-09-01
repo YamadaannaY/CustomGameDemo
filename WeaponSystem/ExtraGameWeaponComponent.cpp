@@ -11,19 +11,29 @@
 #include "GameFramework/Character.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 
 UExtraGameWeaponComponent::UExtraGameWeaponComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	// Fade 淡入淡出由 Tick 驱动（无 Fade 请求时自动关闭 Tick）
+	PrimaryComponentTick.bCanEverTick = true;
 
-	// 默认命中事件走连段伤害事件（GA_Combo 在服务端监听该 Tag）
-	TraceEventTag = UUExtraAbilitySystemStatic::GetComboTargetEventTag();
+	// 默认命中事件走通用伤害事件（GA 基类在服务端监听该 Tag，攻击 GA 统一继承）
+	TraceEventTag = UUExtraAbilitySystemStatic::GetAbilityDamageEventTag();
 }
 
 void UExtraGameWeaponComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	OnWeaponGroupChanged.AddDynamic(this,&ThisClass::WeaponGroupChangeDebug);
+}
+
+void UExtraGameWeaponComponent::WeaponGroupChangeDebug(FGameplayTag OldGroupTag, FGameplayTag NewGroupTag)
+{
+	GEngine->AddOnScreenDebugMessage(-1, 7.0f, FColor::Green, 
+		FString::Printf(TEXT("OldGroup Tag : %s , NewGroup Tag : %s"),*OldGroupTag.ToString(),*NewGroupTag.ToString()));
 }
 
 void UExtraGameWeaponComponent::OnASCInitialized()
@@ -43,6 +53,8 @@ void UExtraGameWeaponComponent::OnASCInitialized()
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[WeaponComponent] OnASCInitialized: Equipping default weapon group '%s'."), *WeaponDataAsset->DefaultWeaponGroupTag.ToString());
+	
+	//装备默认装备组武器（没有配置默认WeaponTag会安全空返回）
 	EquipWeaponGroup(WeaponDataAsset->DefaultWeaponGroupTag);
 }
 
@@ -61,6 +73,10 @@ void UExtraGameWeaponComponent::EndPlay(const EEndPlayReason::Type EndPlayReason
 		}
 	}
 	SpawnedWeaponMeshes.Empty();
+
+	// 清理 Fade 运行时状态与缓存的 DMI
+	WeaponFadeStates.Empty();
+	WeaponDynamicMIs.Empty();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -97,7 +113,7 @@ bool UExtraGameWeaponComponent::EquipWeaponGroup(FGameplayTag GroupTag)
 
 	CacheOwnerASC();
 
-	// 如果已经是同一武器组 → 只需确保 Mesh 可见性正确
+	// 如果已经是同一武器组再次装备 → 只需确保 Mesh 可见性正确
 	if (CurrentGroupTag == GroupTag)
 	{
 		ShowWeapon();
@@ -134,6 +150,9 @@ bool UExtraGameWeaponComponent::EquipWeaponGroup(FGameplayTag GroupTag)
 			const bool bEntryVisible = bWeaponVisible && !HiddenWeaponEntries.Contains(Entry.WeaponTag);
 			MeshComp->SetVisibility(bEntryVisible);
 			MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+			// 装备 / 切换为瞬时到位，无淡入动画
+			InitWeaponFade(Entry.WeaponTag, bEntryVisible);
 		}
 	}
 
@@ -226,7 +245,7 @@ void UExtraGameWeaponComponent::ShowWeapon()
 			// 跳过手动隐藏的条目
 			if (!HiddenWeaponEntries.Contains(Entry.WeaponTag))
 			{
-				SetWeaponMeshVisibility(Entry.WeaponTag, true);
+				RequestWeaponFade(Entry.WeaponTag, true);
 			}
 		}
 	}
@@ -241,7 +260,7 @@ void UExtraGameWeaponComponent::ShowAllWeapons()
 	{
 		for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
 		{
-			SetWeaponMeshVisibility(Entry.WeaponTag, true);
+			RequestWeaponFade(Entry.WeaponTag, true);
 		}
 	}
 }
@@ -249,7 +268,14 @@ void UExtraGameWeaponComponent::ShowAllWeapons()
 void UExtraGameWeaponComponent::HideWeapon()
 {
 	bWeaponVisible = false;
-	HideGroupWeaponMeshes(CurrentGroupTag);
+
+	if (const FExtraGameWeaponGroup* Group = GetCurrentWeaponGroup())
+	{
+		for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
+		{
+			RequestWeaponFade(Entry.WeaponTag, false);
+		}
+	}
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -265,8 +291,7 @@ void UExtraGameWeaponComponent::ShowWeaponEntry(FGameplayTag WeaponTag)
 
 	HiddenWeaponEntries.Remove(WeaponTag);
 
-	SetWeaponMeshVisibility(WeaponTag, true);
-	
+	RequestWeaponFade(WeaponTag, true);
 }
 
 void UExtraGameWeaponComponent::HideWeaponEntry(FGameplayTag WeaponTag)
@@ -277,7 +302,8 @@ void UExtraGameWeaponComponent::HideWeaponEntry(FGameplayTag WeaponTag)
 	}
 
 	HiddenWeaponEntries.Add(WeaponTag);
-	SetWeaponMeshVisibility(WeaponTag, false);
+
+	RequestWeaponFade(WeaponTag, false);
 }
 
 bool UExtraGameWeaponComponent::IsWeaponEntryVisible(FGameplayTag WeaponTag) const
@@ -399,6 +425,17 @@ UStaticMeshComponent* UExtraGameWeaponComponent::SpawnWeaponMesh(const FExtraGam
 		Entry.AttachSocketName);
 	MeshComp->SetRelativeTransform(Entry.RelativeTransform);
 
+	// 为每个 Material Slot 创建动态材质实例并缓存（用于 FadeAmount 控制），默认不透明
+	TArray<TObjectPtr<UMaterialInstanceDynamic>>& DMIs = WeaponDynamicMIs.FindOrAdd(Entry.WeaponTag);
+	for (int32 Slot = 0; Slot < MeshComp->GetNumMaterials(); ++Slot)
+	{
+		if (UMaterialInstanceDynamic* DMI = MeshComp->CreateAndSetMaterialInstanceDynamic(Slot))
+		{
+			DMI->SetScalarParameterValue(FadeParameterName, -1.f);
+			DMIs.Add(DMI);
+		}
+	}
+
 	return MeshComp;
 }
 
@@ -412,6 +449,9 @@ void UExtraGameWeaponComponent::DestroyWeaponMesh(FGameplayTag WeaponTag)
 		}
 		SpawnedWeaponMeshes.Remove(WeaponTag);
 	}
+
+	WeaponFadeStates.Remove(WeaponTag);
+	WeaponDynamicMIs.Remove(WeaponTag);
 }
 
 void UExtraGameWeaponComponent::SetWeaponMeshVisibility(FGameplayTag WeaponTag, bool bVisible)
@@ -433,6 +473,8 @@ void UExtraGameWeaponComponent::HideAllWeaponMeshes()
 		{
 			Pair.Value->SetVisibility(false);
 		}
+		// 瞬时隐藏不参与 Fade 动画，清掉运行时状态
+		WeaponFadeStates.Remove(Pair.Key);
 	}
 }
 
@@ -452,6 +494,112 @@ void UExtraGameWeaponComponent::HideGroupWeaponMeshes(FGameplayTag GroupTag)
 	for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
 	{
 		SetWeaponMeshVisibility(Entry.WeaponTag, false);
+		// 瞬时隐藏（卸载 / 切换组），清掉运行时 Fade 状态
+		WeaponFadeStates.Remove(Entry.WeaponTag);
+	}
+}
+
+// ──────────────────────────────────────────────────────────────
+// 显隐 Fade（私有，材质 FadeAmount 驱动）
+// ──────────────────────────────────────────────────────────────
+
+void UExtraGameWeaponComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (WeaponFadeStates.Num() == 0)
+	{
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	// FadeAmount 跨度为 2（-1 → 1），恒速过渡，总时长 ≈ WeaponFadeDuration
+	const float FadeSpeed = 2.f / FMath::Max(WeaponFadeDuration, KINDA_SMALL_NUMBER);
+
+	bool bAnyFading = false;
+	for (auto& Pair : WeaponFadeStates)
+	{
+		FExtraWeaponFadeState& State = Pair.Value;
+
+		if (FMath::Abs(State.TargetFade - State.CurrentFade) <= 0.005f)
+		{
+			// 已到位：收敛到精确值；完全透明时关闭渲染省性能
+			State.CurrentFade = State.TargetFade;
+			if (State.TargetFade >= 1.f - KINDA_SMALL_NUMBER)
+			{
+				if (UStaticMeshComponent* Mesh = GetWeaponMeshByTag(Pair.Key))
+				{
+					Mesh->SetVisibility(false);
+				}
+			}
+			continue;
+		}
+
+		bAnyFading = true;
+		State.CurrentFade = FMath::FInterpConstantTo(State.CurrentFade, State.TargetFade, DeltaTime, FadeSpeed);
+		SetWeaponFadeValue(Pair.Key, State.CurrentFade);
+	}
+
+	if (!bAnyFading)
+	{
+		SetComponentTickEnabled(false);
+	}
+}
+
+void UExtraGameWeaponComponent::RequestWeaponFade(FGameplayTag WeaponTag, bool bFadeIn)
+{
+	UStaticMeshComponent* Mesh = GetWeaponMeshByTag(WeaponTag);
+	if (!Mesh)
+	{
+		return;
+	}
+
+	const float Target = bFadeIn ? -1.f : 1.f;
+
+	// 淡入前先恢复可见，避免淡出完成后渲染被关闭导致无显示
+	if (bFadeIn)
+	{
+		Mesh->SetVisibility(true);
+	}
+
+	FExtraWeaponFadeState& State = WeaponFadeStates.FindOrAdd(WeaponTag);
+	if (FMath::IsNearlyEqual(State.CurrentFade, Target, 0.005f))
+	{
+		// 已到位：直接收敛，不启动动画
+		State.CurrentFade = Target;
+		State.TargetFade = Target;
+		return;
+	}
+
+	State.TargetFade = Target;
+	if (!IsComponentTickEnabled())
+	{
+		SetComponentTickEnabled(true);
+	}
+}
+
+void UExtraGameWeaponComponent::InitWeaponFade(FGameplayTag WeaponTag, bool bVisible)
+{
+	const float Value = bVisible ? -1.f : 1.f;
+
+	SetWeaponFadeValue(WeaponTag, Value);
+
+	FExtraWeaponFadeState& State = WeaponFadeStates.FindOrAdd(WeaponTag);
+	State.CurrentFade = Value;
+	State.TargetFade = Value;
+}
+
+void UExtraGameWeaponComponent::SetWeaponFadeValue(FGameplayTag WeaponTag, float Value)
+{
+	if (const TArray<TObjectPtr<UMaterialInstanceDynamic>>* DMIs = WeaponDynamicMIs.Find(WeaponTag))
+	{
+		for (const TObjectPtr<UMaterialInstanceDynamic>& DMI : *DMIs)
+		{
+			if (DMI)
+			{
+				DMI->SetScalarParameterValue(FadeParameterName, Value);
+			}
+		}
 	}
 }
 
@@ -565,7 +713,7 @@ void UExtraGameWeaponComponent::UpdateCharacterTags(const FExtraGameWeaponGroup*
 }
 
 // ──────────────────────────────────────────────────────────────
-// 轨迹伤害扫描（由 ANS_WeaponTrace 驱动）
+// 轨迹伤害扫描
 // ──────────────────────────────────────────────────────────────
 
 void UExtraGameWeaponComponent::BeginWeaponTrace()
@@ -609,14 +757,18 @@ void UExtraGameWeaponComponent::TickWeaponTrace()
 		const FVector Curr = MeshComp->GetSocketLocation(SocketName);
 
 		FVector* PrevPtr = TraceSocketPrevLocations.Find(SocketName);
+		
+		// 对首帧进行特别处理：仅记录起点，不扫描（避免从原点拉出整条射线）
 		if (!PrevPtr)
 		{
-			// 首帧：仅记录起点，不扫描（避免从原点拉出整条射线）
 			TraceSocketPrevLocations.Add(SocketName, Curr);
 			continue;
 		}
-
+		
+		//进行插值扫描
 		TraceSocketSegment(SocketName, *PrevPtr, Curr);
+		
+		//更新Pre指针
 		*PrevPtr = Curr;
 	}
 }
@@ -652,6 +804,11 @@ bool UExtraGameWeaponComponent::GatherTraceSocketsFromCurrentGroup()
 
 	for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
 	{
+		if (Group->WeaponShouldNotCauseDamage.Contains(Entry.WeaponTag))
+		{
+			continue;
+		}
+		
 		if (HiddenWeaponEntries.Contains(Entry.WeaponTag))
 		{
 			continue;
@@ -746,8 +903,8 @@ void UExtraGameWeaponComponent::TraceSocketSegment(const FName SocketName, const
 
 		if (bDrawWeaponTraceDebug)
 		{
-			DrawDebugLine(GetWorld(), SegStart, SegEnd, FColor::Red, false, 0.05f);
-			DrawDebugSphere(GetWorld(), SegEnd, TraceRadius, 8, FColor::Orange, false, 0.05f);
+			DrawDebugLine(GetWorld(), SegStart, SegEnd, FColor::Red, false, 0.2f);
+			DrawDebugSphere(GetWorld(), SegEnd, TraceRadius, 8, FColor::Orange, false, 0.2f);
 		}
 
 		for (const FHitResult& Hit : Hits)
@@ -777,18 +934,18 @@ void UExtraGameWeaponComponent::SendHitEventForActor(AActor* HitActor)
 	FGameplayTag EventTag = TraceEventTag;
 	if (!EventTag.IsValid())
 	{
-		EventTag = UUExtraAbilitySystemStatic::GetComboTargetEventTag();
+		EventTag = UUExtraAbilitySystemStatic::GetAbilityDamageEventTag();
 	}
 
 	FGameplayAbilityTargetData_ActorArray* ActorArray = new FGameplayAbilityTargetData_ActorArray();
 	ActorArray->TargetActorArray.Add(HitActor);
 
 	FGameplayAbilityTargetDataHandle TargetData;
-	TargetData.Add(ActorArray);
+	TargetData.Add(ActorArray); 
 
 	FGameplayEventData EventData;
 	EventData.Instigator = Owner;
 	EventData.TargetData = TargetData;
-
+	
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Owner, EventTag, EventData);
 }

@@ -112,7 +112,10 @@ struct EXTRACTGAMECHARACTER_API FExtraGameWeaponGroup
 	// 通用数值参数（伤害倍率、范围等）
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Group|Params")
 	TMap<FName, float> NumericParams;
-
+	
+	UPROPERTY(EditDefaultsOnly,Category = "Group|Params")
+	TSet<FGameplayTag> WeaponShouldNotCauseDamage ; 
+	
 	// 辅助：获取数值参数（带默认值）
 	float GetNumericParam(FName ParamName, float DefaultValue = 0.f) const
 	{

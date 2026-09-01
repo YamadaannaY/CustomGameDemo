@@ -54,10 +54,10 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	float OverHeadGaugeXSize = 300.f;
 	
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	float OverHeadGaugeYSize = 30.f;
 	
 	// ── GAS ────────────────────────────────────────────────────
