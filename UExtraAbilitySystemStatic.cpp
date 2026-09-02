@@ -26,6 +26,7 @@ UE_DEFINE_GAMEPLAY_TAG(Ability_Passive_Launch, "ability.passive.launch.activate"
 UE_DEFINE_GAMEPLAY_TAG(State_Uninterruptible, "State.Uninterruptible");
 UE_DEFINE_GAMEPLAY_TAG(Uninterruptible_End, "ability.uninterruptible.end");
 UE_DEFINE_GAMEPLAY_TAG(Data_Damage, "Data.Damage");
+UE_DEFINE_GAMEPLAY_TAG(HeavyAttack_Shoot, "ability.heavyattack.shoot");
 
 FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 {
@@ -140,6 +141,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetDamageSetByCallerTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetAbilityDamageEventTag()
 {
 	return Ability_Damage;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHeavyAttackShootTag()
+{
+	return HeavyAttack_Shoot;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetLaunchedAbilityActivationTag()

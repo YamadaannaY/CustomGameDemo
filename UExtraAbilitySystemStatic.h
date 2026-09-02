@@ -29,6 +29,7 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Push_Self);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Uninterruptible);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Uninterruptible_End);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(HeavyAttack_Shoot);
 
 /**
  * 
@@ -71,7 +72,9 @@ public:
 
 	// 通用武器碰撞伤害事件 Tag（武器扫描命中后发给 Owner，攻击 GA 基类统一监听）
 	static FGameplayTag GetAbilityDamageEventTag();     // "ability.damage"
-	
-	
+
+	// 重击弓射：Montage 内各放箭帧 AN 触发一次本事件，GA 每收到一次生成一支箭
+	static FGameplayTag GetHeavyAttackShootTag();       // "ability.heavyattack.shoot"
+
 	static FGameplayTag GetLaunchedAbilityActivationTag();
 };
