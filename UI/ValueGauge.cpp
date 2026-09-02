@@ -30,15 +30,19 @@ void UValueGauge::SetAndBoundToGameplayAttribute(UAbilitySystemComponent* Abilit
 {
 	if (AbilitySystemComponent)
 	{
-		bool bFound;
+		// 两个属性分别查询，互不覆盖 bFound
+		bool bFoundValue = false;
+		bool bFoundMax = false;
 
 		//在指定ASC中寻找两个Value，如果找到进行一次初始化，随后正式开始追踪UI变化
-		const  float Value=AbilitySystemComponent->GetGameplayAttributeValue(Attribute,bFound);
-		const float MaxValue=AbilitySystemComponent->GetGameplayAttributeValue(MaxAttribute,bFound);
+		const  float Value=AbilitySystemComponent->GetGameplayAttributeValue(Attribute,bFoundValue);
+		const float MaxValue=AbilitySystemComponent->GetGameplayAttributeValue(MaxAttribute,bFoundMax);
 
-		if(bFound)
+		// 仅当两属性均已注册且 Max 有效时才做初始显示。
+		// ListenServer 下客户端属性可能晚于绑定就绪（Max 短暂为 0/未注册），
+		// 该窗口跳过初始刷新，交由下方委托在真实值到达后纠正，避免 0 分母误报。
+		if(bFoundValue && bFoundMax && MaxValue > 0.f)
 		{
-
 			SetValue(Value,MaxValue);
 		}
 
@@ -74,14 +78,32 @@ void UValueGauge::SetAndBoundToShieldAttribute(UAbilitySystemComponent* AbilityS
 
 void UValueGauge::SetValue(float NewValue, float NewMaxValue)
 {
+	// 记录进入本函数前 Max 是否有效（用于区分窗口 0 与异常归零）
+	const bool bHadValidMax = (CacheMaxValue > 0.f);
+	const float OldMax = CacheMaxValue;
+
 	//时刻更新改变后的值，实际上是这个函数被调用时的参数
 	CacheValue=NewValue;
 	CacheMaxValue=NewMaxValue;
 
-	//NewMaxValue作为分母不能为0
-	if (NewMaxValue==0)
+	//NewMaxValue作为分母不能为0（或负数）
+	if (NewMaxValue <= 0.f)
 	{
-		UE_LOG(LogTemp,Warning,TEXT("ValueGauge:%s,NewMaxValue can`t be 0"),*GetName());
+		// 绑定早于属性复制就绪时 Max 会短暂为 0：属正常时序，显示空占位等待 MaxValueChanged 用真实值刷新
+		ProgressBar->SetPercent(0.f);
+		if (ShieldBar)
+		{
+			ShieldBar->SetPercent(0.f);
+			ShieldBar->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		ValueText->SetText(FText::GetEmpty());
+
+		// 仅当 Max 曾有效却归零才报警，便于定位 DataTable 配置或 GE 把 Max 清零
+		if (bHadValidMax)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ValueGauge:%s,NewMaxValue collapsed from %.1f to %.1f"),
+				*GetName(), OldMax, NewMaxValue);
+		}
 		return;
 	}
 

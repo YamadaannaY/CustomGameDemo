@@ -44,8 +44,10 @@ private:
 	//Shield属性值变化的回调
 	void ShieldChanged(const FOnAttributeChangeData& ChangeData);
 
-	float CacheValue;
-	float CacheMaxValue;
+	// 初始占位：CacheValue=0 防未初始化；CacheMaxValue=-1 表示「从未就绪」，
+	// 用于区分「绑定早于属性复制（Max 短暂为 0，正常时序）」与「有效 Max 异常归零（应报警）」
+	float CacheValue = 0.f;
+	float CacheMaxValue = -1.f;
 
 	// 护盾条缓存值（用于当 MaxHealth 变化时与 ShieldValueChanged 配合刷新）
 	float CacheShieldValue = 0.f;
