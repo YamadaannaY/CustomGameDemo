@@ -95,6 +95,23 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	//播放Montage
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
+		AExtraPlayerCharacter* PC = Cast<AExtraPlayerCharacter>(AvatarChar);
+\
+		if (PC && bPlayingForwardEvade)
+		{
+			const FVector& InitInput = PC->GetInputDirection();
+			if (InitInput.IsNearlyZero())
+			{
+				EvadeBaseYaw = AvatarChar->GetActorRotation().Yaw;
+			}
+			else
+			{
+				EvadeBaseYaw = FRotationMatrix::MakeFromX(InitInput).Rotator().Yaw;
+			}
+
+			ApplyEvadeFacingWarp(PC);
+		}
+
 		PlayEvadeMontage();
 
 		UAbilityTask_WaitGameplayEvent* WaitToSprintTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, UUExtraAbilitySystemStatic::GetEvadeToSprintTag());
@@ -110,22 +127,9 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 			GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ThisClass::SetupWaitDodgeInputPress);
 		}
 
-		AExtraPlayerCharacter* PC = Cast<AExtraPlayerCharacter>(AvatarChar);
-
-		//前冲Evade允许基于MWC进行朝向调整，由于RootMotion，需要将InputDirYaw当做前方基准Yaw而非ActorRotYaw
+		// 播放期间每帧按当前输入在基准 ±EvadeMaxRotationAngle 内插值微调朝向（初始 target 已在 Montage 开播前写入）
 		if (PC && bPlayingForwardEvade)
 		{
-			const FVector& InitInput = PC->GetInputDirection();
-			if (InitInput.IsNearlyZero())
-			{
-				EvadeBaseYaw = AvatarChar->GetActorRotation().Yaw;
-			}
-			else
-			{
-				EvadeBaseYaw = FRotationMatrix::MakeFromX(InitInput).Rotator().Yaw;
-			}
-
-			//定时器每帧应用MR修改朝向
 			GetWorld()->GetTimerManager().SetTimer(EvadeFacingTimer, this, &UGA_Evade::UpdateEvadeFacing, EvadeFacingUpdateInterval, true);
 		}
 	}
@@ -140,8 +144,6 @@ bool UGA_Evade::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	}
 
 	// 空中闪避预算拦截：仅在空中且预算耗尽时拒绝激活；地面 Evade 不受限制。
-	// 必须用 CanActivateAbility 传入的 ActorInfo：CanActivateAbility 在 CallActivateAbility 之前调用，
-	// 此时 CurrentActorInfo 尚未绑定本次激活，GetAvatarActorFromActorInfo() 会返回空导致误放行。
 	if (ActorInfo && ActorInfo->AvatarActor.IsValid())
 	{
 		if (ACharacter* AvatarChar = Cast<ACharacter>(ActorInfo->AvatarActor.Get()))
@@ -265,14 +267,22 @@ void UGA_Evade::UpdateEvadeFacing()
 
 	CurrentEvadeFacingOffset = FMath::FInterpTo(CurrentEvadeFacingOffset, TargetOffset, EvadeFacingUpdateInterval, EvadeRotationInterpSpeed);
 
-	const FRotator TargetRot(0.f, EvadeBaseYaw + CurrentEvadeFacingOffset, 0.f);
+	ApplyEvadeFacingWarp(PlayerChar);
+}
+
+void UGA_Evade::ApplyEvadeFacingWarp(const AExtraPlayerCharacter* PlayerChar)
+{
+	if (!PlayerChar)
+	{
+		return;
+	}
 
 	if (UMotionWarpingComponent* MWC = PlayerChar->GetMotionWarpingComponent())
 	{
 		FMotionWarpingTarget WarpTarget;
 		WarpTarget.Name = FName("EvadeFacing");
 		WarpTarget.Location = PlayerChar->GetActorLocation();
-		WarpTarget.Rotation = TargetRot;
+		WarpTarget.Rotation = FRotator(0.f, EvadeBaseYaw + CurrentEvadeFacingOffset, 0.f);
 		MWC->AddOrUpdateWarpTarget(WarpTarget);
 	}
 }
@@ -348,6 +358,39 @@ void UGA_Evade::PollMoveInputForSprint()
 void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	if (MaxDodgeTriggerCooldownEffect && DodgeCount>=MaxDodgeCount)
+	{
+		if (!K2_HasAuthority())
+		{
+			return;
+		}
+		
+		UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
+		if (!SourceASC)
+		{
+			return;
+		}
+
+		AActor* Avatar = GetAvatarActorFromActorInfo();
+		if (!Avatar)
+		{
+			return;
+		}
+
+		const TSubclassOf<UGameplayEffect> CooldownGE = MaxDodgeTriggerCooldownEffect;
+		if (!CooldownGE)
+		{
+			return;
+		}
+
+		FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+		Context.AddInstigator(Avatar, Avatar);
+		Context.AddSourceObject(Avatar);
+		FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(CooldownGE, GetAbilityLevel(), Context);
+		
+		SourceASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	}
+		
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(InputPollTimer);

@@ -23,7 +23,6 @@ public:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 	// 激活前拦截：空中且本次浮空的空中闪避预算耗尽时，拒绝激活（不进入激活流程、不消耗耐力）。
-	// 预算由空中攻击恢复、落地重置，见 AExtraPlayerCharacter。
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
 	UFUNCTION()
@@ -51,6 +50,9 @@ private:
 
 	void PollMoveInputForSprint();
 	void UpdateEvadeFacing();
+
+	// 将当前 EvadeBaseYaw + CurrentEvadeFacingOffset 写入 MotionWarp target。
+	void ApplyEvadeFacingWarp(const AExtraPlayerCharacter* PlayerChar);
 	
 	UPROPERTY(EditDefaultsOnly, Category="Montage")
 	float InputPollInterval = 0.05f;
@@ -103,4 +105,7 @@ private:
 	int32 DodgeCount = 0;
 	// EvadeToSprint 通知已触发：此后不再响应再次闪避
 	bool bEvadeToSprintTriggered = false;
+	
+	UPROPERTY(EditDefaultsOnly, Category="Cooldown")
+	TSubclassOf<UGameplayEffect> MaxDodgeTriggerCooldownEffect;
 };
