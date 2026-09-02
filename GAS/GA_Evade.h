@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "ExtraGameplayAbility.h"
+#include "GameplayTagContainer.h"
 #include "GA_Evade.generated.h"
 
 class AExtraPlayerCharacter;
@@ -20,6 +21,10 @@ public:
 	UGA_Evade();
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+
+	// 激活前拦截：空中且本次浮空的空中闪避预算耗尽时，拒绝激活（不进入激活流程、不消耗耐力）。
+	// 预算由空中攻击恢复、落地重置，见 AExtraPlayerCharacter。
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
 	UFUNCTION()
 	void OnEvadeToSprint(FGameplayEventData EventData);

@@ -65,6 +65,11 @@ private:
 	UFUNCTION()
 	void OnLandMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
+	// Loop montage 被外部打断（如空中 Evade 抢占同 slot）→ 结束 GA。
+	// 主动停 Loop 进 Land（PlayLandMontage）或 EndAbility 兜底停时 CurrentPhase 已离开 Loop，回调直接 return。
+	UFUNCTION()
+	void OnLoopMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
 	// 共享的落地处理逻辑（无论来自 delegate 还是 timer）
 	void TryTriggerLand();
 

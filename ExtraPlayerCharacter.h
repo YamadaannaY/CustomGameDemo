@@ -61,6 +61,17 @@ public:
 	// 当前锁定目标（转发到锁定组件，无组件/无目标时为空）
 	AActor* GetLockTarget() const;
 
+	// ── 空中闪避次数（本次浮空的空中 Evade 预算）─────────────────────
+	// 空中 Evade 激活消耗 1 次；空中攻击恢复 1 次（每浮空仅首次生效）；
+	// 预算耗尽后空中 Evade 无法再激活，落地时重置。保证每次浮空最多 MaxAirEvadeCharges 次空中闪避。
+	FORCEINLINE bool CanUseAirEvade() const { return AirEvadeCharges > 0; }
+	FORCEINLINE int32 GetAirEvadeCharges() const { return AirEvadeCharges; }
+	void ConsumeAirEvade();
+	// 空中攻击恢复一次空中闪避（每浮空仅首次生效，最高恢复到上限）
+	void GrantAirEvadeCharge();
+	// 落地时重置本次浮空的空中闪避预算
+	void ResetAirEvadeCharges();
+
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	USpringArmComponent* CamBoom;
@@ -251,4 +262,19 @@ private:
 
 	// 重击长按阈值定时器
 	FTimerHandle HeavyAttackHoldTimerHandle;
+
+	// ── 空中闪避次数 ──
+	// 每次浮空初始可用的空中闪避次数（落地重置为初始值）
+	UPROPERTY(EditDefaultsOnly, Category = "Evade|Air", meta = (ClampMin = "1"))
+	int32 InitialAirEvadeCharges = 1;
+
+	// 每浮空允许的空中闪避次数上限（空中攻击的恢复不会超过此值）
+	UPROPERTY(EditDefaultsOnly, Category = "Evade|Air", meta = (ClampMin = "1"))
+	int32 MaxAirEvadeCharges = 2;
+
+	// 本次浮空剩余的空中闪避次数
+	int32 AirEvadeCharges = 1;
+
+	// 本次浮空是否已用过空中攻击的恢复机会（限制总空中闪避不超过 MaxAirEvadeCharges）
+	bool bAirEvadeBonusGranted = false;
 };

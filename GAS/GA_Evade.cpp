@@ -25,7 +25,7 @@ UGA_Evade::UGA_Evade()
 	// 通过 InputTag 触发
 	FAbilityTriggerData DodgeTrigger;
 	DodgeTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	DodgeTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetDodgeInputTag();
+	DodgeTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetDodgeInputTag();	
 	AbilityTriggers.Add(DodgeTrigger);
 }
 
@@ -48,7 +48,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 	// 以角色朝向为"前"判定前/后 Evade：
 	const bool bAirborne = AvatarChar->GetCharacterMovement()->IsFalling();
-	const AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(AvatarChar);
+	AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(AvatarChar);
 
 	bool bBackwardInput = true;
 	if (PlayerChar && PlayerChar->HasMoveInput())
@@ -79,6 +79,12 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	bAirborne == true ? DodgeCount = 2 : DodgeCount = 1;
 	CurrentEvadeFacingOffset = 0.f;
 
+	// 空中 Evade：消耗一次空中闪避预算（预算可用性已在 CanActivateAbility 校验）
+	if (bAirborne && PlayerChar)
+	{
+		PlayerChar->ConsumeAirEvade();
+	}
+
 	// 空中 Evade：绑定落地委托，落地立即结束 GA。地面 Evade 不绑。
 	bAirborneEvade = bAirborne;
 	if (bAirborneEvade)
@@ -96,8 +102,13 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		WaitToSprintTask->ReadyForActivation();
 
 		// 监听第二次 Dodge 输入：第0帧~EvadeToSprint 期间可再闪避一次。
+		// 空中 Evade 一次只闪一次：空中闪避次数由本次浮空的预算管理（见 AExtraPlayerCharacter），
+		// 想再次闪避应通过空中攻击恢复预算后重新激活 GA，故空中不挂此监听。
 		// 必须延迟到下一帧再挂载监听，否则输入直接触发此InputTask
-		GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ThisClass::SetupWaitDodgeInputPress);
+		if (!bAirborne)
+		{
+			GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ThisClass::SetupWaitDodgeInputPress);
+		}
 
 		AExtraPlayerCharacter* PC = Cast<AExtraPlayerCharacter>(AvatarChar);
 
@@ -118,6 +129,33 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 			GetWorld()->GetTimerManager().SetTimer(EvadeFacingTimer, this, &UGA_Evade::UpdateEvadeFacing, EvadeFacingUpdateInterval, true);
 		}
 	}
+}
+
+bool UGA_Evade::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	// 空中闪避预算拦截：仅在空中且预算耗尽时拒绝激活；地面 Evade 不受限制。
+	// 必须用 CanActivateAbility 传入的 ActorInfo：CanActivateAbility 在 CallActivateAbility 之前调用，
+	// 此时 CurrentActorInfo 尚未绑定本次激活，GetAvatarActorFromActorInfo() 会返回空导致误放行。
+	if (ActorInfo && ActorInfo->AvatarActor.IsValid())
+	{
+		if (ACharacter* AvatarChar = Cast<ACharacter>(ActorInfo->AvatarActor.Get()))
+		{
+			if (AvatarChar->GetCharacterMovement()->IsFalling())
+			{
+				if (AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(AvatarChar))
+				{
+					return PlayerChar->CanUseAirEvade();
+				}
+			}
+		}
+	}
+	return true;
 }
 
 void UGA_Evade::PlayEvadeMontage()

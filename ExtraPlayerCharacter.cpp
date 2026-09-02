@@ -77,8 +77,35 @@ void AExtraPlayerCharacter::Tick(float DeltaTime)
 		else if (!bAirborne && AbilitySystemComponent->HasMatchingGameplayTag(AirborneTag))
 		{
 			AbilitySystemComponent->RemoveLooseGameplayTag(AirborneTag);
+			// 落地瞬间重置本次浮空的空中闪避预算（下次浮空重新从初始值开始）
+			ResetAirEvadeCharges();
 		}
 	}
+}
+
+void AExtraPlayerCharacter::ConsumeAirEvade()
+{
+	if (AirEvadeCharges > 0)
+	{
+		--AirEvadeCharges;
+	}
+}
+
+void AExtraPlayerCharacter::GrantAirEvadeCharge()
+{
+	// 每浮空仅首次恢复有效：保证总空中闪避不超过 MaxAirEvadeCharges 次
+	if (bAirEvadeBonusGranted)
+	{
+		return;
+	}
+	bAirEvadeBonusGranted = true;
+	AirEvadeCharges = FMath::Min(AirEvadeCharges + 1, MaxAirEvadeCharges);
+}
+
+void AExtraPlayerCharacter::ResetAirEvadeCharges()
+{
+	AirEvadeCharges = FMath::Min(InitialAirEvadeCharges, MaxAirEvadeCharges);
+	bAirEvadeBonusGranted = false;
 }
 
 void AExtraPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

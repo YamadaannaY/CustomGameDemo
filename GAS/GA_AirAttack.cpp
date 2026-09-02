@@ -68,10 +68,11 @@ void UGA_AirAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 		ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
 	}
 
-	// 锁定Start + Loop过程中移动输入
+	// 锁定Start + Loop过程中移动输入；空中攻击恢复一次空中闪避预算（每浮空仅首次生效）
 	if (AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(AvatarChar))
 	{
 		PlayerChar->SetMovementInputLocked(true);
+		PlayerChar->GrantAirEvadeCharge();
 	}
 	
 	CurrentPhase = EAirAttackPhase::None;
@@ -157,6 +158,24 @@ void UGA_AirAttack::PlayLoopMontage()
 	{
 		AnimInst->Montage_SetNextSection(LoopSection, LoopSection, AirAttackLoopMontage);
 	}
+
+	// 监听 Loop 被外部打断（如空中 Evade 抢占同 slot）：打断即结束 GA。
+	// 主动停 Loop 进 Land 时 CurrentPhase 已是 Land，回调直接 return，不误伤正常流程。
+	FOnMontageEnded LoopEndDelegate;
+	LoopEndDelegate.BindUObject(this, &UGA_AirAttack::OnLoopMontageEnded);
+	AnimInst->Montage_SetEndDelegate(LoopEndDelegate, AirAttackLoopMontage);
+}
+
+void UGA_AirAttack::OnLoopMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	// 仅 Loop 阶段的 Loop montage 被外部打断才结束 GA；
+	// PlayLandMontage 主动停 Loop 时 CurrentPhase 已置 Land、EndAbility 兜底停时已置 None，均直接 return。
+	if (CurrentPhase != EAirAttackPhase::Loop)
+	{
+		return;
+	}
+
+	K2_EndAbility();
 }
 
 void UGA_AirAttack::OnLandDetected(const FHitResult& Hit)
@@ -202,6 +221,10 @@ void UGA_AirAttack::PlayLandMontage()
 		AvatarChar->LandedDelegate.RemoveDynamic(this, &UGA_AirAttack::OnLandDetected);
 	}
 
+	// 先切换阶段，再停动画：停 Start 会触发 OnStartMontageInterrupted、停 Loop 会触发 OnLoopMontageEnded，
+	// 此时已是 Land 阶段，两个回调都会直接 return，避免误结束 GA。
+	CurrentPhase = EAirAttackPhase::Land;
+
 	StopLoopMontage();
 
 	// 落地阶段解锁移动输入：角色已在地面，允许移动并让移动打断机制生效
@@ -216,10 +239,6 @@ void UGA_AirAttack::PlayLandMontage()
 		K2_EndAbility();
 		return;
 	}
-
-	// 先切换阶段，再停 Start：停止会触发 OnStartMontageInterrupted，
-	// 此时已是 Land 阶段，回调会直接 return，避免误结束 GA。
-	CurrentPhase = EAirAttackPhase::Land;
 
 	// Start 阶段就落地时，Start montage 可能仍在播放，直接停掉
 	if (AirAttackStartMontage && AnimInst->Montage_IsPlaying(AirAttackStartMontage))
