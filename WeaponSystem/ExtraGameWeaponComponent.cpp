@@ -889,6 +889,7 @@ void UExtraGameWeaponComponent::TraceSocketSegment(const FName SocketName, const
 	const FCollisionShape Sphere = FCollisionShape::MakeSphere(TraceRadius);
 	const ECollisionChannel Channel = WeaponTraceChannel.GetValue();
 
+	//将路径切分为Steps个首尾相连的小线段
 	for (int32 i = 0; i < Steps; ++i)
 	{
 		const FVector SegStart = Prev + StepVec * static_cast<float>(i);
@@ -904,7 +905,7 @@ void UExtraGameWeaponComponent::TraceSocketSegment(const FName SocketName, const
 		if (bDrawWeaponTraceDebug)
 		{
 			DrawDebugLine(GetWorld(), SegStart, SegEnd, FColor::Red, false, 0.2f);
-			DrawDebugSphere(GetWorld(), SegEnd, TraceRadius, 8, FColor::Orange, false, 0.2f);
+			DrawDebugSphere(GetWorld(), SegEnd, TraceRadius, 8, FColor::Green, false, 0.2f);
 		}
 
 		for (const FHitResult& Hit : Hits)

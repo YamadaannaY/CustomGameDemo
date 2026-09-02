@@ -17,7 +17,6 @@ class EXTRACTGAMECHARACTER_API AExtraCharacter : public ACharacter, public IAbil
 	GENERATED_BODY()
 
 public:
-	// Sets default values for this character's properties
 	AExtraCharacter(const FObjectInitializer& ObjectInitializer);
 
 	// ── IAbilitySystemInterface ────────────────────────────────
@@ -41,11 +40,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Character Movement (Jumping)", meta = (ClampMin = "0.0"))
 	float JumpHeight = 90.f;
 	
-	/******************************* Team ***********************************/
-	/** Assigns Team Agent to given TeamID 在Controller OnPossess时调用*/
-	//Problem:为什么不可以在这里调用PickSkin函数，根据ID换Mesh?
-	//Answer:这个函数只在服务端执行，如果在服务端调用，ID会复制给所有客户端，但是Mesh默认是不复制的，也就是不会复制给客户端。
-	//换句话说，PickSkin确实执行了，但是客户端看不到，应该用OnRep，让客户端收到ID的那一刻根据ID改变Mesh
+
 	virtual void SetGenericTeamId(const FGenericTeamId& NewTeamID) override;
 
 	/** Retrieve team identifier in form of FGenericTeamId */
@@ -100,7 +95,7 @@ protected:
 	
 	bool IsLocallyControlledByPlayer() const 
 	{
-		//判断LocalController从而找到当前客户端的主Player
+		//本地Controller
 		return GetController() && GetController()->IsLocalPlayerController();
 	}
 	

@@ -24,7 +24,7 @@ void ULockOnComponent::BeginPlay()
 		return;
 	}
 
-	// 检测只在本机执行（本地控制的 Pawn），服务端/模拟端不跑，避免重复锁定
+	// 检测只在本机执行（本地控制的 Pawn），避免服务端/模拟端重复锁定
 	if (!OwnerPawn->IsLocallyControlled())
 	{
 		return;
@@ -52,6 +52,7 @@ void ULockOnComponent::ClearLockTarget()
 
 void ULockOnComponent::ForceRefresh()
 {
+	UE_LOG(LogTemp,Warning,TEXT("Lock Comp Take a force refresh"));
 	UpdateLockTarget();
 }
 
@@ -71,13 +72,12 @@ void ULockOnComponent::UpdateLockTarget()
 		AActor* Cur = CurrentLockTarget.Get();
 		if (IsValidTarget(Cur))
 		{
-			const float BreakRangeSq = LockBreakRange * LockBreakRange;
-			if (FVector::DistSquared(GetOwner()->GetActorLocation(), Cur->GetActorLocation()) <= BreakRangeSq)
+			if (FVector::DistSquared(GetOwner()->GetActorLocation(), Cur->GetActorLocation()) <= LockBreakRange * LockBreakRange)
 			{
 				return;
 			}
 		}
-		// 目标失效 / 超距 → 清除，继续扫描
+		// 目标失效 / 超距 → 清除,重新扫描一次
 		CurrentLockTarget.Reset();
 	}
 
@@ -92,8 +92,7 @@ void ULockOnComponent::UpdateLockTarget()
 		CurrentLockTarget.Reset();
 		return;
 	}
-
-	// 从候选中挑距离最近的有效目标
+	
 	float BestDistSq = TNumericLimits<float>::Max();
 	AActor* BestTarget = nullptr;
 	for (const FOverlapResult& Overlap : Overlaps)
@@ -104,6 +103,7 @@ void ULockOnComponent::UpdateLockTarget()
 			continue;
 		}
 
+		//遍历找到最近的目标
 		const float DistSq = FVector::DistSquared(Origin, Candidate->GetActorLocation());
 		if (DistSq < BestDistSq)
 		{

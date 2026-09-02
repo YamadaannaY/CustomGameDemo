@@ -7,11 +7,11 @@
 class AActor;
 
 /**
- * 锁定组件：周期检测 Owner 周围敌对 Pawn，锁定距离最近的目标。
+ * 锁定组件：周期检测 Owner 周围TeamID敌对 Pawn，锁定距离最近的目标。
  *
  * 锁定结果供攻击 GA（基类 bRotateToLockTarget）读取，通过 MotionWarping
  * 使攻击动画朝向锁定目标释放。
- *
+ * 
  * 纯本地组件，不参与网络复制：只在本地控制的 Pawn 上执行检测。
  */
 UCLASS(ClassGroup=(Combat), meta=(BlueprintSpawnableComponent))
@@ -25,7 +25,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	// 当前锁定目标（可为空）
+	// 当前锁定目标（可为空，获取弱指针对象）
 	UFUNCTION(BlueprintPure, Category = "LockOn")
 	AActor* GetLockTarget() const { return CurrentLockTarget.Get(); }
 
@@ -33,20 +33,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "LockOn")
 	bool HasLockTarget() const { return CurrentLockTarget.IsValid(); }
 
-	// 手动解除锁定
+	// 手动调用解除锁定
 	UFUNCTION(BlueprintCallable, Category = "LockOn")
 	void ClearLockTarget();
 
-	// 立即重新扫描（不等检测周期，ForceRefresh 后仍按周期继续）
+	// 立即重新扫描一次（不等检测周期，ForceRefresh 后仍按周期继续）
 	UFUNCTION(BlueprintCallable, Category = "LockOn")
 	void ForceRefresh();
 
 protected:
-	// 检测半径（cm）：超过此范围的目标不纳入候选
+	// 检测半径（cm）
 	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (ClampMin = "0.0"))
 	float LockRadius = 1000.f;
 
-	// 解除锁定距离（cm）：已锁定目标超过此距离即解除并重扫
+	// 解除锁定距离（cm）
 	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (ClampMin = "0.0"))
 	float LockBreakRange = 1500.f;
 
