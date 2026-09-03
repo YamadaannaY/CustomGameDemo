@@ -3,6 +3,8 @@
 #include "Curves/CurveFloat.h"
 #include "ExtraPlayerCharacter.h"
 
+static const FName NAME_W_Gait(TEXT("W_Gait"));
+
 void UExtraGameAnimInstance::OnFootPlantNotify(EFootPlant Foot)
 {
 	if (!bRequestStop)
@@ -39,6 +41,10 @@ void UExtraGameAnimInstance::OnStopStateEntered()
 void UExtraGameAnimInstance::OnSprintStateLeft()
 {
 	bEvadeToSprint = false;
+	if (OwnerCharacter)
+	{
+		OwnerCharacter->SetSprinting(false);
+	}
 }
 
 void UExtraGameAnimInstance::NativeInitializeAnimation()
@@ -93,6 +99,7 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		else
 		{
 			OwnerMovementComp->Velocity = CacheVelocity;
+			CacheVelocity*=0.8;
 		}
 	}
 
@@ -130,13 +137,28 @@ float UExtraGameAnimInstance::CalculateStrideBlend() const
 	const float CurveTime = GroundSpeed / GetOwningComponent()->GetComponentScale().Z;
 	
 	// Gait 判断：bWalkMode = walk 用 Walk 曲线 ; run 用 Run 曲线。 （Walk=0 ， Run=1 , Sprint=2），Clamp限制
-	const float GaitBlend = bWalkMode ? 0.f : 1.f;
-	const float ClampedGait = FMath::Clamp(GaitBlend,0.f,1.f);
+	const float ClampedGait = GetAnimCurveClamped(NAME_W_Gait, -1.0, 0.0f, 1.0f);
 	//获取曲线上对应步幅的值并返回
 	const float LerpStrideBlend =
 		FMath::Lerp(StrideBlend_N_Walk->GetFloatValue(CurveTime), StrideBlend_N_Run->GetFloatValue(CurveTime),ClampedGait);
 	
 	return LerpStrideBlend;
+}
+
+float UExtraGameAnimInstance::CalculateStandingPlayRate() const
+{
+	const float LerpedSpeed = FMath::Lerp(GroundSpeed / OwnerCharacter->WalkSpeed,GroundSpeed / OwnerCharacter->RunSpeed,
+									  GetAnimCurveClamped(NAME_W_Gait, -1.0f, 0.0f, 1.0f));
+
+	const float SprintAffectedSpeed = FMath::Lerp(LerpedSpeed, GroundSpeed / OwnerCharacter->SprintSpeed,
+												  GetAnimCurveClamped(NAME_W_Gait, -2.0f, 0.0f, 1.0f));
+
+	return FMath::Clamp((SprintAffectedSpeed / CalculateStrideBlend()) / GetOwningComponent()->GetComponentScale().Z,0.0f, 3.0f);
+}
+
+float UExtraGameAnimInstance::GetAnimCurveClamped(const FName& Name, float Bias, float ClampMin, float ClampMax) const
+{
+	return FMath::Clamp(GetCurveValue(Name) + Bias, ClampMin, ClampMax);
 }
 
 void UExtraGameAnimInstance::UpdateIdleActionSystem(float DeltaSeconds)

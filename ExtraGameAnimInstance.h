@@ -104,7 +104,7 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion")
 	bool bIsMoving = false;
 	
-	// AN_EvadeToSprint截断 Montage 后置为true，允许进入Sprint State
+	// GA_Evade 确认可衔接冲刺、截断蒙太奇时置 true，ABP 据此进入 Sprint State；离开 Sprint 时经 OnSprintStateLeft 复位
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Sprint")
 	bool bEvadeToSprint = false;
 
@@ -145,6 +145,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Blend | Stride", meta=(BlueprintThreadSafe))
 	float CalculateStrideBlend() const ;
 
+	UFUNCTION(BlueprintCallable, Category="Blend | Stride", meta=(BlueprintThreadSafe))
+	float CalculateStandingPlayRate() const ;
+
+	float GetAnimCurveClamped(const FName& Name, float Bias, float ClampMin,float ClampMax) const;
 private:
 	FVector CacheVelocity = FVector::ZeroVector;
 	

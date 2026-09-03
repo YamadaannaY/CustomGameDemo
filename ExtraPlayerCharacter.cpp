@@ -60,7 +60,7 @@ void AExtraPlayerCharacter::Tick(float DeltaTime)
 	}
 	
 	const float TargetMaxSpeed = bIsSprinting
-		? RunSpeed * SprintSpeedMultiplier
+		? SprintSpeed
 		: (bWalkMode ? WalkSpeed : RunSpeed);
 	GetCharacterMovement()->MaxWalkSpeed = FMath::FInterpTo(
 		GetCharacterMovement()->MaxWalkSpeed, TargetMaxSpeed, DeltaTime, 5.f);
@@ -228,6 +228,15 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	LastMoveInputDuration = GetWorld()->GetTimeSeconds() - MoveInputStartTime;
 
 	bHasMoveInput = false;
+
+	// 松开移动输入即退出冲刺模式（速度由 Tick 插值回落，停步走既有流程）；
+	// 同时撤销 Sprint 进入闸门，防止「截断瞬间松手 → 之后普通跑动误进 Sprint」
+	SetSprinting(false);
+	if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
+	{
+		AI->bEvadeToSprint = false;
+	}
+
 	ForwardDirectionInput = 0.f;
 	RightDirectionInput = 0.f;
 	InputDirection = FVector::ZeroVector;
@@ -299,8 +308,8 @@ void AExtraPlayerCharacter::Look(const FInputActionValue& InputActionValue)
 		const float DelatTime = GetWorld()->GetDeltaSeconds();
 		const float MaxDegreesPerFrame = MaxDegreesPerSecond*DelatTime;
 
-		float DesiredYawInput = LookAxisVector.X * 0.4f;
-		float DesiredPitchInput = LookAxisVector.Y * 0.4f;
+		float DesiredYawInput = LookAxisVector.X * 0.8f;
+		float DesiredPitchInput = LookAxisVector.Y * 0.5f;
 
 		DesiredYawInput = FMath::Clamp(DesiredYawInput,-MaxDegreesPerFrame,MaxDegreesPerFrame);
 		DesiredPitchInput = FMath::Clamp(DesiredPitchInput,-MaxDegreesPerFrame,MaxDegreesPerFrame);
@@ -529,7 +538,6 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 		return;
 	}
 
-	// 长按达到阈值时段数已满 3，立即重击；未满则由 GA 内切入帧在连段满 3 后触发
 	const float ComboCount = AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
 	if (ComboCount >= HeavyComboCount)
 	{

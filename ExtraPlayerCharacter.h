@@ -30,7 +30,10 @@ public:
 	FORCEINLINE UMotionWarpingComponent* GetMotionWarpingComponent() const { return MotionWarpingComp; }
 	
 	bool GetWalkMode() const { return  bWalkMode; }
-	
+
+	// 冲刺模式开关：GA_Evade 截断蒙太奇进入冲刺时置 true；AnimInstance 离开 Sprint 状态经 OnSprintStateLeft 复位
+	void SetSprinting(bool bSprinting) { bIsSprinting = bSprinting; }
+
 	FORCEINLINE bool HasForwardInput() const { return bHasMoveInput && ForwardDirectionInput > 0.f; }
 	FORCEINLINE bool HasMoveInput() const { return bHasMoveInput; }
 	FORCEINLINE float GetRightDirectionInput() const { return RightDirectionInput; }
@@ -72,6 +75,18 @@ public:
 	// 落地时重置本次浮空的空中闪避预算
 	void ResetAirEvadeCharges();
 
+	
+	//Walk模式最大速度
+	UPROPERTY(EditDefaultsOnly, Category="Movement", meta=(ClampMin="0.0"))
+	float WalkSpeed = 250.f;
+
+	//Run模式最大速度
+	UPROPERTY(EditDefaultsOnly, Category="Movement", meta=(ClampMin="0.0"))
+	float RunSpeed = 600.f;
+	
+	//Sprint（冲刺）最高速度，物理 MaxWalkSpeed 与动画 PlayRate 归一统一引用此值
+	UPROPERTY(EditDefaultsOnly, Category="Movement|Sprint", meta=(ClampMin="0.0"))
+	float SprintSpeed = 800.f;
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	USpringArmComponent* CamBoom;
@@ -177,17 +192,6 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Movement", meta=(ClampMin="1.0"))
 	float InputDirectionInterpSpeed = 12.f;
 
-	//Walk模式最大速度
-	UPROPERTY(EditDefaultsOnly, Category="Movement", meta=(ClampMin="0.0"))
-	float WalkSpeed = 250.f;
-
-	//Run模式最大速度
-	UPROPERTY(EditDefaultsOnly, Category="Movement", meta=(ClampMin="0.0"))
-	float RunSpeed = 600.f;
-
-	// Sprint 时的额外速度乘数（1.x = 微快，2.0 = 双倍）
-	UPROPERTY(EditDefaultsOnly, Category="Movement|Sprint", meta=(ClampMin="1.0"))
-	float SprintSpeedMultiplier = 1.8f;
 
 	FTimerHandle ArmLengthLerpTimerHandle;
 
@@ -234,7 +238,7 @@ private:
 
 	FVector InputDirection;
 
-	// 由 GA_Evade::OnEvadeToSprint 设置，触发 Sprint 过渡（仅当前帧有效）
+	// 由 GA_Evade 截断蒙太奇时设置，下一帧写入 Velocity 以保持冲刺速度（仅当前帧有效）
 	FVector SprintTransitionVelocity = FVector::ZeroVector;
 
 	bool bHasMoveInput=false;

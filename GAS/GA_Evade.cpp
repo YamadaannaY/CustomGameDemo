@@ -5,6 +5,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
+#include "ExtractGameCharacter/ExtraGameAnimInstance.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -351,6 +352,18 @@ void UGA_Evade::PollMoveInputForSprint()
 
 	GetWorld()->GetTimerManager().ClearTimer(InputPollTimer);
 	bTransitionedToSprint = true;
+
+	// 玩家按住移动进入冲刺：置冲刺模式（物理提速）+ 放行 ABP Sprint 过渡 + 用目标速度喂一帧避免截断后塌速
+	PlayerChar->SetSprinting(true);
+	if (UExtraGameAnimInstance* GameAI = Cast<UExtraGameAnimInstance>(PlayerChar->GetMesh()->GetAnimInstance()))
+	{
+		GameAI->bEvadeToSprint = true;
+	}
+	const FVector SprintDir = PlayerChar->GetInputDirection();
+	if (!SprintDir.IsNearlyZero())
+	{
+		PlayerChar->SprintTransitionVelocity = SprintDir * PlayerChar->SprintSpeed;
+	}
 
 	AnimInst->Montage_Stop(MontageCancelBlendOutTime, CurrentPlayingMontage);
 }

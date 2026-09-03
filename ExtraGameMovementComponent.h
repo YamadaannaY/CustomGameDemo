@@ -6,7 +6,7 @@
 
 /*
  *项目用CMC
- * -重写了转向逻辑，添加平滑处理
+ * -重写了转向逻辑，恒定速率（RotationRate.Yaw），空中额外削弱
  *
  */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -17,18 +17,10 @@ class EXTRACTGAMECHARACTER_API UExtraGameMovementComponent : public UCharacterMo
 public:
 	UExtraGameMovementComponent();
 
-	// 最大旋转速度（deg/s），用于大幅转向时（>90度）
-	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation Settings)", meta=(ClampMin="0.0"))
-	float MaxRotationRate = 720.f;
-
-	// 最小旋转速度（deg/s），用于接近目标朝向时的平滑减速
-	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation Settings)", meta=(ClampMin="0.0"))
-	float MinRotationRate = 180.f;
-
 	// 空中（跳跃/下落）时左右输入转向的削弱系数，值越小空中越难转向（0 = 完全不能转向，1 = 与地面一致）
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation Settings)", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float AirRotationScale = 0.3f;
-	
-	//对Rot值进行平滑
+
+	// 转向：恒定 RotationRate.Yaw，空中按 AirRotationScale 削弱
 	virtual void PhysicsRotation(float DeltaTime) override;
 };

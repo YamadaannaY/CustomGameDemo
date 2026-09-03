@@ -11,49 +11,60 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 	{
 		return;
 	}
-	
-	
+
 	if (!bOrientRotationToMovement)
 	{
 		Super::PhysicsRotation(DeltaTime);
 		return;
 	}
 
+	// 没有有效加速度，不旋转
 	if (Acceleration.IsNearlyZero(0.001f))
 	{
 		return;
 	}
 
-	FRotator CurrentRotation = UpdatedComponent->GetComponentRotation();
+	const FRotator CurrentRotation =
+		UpdatedComponent->GetComponentRotation();
+
+	// 根据移动加速度计算目标方向
 	FRotator TargetRotation = Acceleration.Rotation();
 	TargetRotation.Pitch = 0.f;
 	TargetRotation.Roll = 0.f;
-	CurrentRotation.Pitch = 0.f;
-	CurrentRotation.Roll = 0.f;
 
-	if (CurrentRotation.Equals(TargetRotation, 0.1f))
-	{
-		return;
-	}
-
-	const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentRotation.Yaw, TargetRotation.Yaw);
-	const float AbsDeltaYaw = FMath::Abs(DeltaYaw);
-
-	const float SpeedBlend = FMath::Clamp(AbsDeltaYaw / 180.f, 0.f, 1.f);
-	float CurrentRotationRate = FMath::Lerp(MinRotationRate, MaxRotationRate, SpeedBlend);
-
-	// 空中（跳跃/下落）时削弱转向幅度，仅允许小幅度的左右朝向旋转
+	// 恒定转向速率；空中削弱转向
+	float RotationRateYaw = RotationRate.Yaw;
 	if (IsFalling())
 	{
-		CurrentRotationRate *= AirRotationScale;
+		RotationRateYaw *= AirRotationScale;
 	}
 
-	const float MaxYawThisFrame = CurrentRotationRate * DeltaTime;
-	float StepYaw = FMath::Clamp(DeltaYaw, -MaxYawThisFrame, MaxYawThisFrame);
+	// 本帧最大旋转角
+	const float MaxYawThisFrame =
+		RotationRateYaw * DeltaTime;
+
+	// 取 [-180, 180] 最短旋转路径并夹到本帧上限，恒速转向到对齐为止
+	const float DeltaYaw =
+		FMath::FindDeltaAngleDegrees(
+			CurrentRotation.Yaw,
+			TargetRotation.Yaw
+		);
+
+	const float StepYaw =
+		FMath::Clamp(
+			DeltaYaw,
+			-MaxYawThisFrame,
+			MaxYawThisFrame
+		);
 
 	FRotator DesiredRotation = CurrentRotation;
-	DesiredRotation.Yaw = CurrentRotation.Yaw + StepYaw;
+	DesiredRotation.Yaw += StepYaw;
+	DesiredRotation.Pitch = 0.f;
+	DesiredRotation.Roll = 0.f;
 
-	MoveUpdatedComponent(FVector::ZeroVector, DesiredRotation, false);
+	MoveUpdatedComponent(
+		FVector::ZeroVector,
+		DesiredRotation,
+		false
+	);
 }
-
