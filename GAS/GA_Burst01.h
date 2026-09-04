@@ -20,10 +20,20 @@ public:
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 	
+	UFUNCTION()
+	void ChangeToSecondState(FGameplayEventData PayLoad);
 private:
 	UPROPERTY(EditDefaultsOnly,Category="Montage")
 	UAnimMontage* BurstMontage;
-	
+
 	UPROPERTY(EditDefaultsOnly,Category="Material")
 	TMap<FName, UMaterialInterface*> SlotMaterialMap;
+
+	// 激活瞬间要切换到的第二形态武器组 GroupTag。
+	// 由 GA 蓝图填写（如 WeaponGroup.FeiXue.Phase2）：开大即切组，整段 Montage 用第二形态武器演出。
+	UPROPERTY(EditDefaultsOnly, Category="Form")
+	FGameplayTag BurstTargetWeaponGroupTag;
+
+	// 激活即把武器组切到 BurstTargetWeaponGroupTag；失败仅告警不阻断大招
+	void SwitchToBurstForm();
 };
