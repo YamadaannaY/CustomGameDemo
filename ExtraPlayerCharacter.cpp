@@ -560,7 +560,8 @@ void AExtraPlayerCharacter::OnUltimateStarted(const FInputActionValue& InputActi
 	if (AbilitySystemComponent)
 	{
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-			this, UUExtraAbilitySystemStatic::GetUltimateInputTag(), FGameplayEventData());
+			this, UUExtraAbilitySystemStatic::
+			GetUltimateInputTag(), FGameplayEventData());
 	}
 }
 

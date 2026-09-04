@@ -40,12 +40,14 @@ class EXTRACTGAMECHARACTER_API UUExtraAbilitySystemStatic : public UBlueprintFun
 	GENERATED_BODY()
 	
 public:
+	static FGameplayTag GetAbilityTag();
 	static FGameplayTag GetBasicAttackAbilityTag();
 	static FGameplayTag GetHeavyAttackAbilityTag();
 	static FGameplayTag GetAirAttackAbilityTag();
 	static FGameplayTag GetDodgeAbilityTag();
 	static FGameplayTag GetAirborneTag();
 	static FGameplayTag GetSkill01Tag();
+	static FGameplayTag GetBurst01Tag();
 
 	// ── 输入触发 Tag（废弃 InputID，改用 AbilityTriggers + GameplayEvent）──
 	// 武器组 IA 全局固定，换武器只换背后 GA；GA 通过 AbilityTriggers 声明响应哪个 InputTag

@@ -1,12 +1,14 @@
 #include "UExtraAbilitySystemStatic.h"
 
 // ── Native GameplayTag 定义（静态注册，早于 CDO 构造）──
+UE_DEFINE_GAMEPLAY_TAG(Ability, "ability");
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack, "ability.basicattack");
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack_AirAttack, "ability.basicattack.airattack");
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack_Light, "ability.basicattack.light");
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack_Heavy, "ability.basicattack.heavy");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Dodge, "ability.dodge");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Skill_01, "ability.Skill.01");
+UE_DEFINE_GAMEPLAY_TAG(Ability_Burst_01, "ability.Burst.01");
 UE_DEFINE_GAMEPLAY_TAG(State_Airborne, "character.state.airborne");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_LightAttack, "InputTag.LightAttack");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_HeavyAttack, "InputTag.HeavyAttack");
@@ -33,6 +35,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 	return Ability_BasicAttack_Light;
 }
 
+FGameplayTag UUExtraAbilitySystemStatic::GetAbilityTag()
+{
+	return Ability;
+}
+
 FGameplayTag UUExtraAbilitySystemStatic::GetDodgeAbilityTag()
 {
 	return Ability_Dodge;
@@ -51,6 +58,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackAbilityTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetSkill01Tag()
 {
 	return Ability_Skill_01;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetBurst01Tag()
+{
+	return Ability_Burst_01;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetHeavyAttackAbilityTag()

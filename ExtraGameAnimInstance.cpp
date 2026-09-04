@@ -16,8 +16,6 @@ void UExtraGameAnimInstance::OnFootPlantNotify(EFootPlant Foot)
 
 void UExtraGameAnimInstance::RequestStop()
 {
-	if (bWalkMode == true) return ; 
-	
 	bRequestStop = true;
 	bCanEnterStop = false;
 	PendingStopFoot = EFootPlant::None;
@@ -98,8 +96,9 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		//停步
 		else
 		{
+			/*CacheVelocity = OwnerCharacter->GetVelocity();
+			GroundSpeed = CacheVelocity.Size2D();*/
 			OwnerMovementComp->Velocity = CacheVelocity;
-			CacheVelocity*=0.8;
 		}
 	}
 
@@ -136,7 +135,6 @@ float UExtraGameAnimInstance::CalculateStrideBlend() const
 	// 步幅曲线：把 GroundSpeed 映射到步幅系数，缩放脚步位移使其匹配移动速度。
 	const float CurveTime = GroundSpeed / GetOwningComponent()->GetComponentScale().Z;
 	
-	// Gait 判断：bWalkMode = walk 用 Walk 曲线 ; run 用 Run 曲线。 （Walk=0 ， Run=1 , Sprint=2），Clamp限制
 	const float ClampedGait = GetAnimCurveClamped(NAME_W_Gait, -1.0, 0.0f, 1.0f);
 	//获取曲线上对应步幅的值并返回
 	const float LerpStrideBlend =
