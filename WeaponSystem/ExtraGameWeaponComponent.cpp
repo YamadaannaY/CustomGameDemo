@@ -10,6 +10,7 @@
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Character.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
@@ -90,6 +91,81 @@ void UExtraGameWeaponComponent::CacheOwnerASC()
 			OwnerASC = Owner->FindComponentByClass<UAbilitySystemComponent>();
 		}
 	}
+}
+
+const FExtraGameWeaponEntry* UExtraGameWeaponComponent::ResolveWeaponEntry(FGameplayTag WeaponTag) const
+{
+	if (!WeaponDataAsset || !WeaponTag.IsValid())
+	{
+		return nullptr;
+	}
+
+	// 优先当前组，其次全局表（跨组保留的 Mesh 也能解析到数据）
+	if (const FExtraGameWeaponGroup* Cur = GetWeaponGroupByTag(CurrentGroupTag))
+	{
+		if (const FExtraGameWeaponEntry* Entry = Cur->FindWeaponEntry(WeaponTag))
+		{
+			return Entry;
+		}
+	}
+
+	if (const FExtraGameWeaponGroup* OwnerGroup = WeaponDataAsset->FindGroupContainingWeapon(WeaponTag))
+	{
+		return OwnerGroup->FindWeaponEntry(WeaponTag);
+	}
+
+	return nullptr;
+}
+
+bool UExtraGameWeaponComponent::SetWeaponAttachSocket(FGameplayTag WeaponTag, FName SocketName)
+{
+	const FExtraGameWeaponEntry* Entry = ResolveWeaponEntry(WeaponTag);
+	if (!Entry)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] SetWeaponAttachSocket: no weapon data for '%s'."), *WeaponTag.ToString());
+		return false;
+	}
+
+	UStaticMeshComponent* MeshComp = GetWeaponMeshByTag(WeaponTag);
+	if (!MeshComp)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] SetWeaponAttachSocket: no mesh for '%s'."), *WeaponTag.ToString());
+		return false;
+	}
+
+	ACharacter* OwnerChar = Cast<ACharacter>(GetOwner());
+	USkeletalMeshComponent* SkeletalMesh = OwnerChar ? OwnerChar->GetMesh() : nullptr;
+	if (!SkeletalMesh)
+	{
+		return false;
+	}
+
+	// 空 / None / 默认挂点 → 复位到默认 AttachSocketName；否则必须是该武器的合法显示挂点
+	FName TargetSocket = SocketName != NAME_None ? SocketName : Entry->AttachSocketName;
+	if (!Entry->IsDisplaySocket(TargetSocket))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] SetWeaponAttachSocket: socket '%s' is not in weapon '%s' display sockets."),
+			*SocketName.ToString(), *WeaponTag.ToString());
+		return false;
+	}
+
+	if (!SkeletalMesh->DoesSocketExist(TargetSocket))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] SetWeaponAttachSocket: skeleton socket '%s' not found."), *TargetSocket.ToString());
+		return false;
+	}
+
+	// 已在目标挂点则无需重挂
+	if (MeshComp->GetAttachSocketName() == TargetSocket)
+	{
+		return true;
+	}
+
+	MeshComp->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+	MeshComp->AttachToComponent(SkeletalMesh, FAttachmentTransformRules::KeepRelativeTransform, TargetSocket);
+	MeshComp->SetRelativeTransform(Entry->RelativeTransform);
+
+	return true;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -292,6 +368,17 @@ void UExtraGameWeaponComponent::ShowWeaponEntry(FGameplayTag WeaponTag)
 	HiddenWeaponEntries.Remove(WeaponTag);
 
 	RequestWeaponFade(WeaponTag, true);
+}
+
+bool UExtraGameWeaponComponent::ShowWeaponEntryOnSocket(FGameplayTag WeaponTag, FName SocketName)
+{
+	if (!SetWeaponAttachSocket(WeaponTag, SocketName))
+	{
+		return false;
+	}
+
+	ShowWeaponEntry(WeaponTag);
+	return true;
 }
 
 void UExtraGameWeaponComponent::HideWeaponEntry(FGameplayTag WeaponTag)

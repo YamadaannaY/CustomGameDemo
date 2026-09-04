@@ -10,6 +10,7 @@
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_BasicAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Dodge);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Airborne);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Phase1);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_LightAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_HeavyAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Skill);
@@ -46,9 +47,12 @@ public:
 	static FGameplayTag GetAirAttackAbilityTag();
 	static FGameplayTag GetDodgeAbilityTag();
 	static FGameplayTag GetAirborneTag();
+	// 形态状态 Tag：GA_Burst01 等"第一形态专属大招"以它做 ActivationRequiredTags 门控，
+	// 对应武器组把 State.Phase1 放进 AdditionalTags，切到第二形态(Phase2 组)后 tag 移除→大招自然失效
+	static FGameplayTag GetPhase1StateTag();
 	static FGameplayTag GetSkill01Tag();
 	static FGameplayTag GetBurst01Tag();
-
+	static FGameplayTag GetBurstChangeStateTag();
 	// ── 输入触发 Tag（废弃 InputID，改用 AbilityTriggers + GameplayEvent）──
 	// 武器组 IA 全局固定，换武器只换背后 GA；GA 通过 AbilityTriggers 声明响应哪个 InputTag
 	static FGameplayTag GetLightAttackInputTag();  // "InputTag.LightAttack"

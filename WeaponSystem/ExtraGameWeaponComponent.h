@@ -95,6 +95,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
 	void ShowWeaponEntry(FGameplayTag WeaponTag);
 
+	/** 显示指定武器 Mesh，但显示前先把 Mesh 重挂到指定 SocketName。
+	 *  SocketName 为空 / None / 默认挂点 → 复位到默认 AttachSocketName；
+	 *  否则必须属于该武器 AltAttachSockets。失败（无 Mesh / Socket 无效）时返回 false 且不显示。 */
+	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
+	bool ShowWeaponEntryOnSocket(FGameplayTag WeaponTag, FName SocketName);
+
 	/** 隐藏当前武器组中的指定武器 Mesh */
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
 	void HideWeaponEntry(FGameplayTag WeaponTag);
@@ -243,6 +249,14 @@ private:
 
 	// ── 内部辅助 ────────────────────────────────────────────
 	void CacheOwnerASC();
+
+	// ── 多挂点重挂（ShowWeaponEntryOnSocket 用）─────────────
+	// 解析 WeaponTag 对应武器数据：优先当前组，其次全局表（跨组保留的 Mesh）
+	const FExtraGameWeaponEntry* ResolveWeaponEntry(FGameplayTag WeaponTag) const;
+
+	// 把指定武器 Mesh 重挂到 SocketName（空 / None / 默认挂点 → 复位默认）。
+	// 校验 Mesh 存在与骨骼 Socket 有效；失败返回 false 不改动。
+	bool SetWeaponAttachSocket(FGameplayTag WeaponTag, FName SocketName);
 
 	// ── 轨迹扫描状态 ────────────────────────────────────────
 	bool bTraceActive = false;

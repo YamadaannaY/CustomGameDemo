@@ -33,7 +33,8 @@ void UAN_WeaponVisibility::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenc
 		}
 		if (bShow)
 		{
-			WeaponComp->ShowWeaponEntry(WeaponTag);
+			// 显示时可指定挂点：选择该武器 AltAttachSockets 之一，空则复位默认挂点
+			WeaponComp->ShowWeaponEntryOnSocket(WeaponTag, WeaponDisplaySocketName);
 		}
 		else
 		{
@@ -62,6 +63,10 @@ FString UAN_WeaponVisibility::GetNotifyName_Implementation() const
 	case EWeaponVisibilityTarget::SingleWeapon:
 		if (WeaponTag.IsValid())
 		{
+			if (bShow && WeaponDisplaySocketName != NAME_None)
+			{
+				return FString::Printf(TEXT("%s %s [%s]"), *Action, *WeaponTag.GetTagName().ToString(), *WeaponDisplaySocketName.ToString());
+			}
 			return FString::Printf(TEXT("%s %s"), *Action, *WeaponTag.GetTagName().ToString());
 		}
 		return FString::Printf(TEXT("%s Weapon"), *Action);

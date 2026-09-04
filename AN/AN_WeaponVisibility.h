@@ -40,4 +40,9 @@ public:
 	// true = 显示，false = 隐藏
 	UPROPERTY(EditAnywhere, Category = "Weapon")
 	bool bShow = false;
+
+	// 显示时的挂点 Socket（仅 SingleWeapon + bShow=true 生效）。
+	// 填该武器 AltAttachSockets 之一 → 重挂到该挂点后显示；留空 → 使用该武器默认挂点(AttachSocketName)。
+	UPROPERTY(EditAnywhere, Category = "Weapon", meta = (EditCondition = "Target == EWeaponVisibilityTarget::SingleWeapon && bShow"))
+	FName WeaponDisplaySocketName;
 };

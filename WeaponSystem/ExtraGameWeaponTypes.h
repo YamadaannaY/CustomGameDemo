@@ -54,9 +54,16 @@ struct EXTRACTGAMECHARACTER_API FExtraGameWeaponEntry
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Visual")
 	TSoftObjectPtr<UStaticMesh> WeaponMesh;
 
-	// 绑定到的角色骨骼 Socket 名称（如 "hand_r_weapon"）
+	// 绑定到的角色骨骼 Socket 名称（如 "hand_r_weapon"）。
+	// 作为默认挂点：生成时挂载于此；重挂接口/AN 未指定 socket 时复位回此。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Visual")
 	FName AttachSocketName;
+
+	// 可选显示挂点（角色骨骼 Socket，不含默认 AttachSocketName）。
+	// 动画期间可用 AN_WeaponVisibility / ShowWeaponEntryOnSocket 把本武器重挂到其中某个并显示；
+	// 为空则本武器只有默认挂点。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Visual")
+	TArray<FName> AltAttachSockets;
 
 	// 相对 Socket 的偏移
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Visual")
@@ -70,6 +77,12 @@ struct EXTRACTGAMECHARACTER_API FExtraGameWeaponEntry
 	// 该武器的轨迹扫描配置（球半径 / 子步细分）
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
 	FExtraGameWeaponTraceConfig TraceConfig;
+
+	// 辅助：SocketName 是否属于本武器可用的显示挂点（默认 AttachSocketName 或 AltAttachSockets 之一）
+	bool IsDisplaySocket(const FName SocketName) const
+	{
+		return SocketName == AttachSocketName || AltAttachSockets.Contains(SocketName);
+	}
 };
 
 /**
