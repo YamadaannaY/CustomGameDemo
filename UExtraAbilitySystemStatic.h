@@ -31,6 +31,7 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Uninterruptible);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Uninterruptible_End);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(HeavyAttack_Shoot);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Area_Damage);
 
 /**
  * 
@@ -78,6 +79,10 @@ public:
 
 	// 通用武器碰撞伤害事件 Tag（武器扫描命中后发给 Owner，攻击 GA 基类统一监听）
 	static FGameplayTag GetAbilityDamageEventTag();     // "ability.damage"
+
+	// 范围伤害事件 Tag：启用 bEnableAreaDamage 的 GA 基类统一监听，
+	// Montage 伤害帧用 AN_SendGameplayEvent 触发一次，做以角色为中心的范围判定
+	static FGameplayTag GetAreaDamageTag();             // "ability.area.damage"
 
 	// 重击弓射：Montage 内各放箭帧 AN 触发一次本事件，GA 每收到一次生成一支箭
 	static FGameplayTag GetHeavyAttackShootTag();       // "ability.heavyattack.shoot"

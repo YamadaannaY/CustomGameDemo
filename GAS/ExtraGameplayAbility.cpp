@@ -2,10 +2,15 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "EngineUtils.h"
+#include "DrawDebugHelpers.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "MotionWarpingComponent.h"
+#include "ExtractGameCharacter/ExtraCharacter.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
+#include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 
@@ -112,6 +117,12 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 	if (bEnableWeaponDamage && K2_HasAuthority())
 	{
 		SetupDamageListener();
+	}
+
+	// 角色中心范围伤害：开启 bEnableAreaDamage 后，服务端监听范围伤害触发事件并做半径判定。
+	if (bEnableAreaDamage && K2_HasAuthority())
+	{
+		SetupAreaDamageListener();
 	}
 
 	// 重力缩放：激活时缓存引擎默认重力（仅首次）并应用 AbilityGravityScale，EndAbility 统一恢复默认。
@@ -273,6 +284,152 @@ void UExtraGameplayAbility::DoDamage(const FGameplayEventData& Data)
 	{
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
 		SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+	}
+}
+
+FGameplayTag UExtraGameplayAbility::GetAreaDamageTriggerTag() const
+{
+	return UUExtraAbilitySystemStatic::GetAreaDamageTag();
+}
+
+void UExtraGameplayAbility::SetupAreaDamageListener()
+{
+	// OnlyTriggerOnce=false：一段 Montage 内多个伤害帧（多个 AN）都要响应
+	UAbilityTask_WaitGameplayEvent* WaitAreaTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, GetAreaDamageTriggerTag(), nullptr, /*OnlyTriggerOnce*/ false, /*OnlyMatchExact*/ true);
+	WaitAreaTask->EventReceived.AddDynamic(this, &ThisClass::OnAreaDamageEventReceived);
+	WaitAreaTask->ReadyForActivation();
+}
+
+void UExtraGameplayAbility::OnAreaDamageEventReceived(FGameplayEventData Payload)
+{
+	PerformAreaDamage();
+}
+
+void UExtraGameplayAbility::PerformAreaDamage()
+{
+	// 伤害判定只在服务端执行
+	if (!K2_HasAuthority())
+	{
+		return;
+	}
+
+	AExtraCharacter* Char = Cast<AExtraCharacter>(GetAvatarActorFromActorInfo());
+	UWorld* World = GetWorld();
+	if (!Char || !World)
+	{
+		return;
+	}
+
+	const float Radius = AreaDamageRadius;
+	if (Radius <= 0.f)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ExtraGameplayAbility] PerformAreaDamage: AreaDamageRadius <= 0, skip."));
+		return;
+	}
+
+	const FVector Center = Char->GetActorLocation();
+
+	// 收集半径内敌方存活单位（与 HeavyAttack 时停判定同口径：不同 Team + Health>0）
+	TArray<AActor*> Targets;
+	for (TActorIterator<AExtraCharacter> It(World); It; ++It)
+	{
+		AExtraCharacter* Enemy = *It;
+		if (!Enemy || Enemy == Char)
+		{
+			continue;
+		}
+		if (Enemy->GetGenericTeamId() == Char->GetGenericTeamId())
+		{
+			continue;
+		}
+
+		const UAbilitySystemComponent* EnemyASC = Enemy->GetAbilitySystemComponent();
+		if (!EnemyASC || EnemyASC->GetNumericAttribute(UExtraGameAttributeSet::GetHealthAttribute()) <= 0.f)
+		{
+			continue;
+		}
+
+		if (FVector::DistSquared(Center, Enemy->GetActorLocation()) > FMath::Square(Radius))
+		{
+			continue;
+		}
+
+		Targets.Add(Enemy);
+	}
+
+	if (bShouldDrawDebug)
+	{
+		DrawAreaDamageDebug(Center, Targets);
+	}
+
+	if (Targets.Num() == 0)
+	{
+		return;
+	}
+
+	// 统一结算：包成 TargetData 交给基类 DoDamage，对所有目标应用同一个伤害 GE（GetDamageEffect 可选）
+	FGameplayAbilityTargetData_ActorArray* ActorArray = new FGameplayAbilityTargetData_ActorArray();
+	for (AActor* Target : Targets)
+	{
+		ActorArray->TargetActorArray.Add(Target);
+	}
+
+	FGameplayEventData EventData;
+	EventData.Instigator = Char;
+	EventData.TargetData.Add(ActorArray);
+	DoDamage(EventData);
+}
+
+void UExtraGameplayAbility::DrawAreaDamageDebug(const FVector& Center, const TArray<AActor*>& Targets)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const float Radius = FMath::Max(AreaDamageRadius, 1.f);
+	const float LifeTime = 2.f;
+	const FColor RangeColor = Targets.Num() > 0 ? FColor::Green : FColor::Red;
+
+	// 地面脚印圈：与实际判定同半径，俯视/平视即可目测波及范围
+	AExtraCharacter* Char = Cast<AExtraCharacter>(GetAvatarActorFromActorInfo());
+	FVector GroundCenter = Center;
+	if (Char && Char->GetCapsuleComponent())
+	{
+		GroundCenter.Z -= Char->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 2.f;
+	}
+
+	constexpr int32 Segments = 48;
+	FVector Prev = GroundCenter + FVector(Radius, 0.f, 0.f);
+	for (int32 i = 1; i <= Segments; ++i)
+	{
+		const float Angle = 2.f * PI * static_cast<float>(i) / static_cast<float>(Segments);
+		const FVector Curr = GroundCenter + FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.f);
+		DrawDebugLine(World, Prev, Curr, RangeColor, false, LifeTime);
+		Prev = Curr;
+	}
+
+	// 判定球体（实际 3D 检测体积）
+	DrawDebugSphere(World, Center, Radius, 16, RangeColor, false, LifeTime);
+
+	// 命中目标：连线 + 打点，直观看出这一圈到底打到谁
+	for (const AActor* Target : Targets)
+	{
+		if (!Target)
+		{
+			continue;
+		}
+		const FVector TargetLoc = Target->GetActorLocation();
+		DrawDebugLine(World, Center + FVector(0.f, 0.f, 20.f), TargetLoc + FVector(0.f, 0.f, 20.f), FColor::Orange, false, LifeTime);
+		DrawDebugSphere(World, TargetLoc, 25.f, 8, FColor::Orange, false, LifeTime);
+	}
+
+	if (GEngine)
+	{
+		const FString Msg = FString::Printf(TEXT("[AreaDamage] Radius=%.0f cm | EnemiesInRange=%d"), Radius, Targets.Num());
+		GEngine->AddOnScreenDebugMessage(-1, LifeTime, RangeColor, Msg);
 	}
 }
 

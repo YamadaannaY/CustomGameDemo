@@ -25,6 +25,13 @@ UGA_Burst01::UGA_Burst01()
 	ActivationRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetPhase1StateTag());
 
 	bEnableUninterruptible = true;
+
+	// Burst 不用武器轨迹碰撞：默认关闭武器伤害，改走「角色中心范围伤害」。
+	// Montage 想要的伤害帧各放一个 AN_SendGameplayEvent(ability.area.damage)，
+	// 每收到一次以角色为中心做半径检测，对范围内所有敌方单位统一结算伤害 GE。
+	bEnableWeaponDamage = false;
+	bEnableAreaDamage = true;
+	AreaDamageRadius = 1500.f;
 }
 
 void UGA_Burst01::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

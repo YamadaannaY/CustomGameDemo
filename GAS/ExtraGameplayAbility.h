@@ -199,13 +199,43 @@ protected:
 	// 子类如需追加独有逻辑（击飞/附加效果），先调用 Super::DoDamage(Data) 再补充。
 	virtual void DoDamage(const FGameplayEventData& Data);
 
+	// ── 角色中心范围伤害（事件帧驱动）─────────────────────
+	// 是否启用范围伤害：开启后服务端监听 GetAreaDamageTriggerTag() 的 GameplayEvent，
+	// Montage 伤害帧放一个 AN_SendGameplayEvent 触发一次范围判定（一个 AN = 一次）。
+	// 以角色为中心对半径内全部敌方存活单位统一应用 GetDamageEffect() 选出的伤害 GE，
+	// 与武器轨迹伤害（bEnableWeaponDamage）可并存/二选一，共用 DoDamage 结算。
+	UPROPERTY(EditDefaultsOnly, Category = "Area Damage")
+	bool bEnableAreaDamage = false;
+
+	// 范围检测半径（cm）。收到触发事件时若 <=0 仅告警不结算。
+	UPROPERTY(EditDefaultsOnly, Category = "Area Damage", meta = (ClampMin = "0.0", EditCondition = "bEnableAreaDamage"))
+	float AreaDamageRadius = 0.f;
+
+	// 范围 Debug：开启后 PerformAreaDamage 画「地面脚印圈(半径) + 判定球 + 命中连线/打点」，
+	// 并在屏幕打印当前半径与命中数——可直接目测范围大概有多大。GA 蓝图 Class Defaults 里勾选。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Debug")
+	bool bShouldDrawDebug = false;
+
+	// 范围伤害触发事件 Tag（默认通用 ability.area.damage；子类如需专属 Tag 可覆写）
+	virtual FGameplayTag GetAreaDamageTriggerTag() const;
+
+	// 以角色为中心收集半径内敌方存活单位并统一结算伤害（Debug 开启时附带可视化）。
+	// 内部事件回调调用；子类也可在无 Notify 的时机手动触发（注意只应权威端执行）。
+	void PerformAreaDamage();
+
+	// 内部：PreActivate 统一挂载范围伤害事件监听
+	void SetupAreaDamageListener();
+
+	// 内部：范围伤害事件回调，转发到 PerformAreaDamage
+	UFUNCTION()
+	void OnAreaDamageEventReceived(FGameplayEventData Payload);
+
+	// 内部：Debug 可视化（地面脚印圈 + 判定球 + 命中连线/打点 + 屏幕打印半径/命中数）
+	void DrawAreaDamageDebug(const FVector& Center, const TArray<AActor*>& Targets);
 
 	//获得AvatarCharacter，即Push对象
 	AExtraPlayerCharacter* GetOwningAvatarCharacter();
 private:
-	UPROPERTY(EditDefaultsOnly,Category="Debug")
-	bool bShouldDrawDebug=false;
-
 	// 武器伤害事件回调（动态委托目标，转发到 virtual DoDamage 供子类覆写）
 	UFUNCTION()
 	void OnDamageEventReceived(FGameplayEventData Data);

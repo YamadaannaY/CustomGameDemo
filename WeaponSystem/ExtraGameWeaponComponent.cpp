@@ -756,9 +756,10 @@ void UExtraGameWeaponComponent::ApplyWeaponGroupEffects(const FExtraGameWeaponGr
 		return;
 	}
 
-	// 构建 EffectContext
+	//EffectContext
 	FGameplayEffectContextHandle ContextHandle = OwnerASC->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
+	ContextHandle.AddInstigator(GetOwner(), GetOwner());
 
 	for (const TSubclassOf<UGameplayEffect>& EffectClass : Group.GrantedEffects)
 	{
