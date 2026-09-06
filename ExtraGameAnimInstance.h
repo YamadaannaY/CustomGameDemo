@@ -57,9 +57,9 @@ public:
 	UFUNCTION(BlueprintCallable,meta=(BlueprintThreadSafe))
 	FORCEINLINE bool bIsWalking() const {return  bisWalking;}
 	
-	//是否处于步行模式
+	//判断当前处于哪个移动模式，0为走路，1为跑步
 	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
-	FORCEINLINE int IsWalkMode() const {return bWalkMode== true ? 0 : 1;}
+	FORCEINLINE int GetMoveMode() const {return bWalkMode== true ? 0 : 1;}
 
 	// -- 延迟停步系统 --
 	

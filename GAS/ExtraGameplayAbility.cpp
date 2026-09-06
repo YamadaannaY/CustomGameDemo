@@ -88,6 +88,12 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		World->GetTimerManager().ClearTimer(LockOnWarpRefreshTimerHandle);
 	}
 
+	// 兜底移除已注册的锁定朝向 warp target，避免 GA 结束后残留（幂等）
+	if (Char && Char->GetMotionWarpingComponent())
+	{
+		Char->GetMotionWarpingComponent()->RemoveWarpTarget(LockOnWarpTargetName);
+	}
+
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
@@ -561,9 +567,17 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 	}
 
 	UMotionWarpingComponent* MWC = PlayerChar->GetMotionWarpingComponent();
-	const AActor* LockTarget = PlayerChar->GetLockTarget();
-	if (!MWC || !LockTarget)
+	if (!MWC)
 	{
+		return;
+	}
+
+	// 目标丢失/超出锁定范围：移除已注册的 warp target，使动画 MR 区间不再强转朝向旧目标。
+	// 下一 tick 若重新锁定到目标，会再次走下方 AddOrUpdate 自动恢复转向。
+	const AActor* LockTarget = PlayerChar->GetLockTarget();
+	if (!LockTarget)
+	{
+		MWC->RemoveWarpTarget(LockOnWarpTargetName);
 		return;
 	}
 
