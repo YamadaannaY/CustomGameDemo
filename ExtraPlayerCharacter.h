@@ -190,7 +190,8 @@ private:
 	UPROPERTY(EditDefaultsOnly,Category="View|Zoom")
 	float ZoomLerpSpeed=10.f;
 
-	// 输入方向平滑速度，值越大转向响应越快
+	// [Deprecated] 输入方向角度插值已随转向收归 ExtraGameMovementComponent（角度差自适应速率）移除，
+	// 字段保留以防编辑器默认配置覆盖引用丢失，不再参与运行逻辑。
 	UPROPERTY(EditDefaultsOnly, Category="Movement", meta=(ClampMin="1.0"))
 	float InputDirectionInterpSpeed = 12.f;
 
@@ -234,9 +235,6 @@ private:
 	// 停步/转身 montage 结束（正常播完或被打断）回调
 	UFUNCTION()
 	void OnStopMontageEnded(UAnimMontage* Montage, bool bInterrupted);
-
-	// 平滑后的输入方向（逐帧 VInterpTo 插值），用于 AddMovementInput
-	FVector SmoothedInputDirection = FVector::ZeroVector;
 
 	FVector InputDirection;
 
