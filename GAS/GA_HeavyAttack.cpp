@@ -43,7 +43,7 @@ void UGA_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	// 重击成功激活，消耗已打满的 3 层计数（清零后需重新打满 3 次连段才能再重击）
+	// 重击成功激活，消耗打满的被动计数（清零后需重新打满连段才能再重击）
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetComboCountAttribute(), 0.f);

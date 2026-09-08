@@ -24,6 +24,10 @@ public:
 	// 无 Controller，主动初始化 GAS；跳过武器组件装备（木桩不配 WeaponDataAsset）
 	virtual void ServerSideInit() override;
 
+	// 血量归零时是否立即回满。训练/调试用「不死」开关，在 AI 蓝图子类 Class Defaults 里可开可关。
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Combat")
+	bool bRefillHealthOnZero = true;
+
 protected:
 	virtual void BeginPlay() override;
 

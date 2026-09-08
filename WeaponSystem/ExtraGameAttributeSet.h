@@ -90,6 +90,9 @@ protected:
 	
 	
 	bool bProcessingShieldAbsorption=false;
+	
+	UPROPERTY(EditDefaultsOnly,Category="Attributes|Regen")
+	TSubclassOf<UGameplayEffect> HealthReFillEffect;
 };
 
 // DataTable 行结构：每个 Actor 类对应一行初始属性值

@@ -37,6 +37,8 @@ public:
 	FORCEINLINE bool HasForwardInput() const { return bHasMoveInput && ForwardDirectionInput > 0.f; }
 	FORCEINLINE bool HasMoveInput() const { return bHasMoveInput; }
 	FORCEINLINE float GetRightDirectionInput() const { return RightDirectionInput; }
+	
+	//获取当前输入相对于摄像机视角的方向
 	FORCEINLINE const FVector& GetInputDirection() const { return InputDirection; }
 	FORCEINLINE bool IsMovementInputLocked() const { return bMovementInputLocked; }
 

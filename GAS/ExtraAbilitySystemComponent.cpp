@@ -63,8 +63,7 @@ void UExtraAbilitySystemComponent::InitializeAttributeFromDataTable(UExtraGameAt
 		{
 			continue;
 		}
-
-		// 计算当前角色类到该行 CharacterClass 的继承距离（0 = 精确匹配）
+		
 		int32 Distance = 0;
 		const UClass* Cur = OwnerClass;
 		while (Cur && Cur != Row->CharacterClass)

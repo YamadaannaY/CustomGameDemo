@@ -176,8 +176,10 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 
 	if (Controller != nullptr)
 	{
+		//以摄像机旋转为前方向
 		const FRotator YawRot(0.f, Controller->GetControlRotation().Yaw, 0.f);
 
+		//Vector2D中X为前后，Y为右左，是平面坐标系
 		ForwardDirectionInput = InputVal.Y;
 		RightDirectionInput = InputVal.X;
 
@@ -186,11 +188,15 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		// 最新的剩余角度差（转向到位→小角度→急停；快速反向还没转到位→大角度→转身 montage）。
 		
 		CalculateTargetDelta(ForwardDirectionInput, RightDirectionInput);
+		
+		//EAxis中X为前Y为右Z为上，是世界坐标轴
 		const FVector Forward = FRotationMatrix(YawRot).GetUnitAxis(EAxis::X);
 		const FVector Right = FRotationMatrix(YawRot).GetUnitAxis(EAxis::Y);
 
-		FVector RawInputWorld = (Forward * ForwardDirectionInput + Right * RightDirectionInput);
-		float InputMagnitude = RawInputWorld.Size();
+		//获得输入向量及其数值
+		
+		const FVector RawInputWorld = (Forward * ForwardDirectionInput + Right * RightDirectionInput);
+		const float InputMagnitude = RawInputWorld.Size();
 
 		if (InputMagnitude < KINDA_SMALL_NUMBER)
 		{
@@ -199,10 +205,12 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 			return;
 		}
 
-		FVector RawInputDir = RawInputWorld / InputMagnitude;
+		//获取输入方向
+		const FVector RawInputDir = RawInputWorld / InputMagnitude;
 
 		if (SmoothedInputDirection.IsNearlyZero())
 		{
+			//第一帧
 			SmoothedInputDirection = RawInputDir;
 		}
 		else
@@ -214,9 +222,12 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 			const float TargetYaw = RawInputDir.Rotation().Yaw;
 			const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentYaw, TargetYaw);
 			const float StepYaw = DeltaYaw * FMath::Clamp(DeltaTime * InputDirectionInterpSpeed, 0.f, 1.f);
+			
+			//获得每一帧的当前Input方向
 			SmoothedInputDirection = FRotationMatrix(FRotator(0.f, CurrentYaw + StepYaw, 0.f)).GetUnitAxis(EAxis::X);
 		}
 
+		//封装为函数供其他功能使用
 		InputDirection = SmoothedInputDirection;
 
 		AddMovementInput(SmoothedInputDirection, FMath::Min(InputMagnitude, 1.0f));

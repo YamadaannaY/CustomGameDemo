@@ -232,7 +232,7 @@ void UExtraGameplayAbility::SetupDamageListener()
 {
 	// OnlyTriggerOnce=false：一个攻击窗口命中多个目标、或一个蒙太奇含多个窗口时都要响应
 	UAbilityTask_WaitGameplayEvent* WaitDamageTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, GetDamageEventTag(), nullptr, /*OnlyTriggerOnce*/ false, /*OnlyMatchExact*/ true);
+		this, GetDamageEventTag(), nullptr,false,true);
 	WaitDamageTask->EventReceived.AddDynamic(this, &ThisClass::OnDamageEventReceived);
 	WaitDamageTask->ReadyForActivation();
 }
@@ -302,7 +302,7 @@ void UExtraGameplayAbility::SetupAreaDamageListener()
 {
 	// OnlyTriggerOnce=false：一段 Montage 内多个伤害帧（多个 AN）都要响应
 	UAbilityTask_WaitGameplayEvent* WaitAreaTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, GetAreaDamageTriggerTag(), nullptr, /*OnlyTriggerOnce*/ false, /*OnlyMatchExact*/ true);
+		this, GetAreaDamageTriggerTag(), nullptr,false,true);
 	WaitAreaTask->EventReceived.AddDynamic(this, &ThisClass::OnAreaDamageEventReceived);
 	WaitAreaTask->ReadyForActivation();
 }

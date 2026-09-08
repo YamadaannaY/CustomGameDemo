@@ -1,6 +1,7 @@
 // Copyright Yu. All Rights Reserved.
 
 #include "ExtraGameAttributeSet.h"
+#include "ExtractGameCharacter/AI/ExtraAICharacter.h"
 #include "GameplayEffectTypes.h"
 #include "GameplayEffectExtension.h"
 #include "Net/UnrealNetwork.h"
@@ -79,6 +80,20 @@ void UExtraGameAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModC
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
 		SetHealth(FMath::Clamp(GetHealth(), 0.f, GetMaxHealth()));
+		if (GetHealth() == 0.f)
+		{
+			// AI 不死开关：血量归零瞬间按所属 AI 角色的蓝图配置回满
+			if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
+			{
+				if (const AExtraAICharacter* AIChar = Cast<AExtraAICharacter>(ASC->GetOwnerActor()))
+				{
+					if (AIChar->bRefillHealthOnZero)
+					{
+						SetHealth(GetMaxHealth());
+					}
+				}
+			}
+		}
 	}
 	else if (Data.EvaluatedData.Attribute == GetStaminaAttribute())
 	{
