@@ -20,7 +20,7 @@ UGA_Evade::UGA_Evade()
 	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
 
-	// 不可打断Tag存在期间（SkillGA 表现段）不可激活；后摇段放开后，激活时取消 SkillGA 打断其后摇。
+ // 不可打断Tag存在期间（SkillGA 表现段）不可激活；后摇段放开后，激活时SkillGA 打断其后摇。
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 
 	// 通过 InputTag 触发
@@ -47,17 +47,20 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	// 以角色朝向为"前"判定前/后 Evade：
+	// 以「是否有移动输入」判定前/后 Evade：
+	// 无输入 → 原地后闪（Backward）；有输入 → 一律前闪（Forward），
+	// 由下方 ApplyEvadeFacingWarp 用 MW 把角色快速扭转到输入方向，无论该方向相对当前朝向夹角多大。
 	const bool bAirborne = AvatarChar->GetCharacterMovement()->IsFalling();
 	AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(AvatarChar);
 
-	bool bBackwardInput = true;
-	if (PlayerChar && PlayerChar->HasMoveInput())
+	bool bBackwardInput = !(PlayerChar && PlayerChar->HasMoveInput());
+	if (!bBackwardInput)
 	{
+		// 有输入标志但方向向量尚未就绪（平滑首帧/归零边缘），兜底为原地后闪
 		const FVector& InputDir = PlayerChar->GetInputDirection();
-		if (!InputDir.IsNearlyZero())
+		if (InputDir.IsNearlyZero())
 		{
-			bBackwardInput = FVector::DotProduct(AvatarChar->GetActorForwardVector(), InputDir) < 0.f;
+			bBackwardInput = true;
 		}
 	}
 
@@ -80,7 +83,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	bAirborne == true ? DodgeCount = 2 : DodgeCount = 1;
 	CurrentEvadeFacingOffset = 0.f;
 
-	// 空中 Evade：消耗一次空中闪避预算（预算可用性已在 CanActivateAbility 校验）
+	// 空中 Evade：消耗一次空中闪避预算（CanActivateAbility 校验）
 	if (bAirborne && PlayerChar)
 	{
 		PlayerChar->ConsumeAirEvade();
@@ -96,11 +99,11 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	//播放Montage
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
-		AExtraPlayerCharacter* PC = Cast<AExtraPlayerCharacter>(AvatarChar);
-\
-		if (PC && bPlayingForwardEvade)
+		const AExtraPlayerCharacter* Char = Cast<AExtraPlayerCharacter>(AvatarChar);
+
+		if (Char && bPlayingForwardEvade)
 		{
-			const FVector& InitInput = PC->GetInputDirection();
+			const FVector& InitInput = Char->GetInputDirection();
 			if (InitInput.IsNearlyZero())
 			{
 				EvadeBaseYaw = AvatarChar->GetActorRotation().Yaw;
@@ -110,7 +113,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 				EvadeBaseYaw = FRotationMatrix::MakeFromX(InitInput).Rotator().Yaw;
 			}
 
-			ApplyEvadeFacingWarp(PC);
+			ApplyEvadeFacingWarp(Char);
 		}
 
 		PlayEvadeMontage();
@@ -122,16 +125,16 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		// 监听第二次 Dodge 输入：第0帧~EvadeToSprint 期间可再闪避一次。
 		// 空中 Evade 一次只闪一次：空中闪避次数由本次浮空的预算管理（见 AExtraPlayerCharacter），
 		// 想再次闪避应通过空中攻击恢复预算后重新激活 GA，故空中不挂此监听。
-		// 必须延迟到下一帧再挂载监听，否则输入直接触发此InputTask
+		// 延迟到下一帧再挂载监听，否则输入直接触发此InputTask导致一次函数调用
 		if (!bAirborne)
 		{
 			GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ThisClass::SetupWaitDodgeInputPress);
 		}
 
 		// 播放期间每帧按当前输入在基准 ±EvadeMaxRotationAngle 内插值微调朝向（初始 target 已在 Montage 开播前写入）
-		if (PC && bPlayingForwardEvade)
+		if (Char && bPlayingForwardEvade)
 		{
-			GetWorld()->GetTimerManager().SetTimer(EvadeFacingTimer, this, &UGA_Evade::UpdateEvadeFacing, EvadeFacingUpdateInterval, true);
+			GetWorld()->GetTimerManager().SetTimer(EvadeFacingTimer, this, &UGA_Evade::UpdateEvadeFacing, GetWorld()->GetDeltaSeconds(), true);
 		}
 	}
 }
@@ -198,7 +201,7 @@ void UGA_Evade::SetupWaitDodgeInputPress()
 
 void UGA_Evade::HandleDodgeInputPress(FGameplayEventData EventData)
 {
-	// 与 GA_Combo 一致：先重新挂载监听，形成循环接收后续输入，再由次数守卫决定是否响应
+	// 与 GA_Combo 逻辑一致：先重新监听下一次输入，形成循环，再由次数守卫决定是否响应
 	SetupWaitDodgeInputPress();
 
 	// 仅在第0帧~EvadeToSprint 通知期间响应，且次数未用尽
@@ -259,14 +262,14 @@ void UGA_Evade::UpdateEvadeFacing()
 
 		// 以 EvadeBaseYaw 为"前"，计算输入方向在左右轴上的投影
 		const FVector EvadeRight = FRotationMatrix(FRotator(0.f, EvadeBaseYaw, 0.f)).GetUnitAxis(EAxis::Y);
-
 		const float RawRight = FVector::DotProduct(InputDir, EvadeRight);
-		float TargetYaw = EvadeBaseYaw + FMath::Clamp(RawRight, -1.f, 1.f) * EvadeMaxRotationAngle;
+		
+		const float TargetYaw = EvadeBaseYaw + FMath::Clamp(RawRight, -1.f, 1.f) * EvadeMaxRotationAngle;
 
 		return FMath::FindDeltaAngleDegrees(EvadeBaseYaw, TargetYaw);
 	}();
 
-	CurrentEvadeFacingOffset = FMath::FInterpTo(CurrentEvadeFacingOffset, TargetOffset, EvadeFacingUpdateInterval, EvadeRotationInterpSpeed);
+	CurrentEvadeFacingOffset = FMath::FInterpTo(CurrentEvadeFacingOffset, TargetOffset, GetWorld()->GetDeltaSeconds(), EvadeRotationInterpSpeed);
 
 	ApplyEvadeFacingWarp(PlayerChar);
 }
@@ -371,7 +374,8 @@ void UGA_Evade::PollMoveInputForSprint()
 void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
-	if (MaxDodgeTriggerCooldownEffect && DodgeCount>=MaxDodgeCount)
+	//地面使用了连续Evade机制时应用一个冷却GE
+	if (MaxDodgeTriggerCooldownEffect && DodgeCount>=MaxDodgeCount && !bAirborneEvade)
 	{
 		if (!K2_HasAuthority())
 		{

@@ -56,11 +56,7 @@ private:
 	
 	UPROPERTY(EditDefaultsOnly, Category="Montage")
 	float InputPollInterval = 0.05f;
-
-	//AN 触发之前，MotionWarp左右输入调整朝向的应用间隔
-	UPROPERTY(EditDefaultsOnly, Category="Evade|Facing")
-	float EvadeFacingUpdateInterval = 0.016f;
-
+	
 	//左右输入调整朝向可以达到的最大角度
 	UPROPERTY(EditDefaultsOnly, Category="Evade|Facing")
 	float EvadeMaxRotationAngle = 90.f;
@@ -103,7 +99,7 @@ private:
 
 	// 本次激活已发生的闪避次数（每重播一次 +1，达到 MaxDodgeCount 后不再响应）
 	int32 DodgeCount = 0;
-	// EvadeToSprint 通知已触发：此后不再响应再次闪避
+	// EvadeToSprint 通知已触发：此动画帧开始不再响应再次闪避
 	bool bEvadeToSprintTriggered = false;
 	
 	UPROPERTY(EditDefaultsOnly, Category="Cooldown")
