@@ -62,8 +62,7 @@ void AExtraPlayerCharacter::Tick(float DeltaTime)
 	const float TargetMaxSpeed = bIsSprinting
 		? SprintSpeed
 		: (bWalkMode ? WalkSpeed : RunSpeed);
-	GetCharacterMovement()->MaxWalkSpeed = FMath::FInterpTo(
-		GetCharacterMovement()->MaxWalkSpeed, TargetMaxSpeed, DeltaTime, 5.f);
+	GetCharacterMovement()->MaxWalkSpeed = FMath::FInterpTo(GetCharacterMovement()->MaxWalkSpeed, TargetMaxSpeed, DeltaTime, 5.f);
 
 	// 维护空中状态的 GameplayTag
 	if (AbilitySystemComponent)
@@ -228,12 +227,21 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	RightDirectionInput = 0.f;
 	InputDirection = FVector::ZeroVector;
 	
-	// 只在普通跑步时才响应松手停步，避免干扰 Evade / QuickStop / Turn 等 Montage
+	// 仅在仍有非停步类 Montage（Evade / 攻击等）播放时才跳过松手停步，避免松手去打断战斗动作。
+	// 不能用 IsAnyMontagePlaying() 判断：它等价于 MontageInstances.Num()>0，
+	// 被本次按下打断、正处 BlendOut 的停步 Montage 仍留在实例数组中会使其返回 true，
+	// 导致快速连点变向时松手若落在此BlendOut窗口内会被直接吞掉，无法重新触发快速停步。
 	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
 	{
-		if (AnimInst->IsAnyMontagePlaying())
+		if (UAnimMontage* ActiveMontage = AnimInst->GetCurrentActiveMontage())
 		{
-			return;
+			if (ActiveMontage != QuickLeftStopMontage &&
+				ActiveMontage != QuickRightStopMontage &&
+				ActiveMontage != TurnLeft90Montage &&
+				ActiveMontage != TurnRight90Montage)
+			{
+				return;
+			}
 		}
 	}
 
@@ -372,8 +380,6 @@ void AExtraPlayerCharacter::TickArmLengthLerp(float Goal)
 
 void AExtraPlayerCharacter::PlayQuickStopMontage()
 {
-	// TargetDelta == 0 时角色朝向已与输入方向对齐（急停后静止、再朝原方向短输入最典型），
-	// 左右急停无差别，用 <= 兜底到左停，避免两个分支都不进导致静默失败、无法再次触发急停。
 	UAnimMontage* MontageToPlay = (TargetDelta <= 0.f) ? QuickLeftStopMontage : QuickRightStopMontage;
 	if (!MontageToPlay)
 	{
@@ -427,7 +433,6 @@ void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
 	PlayAnimMontage(MontageToPlay);
 
 	// 转身 montage 结束（播完/被打断）时清零停步请求与残留速度，
-	// 否则 StopMoveInput 里先 RequestStop() 锁的速度会在 montage 播完后残留，导致 idle 滑行。
 	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
 	{
 		AnimInst->OnMontageEnded.RemoveAll(this);
@@ -449,11 +454,12 @@ void AExtraPlayerCharacter::OnStopMontageEnded(UAnimMontage* Montage, bool bInte
 	{
 		AI->ClearStopRequest();
 
+		/*
 		// 清零残留速度防止停步/转身 montage 播完后角色仍滑行
 		if (UCharacterMovementComponent* CMC = GetCharacterMovement())
 		{
 			CMC->Velocity = FVector::ZeroVector;
-		}
+		}*/
 	}
 }
 

@@ -189,16 +189,10 @@ private:
 	//缩放的Lerp速度
 	UPROPERTY(EditDefaultsOnly,Category="View|Zoom")
 	float ZoomLerpSpeed=10.f;
-
-	// [Deprecated] 输入方向角度插值已随转向收归 ExtraGameMovementComponent（角度差自适应速率）移除，
-	// 字段保留以防编辑器默认配置覆盖引用丢失，不再参与运行逻辑。
-	UPROPERTY(EditDefaultsOnly, Category="Movement", meta=(ClampMin="1.0"))
-	float InputDirectionInterpSpeed = 12.f;
-
-
+	
 	FTimerHandle ArmLengthLerpTimerHandle;
 
-	float TargetArmLength;
+	float TargetArmLength = 0.f;
 
 	void Move(const FInputActionValue& InputActionValue);
 	void StopMoveInput(const FInputActionValue& InputActionValue);
