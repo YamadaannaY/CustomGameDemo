@@ -4,6 +4,7 @@
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "AbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 
@@ -24,6 +25,10 @@ UGA_Burst01::UGA_Burst01()
 	// 从而避免"运行时把自己所在的武器组卸掉导致自杀"的矛盾。
 	ActivationRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetPhase1StateTag());
 
+	// 大招必须先完成一次「满足段数」的重击：
+	// GA_HeavyAttack 在打满 ComboCount 的重击成功激活时置位 State.BurstReady，激活时消费移除。
+	ActivationRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetBurstReadyTag());
+
 	bEnableUninterruptible = true;
 
 	// Burst 不用武器轨迹碰撞：默认关闭武器伤害，改走「角色中心范围伤害」。
@@ -40,6 +45,12 @@ void UGA_Burst01::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const
 	UE_LOG(LogTemp,Warning,TEXT("[GA_Burst01] : The GA has been activated"));
 
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+
+	// 大招已触发：消费「满段重击」解锁状态，需重新满段重击才能再次释放
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->RemoveLooseGameplayTag(UUExtraAbilitySystemStatic::GetBurstReadyTag());
+	}
 
 	// 激活即切第二形态：整段开大 Montage 都用第二阶段武器组演出。
 	// 本 GA spec 常驻 Innate、不在武器组的 ActiveAbilityHandles 里，

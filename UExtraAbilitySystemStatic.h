@@ -11,6 +11,7 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_BasicAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Dodge);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Airborne);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Phase1);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_BurstReady);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_LightAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_HeavyAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Skill);
@@ -51,6 +52,10 @@ public:
 	// 形态状态 Tag：GA_Burst01 等"第一形态专属大招"以它做 ActivationRequiredTags 门控，
 	// 对应武器组把 State.Phase1 放进 AdditionalTags，切到第二形态(Phase2 组)后 tag 移除→大招自然失效
 	static FGameplayTag GetPhase1StateTag();
+
+	// 大招解锁状态 Tag：一次「满足段数(打满 ComboCount)」的重击成功激活时置位；
+	// GA_Burst01 以它做 ActivationRequiredTags 门控，激活时消费移除 → 需重新满段重击才能再放大招。
+	static FGameplayTag GetBurstReadyTag();
 	static FGameplayTag GetSkill01Tag();
 	static FGameplayTag GetBurst01Tag();
 	static FGameplayTag GetBurstChangeStateTag();

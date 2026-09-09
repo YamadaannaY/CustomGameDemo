@@ -3,6 +3,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
@@ -43,9 +44,28 @@ void UGA_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	// 重击成功激活，消耗打满的被动计数（清零后需重新打满连段才能再重击）
+	// 重击成功激活。若此前轻击已「打满」ComboCount（达到要求段数），本次即是一次满足段数的重击：
+	// 置位大招解锁 tag（GA_Burst01 以它为 ActivationRequiredTags 门控，激活时消费移除）。
+	// 计数需在清零前读取；tag 仅在未置位时添加，避免多次满段重击把 loose tag 引用计数叠高。
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
+		const float CurrentComboCount = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
+
+		const AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
+		const float RequiredComboCount = PlayerCharacter ? PlayerCharacter->GetHeavyComboCount() : 3.f;
+		if (CurrentComboCount >= RequiredComboCount && ASC->GetTagCount(UUExtraAbilitySystemStatic::GetBurstReadyTag()) == 0)
+		{
+			ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetBurstReadyTag());
+
+			// Debug：满段重击达成 → 大招解锁，屏幕打印提示
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green,
+					TEXT("Burst 可激活：已达成满段重击"));
+			}
+		}
+
+		// 重击成功激活，消耗打满的被动计数（清零后需重新打满连段才能再重击）
 		ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetComboCountAttribute(), 0.f);
 	}
 
