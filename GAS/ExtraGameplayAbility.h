@@ -59,11 +59,14 @@ protected:
 
 	// 是否启用移动打断机制（开启此项后，使用ability.cancel可以提前结束GA）。
 	// 只需在子类构造函数中置 true，基类会在 PreActivate 自动挂载监听，无需在 ActivateAbility 里手动调用。
-	UPROPERTY(EditDefaultsOnly, Category = "Movement Cancel")
+	UPROPERTY(EditDefaultsOnly, Category = "Movement | Cancel")
 	bool bEnableMovementCancel = false;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Movement Cancel")
+	UPROPERTY(EditDefaultsOnly, Category = "Movement | Cancel")
 	float MontageCancelBlendOutTime = 0.3f ;
+	
+	UPROPERTY(EditDefaultsOnly,Category= "MoveMent | MotionWarp")
+	float MotionWarpMaxMoveDist = 150.f  ; 
 
 	// 是否启用重力缩放：开启后，GA 激活时把角色移动组件的 GravityScale 设为 AbilityGravityScale，
 	// EndAbility 时自动恢复为激活前的原始值。与 bEnableMovementCancel 一样在 PreActivate 统一处理。

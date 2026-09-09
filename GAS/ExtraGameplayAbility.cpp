@@ -13,6 +13,7 @@
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "ExtractGameCharacter/LockOn/ULockOnComponent.h"
 
 UExtraGameplayAbility::UExtraGameplayAbility()
 {
@@ -588,10 +589,20 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 	{
 		return;
 	}
+	
+	
+	// 有限MW追踪：距离不超过上限时 warp 落点在目标身上；超出时把落点钳制到自身朝目标的
+	// MotionWarpMaxMoveDist 处，避免动画强制位移超出设定距离。
+	FVector WarpLocation = LockTarget->GetActorLocation();
+	float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation() , PlayerChar->GetActorLocation());
+	if (DistanceToTarget > MotionWarpMaxMoveDist)
+	{
+		WarpLocation = PlayerChar->GetActorLocation() + FlatDir.GetSafeNormal() * MotionWarpMaxMoveDist;
+	}
 
 	FMotionWarpingTarget WarpTarget;
 	WarpTarget.Name = LockOnWarpTargetName;
-	WarpTarget.Location = PlayerChar->GetActorLocation();
+	WarpTarget.Location = WarpLocation;
 	WarpTarget.Rotation = FRotationMatrix::MakeFromX(FlatDir).Rotator();
 
 	MWC->AddOrUpdateWarpTarget(WarpTarget);
