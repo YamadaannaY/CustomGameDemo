@@ -49,6 +49,12 @@ private:
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> PlayEvadeMontageTask;
 
 	void PollMoveInputForSprint();
+
+	// 依据当前移动输入重新选择本次闪避 montage（前冲需带输入，无输入为原地后闪）并写入朝向/MW target。
+	// 首次激活与二次闪避共用：二次闪避不再锁定触发时的 montage，而是重新按当前输入判定与转向。
+	// 返回 false 表示无可用 montage（不改动当前状态）。
+	bool ReselectEvade(bool bAirborne);
+
 	void UpdateEvadeFacing();
 
 	// 将当前 EvadeBaseYaw + CurrentEvadeFacingOffset 写入 MotionWarp target。

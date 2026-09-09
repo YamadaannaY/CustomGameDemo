@@ -47,34 +47,8 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	// 以「是否有移动输入」判定前/后 Evade：
-	// 无输入 → 原地后闪（Backward）；有输入 → 一律前闪（Forward），
-	// 由下方 ApplyEvadeFacingWarp 用 MW 把角色快速扭转到输入方向，无论该方向相对当前朝向夹角多大。
 	const bool bAirborne = AvatarChar->GetCharacterMovement()->IsFalling();
 	AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(AvatarChar);
-
-	bool bBackwardInput = !(PlayerChar && PlayerChar->HasMoveInput());
-	if (!bBackwardInput)
-	{
-		// 有输入标志但方向向量尚未就绪（平滑首帧/归零边缘），兜底为原地后闪
-		const FVector& InputDir = PlayerChar->GetInputDirection();
-		if (InputDir.IsNearlyZero())
-		{
-			bBackwardInput = true;
-		}
-	}
-
-	const bool bForwardInput = !bBackwardInput;
-
-	bPlayingForwardEvade = bForwardInput;
-	CurrentPlayingMontage = bAirborne
-		? (bForwardInput ? ForwardAirEvadeMontage : BackwardAirEvadeMontage)
-		: (bForwardInput ? ForwardEvadeMontage : BackwardEvadeMontage);
-	if (!CurrentPlayingMontage)
-	{
-		K2_EndAbility();
-		return;
-	}
 
 	//init
 	bTransitionedToSprint = false;
@@ -82,6 +56,15 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	bEvadeToSprintTriggered = false;
 	bAirborne == true ? DodgeCount = 2 : DodgeCount = 1;
 	CurrentEvadeFacingOffset = 0.f;
+
+	// 每次闪避动作（首次激活 / 二次闪避）都基于当前输入重新选择 montage：
+	// 无输入 → 原地后闪；任意方向输入 → 前冲并 MW 快速扭转到输入方向。
+	// 置于空中消耗预算之前，保证 montage 缺失时提前结束、不吞空中预算。
+	if (!ReselectEvade(bAirborne))
+	{
+		K2_EndAbility();
+		return;
+	}
 
 	// 空中 Evade：消耗一次空中闪避预算（CanActivateAbility 校验）
 	if (bAirborne && PlayerChar)
@@ -99,23 +82,6 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	//播放Montage
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
-		const AExtraPlayerCharacter* Char = Cast<AExtraPlayerCharacter>(AvatarChar);
-
-		if (Char && bPlayingForwardEvade)
-		{
-			const FVector& InitInput = Char->GetInputDirection();
-			if (InitInput.IsNearlyZero())
-			{
-				EvadeBaseYaw = AvatarChar->GetActorRotation().Yaw;
-			}
-			else
-			{
-				EvadeBaseYaw = FRotationMatrix::MakeFromX(InitInput).Rotator().Yaw;
-			}
-
-			ApplyEvadeFacingWarp(Char);
-		}
-
 		PlayEvadeMontage();
 
 		UAbilityTask_WaitGameplayEvent* WaitToSprintTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, UUExtraAbilitySystemStatic::GetEvadeToSprintTag());
@@ -132,7 +98,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		}
 
 		// 播放期间每帧按当前输入在基准 ±EvadeMaxRotationAngle 内插值微调朝向（初始 target 已在 Montage 开播前写入）
-		if (Char && bPlayingForwardEvade)
+		if (bPlayingForwardEvade)
 		{
 			GetWorld()->GetTimerManager().SetTimer(EvadeFacingTimer, this, &UGA_Evade::UpdateEvadeFacing, GetWorld()->GetDeltaSeconds(), true);
 		}
@@ -161,6 +127,35 @@ bool UGA_Evade::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 			}
 		}
 	}
+	return true;
+}
+
+bool UGA_Evade::ReselectEvade(bool bAirborne)
+{
+	AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
+
+	// 前冲闪避需要有效移动输入；无输入（或输入方向尚未就绪）→ 原地后闪
+	const bool bForward = PlayerChar && PlayerChar->HasMoveInput() && !PlayerChar->GetInputDirection().IsNearlyZero();
+
+	UAnimMontage* NewMontage = bAirborne
+		? (bForward ? ForwardAirEvadeMontage : BackwardAirEvadeMontage)
+		: (bForward ? ForwardEvadeMontage : BackwardEvadeMontage);
+	if (!NewMontage)
+	{
+		return false;
+	}
+
+	bPlayingForwardEvade = bForward;
+	CurrentPlayingMontage = NewMontage;
+	CurrentEvadeFacingOffset = 0.f;
+
+	if (bForward)
+	{
+		// 朝向基准取当前输入方向，MW 将角色从当前朝向快速扭转至此方向
+		EvadeBaseYaw = FRotationMatrix::MakeFromX(PlayerChar->GetInputDirection()).Rotator().Yaw;
+		ApplyEvadeFacingWarp(PlayerChar);
+	}
+
 	return true;
 }
 
@@ -228,6 +223,27 @@ void UGA_Evade::HandleDodgeInputPress(FGameplayEventData EventData)
 	}
 
 	DodgeCount++;
+
+	// 二次闪避与首次一致：基于此刻的移动输入重新选择 montage 与转向方向，
+	// 而不是复用本次激活触发时锁定的 montage（原地后闪与输入转向各自独立，均不继承上一次朝向基准）。
+	if (!ReselectEvade(bAirborneEvade))
+	{
+		// 防御：当前无可用 montage，回滚计数并保持正在播放的闪避动画继续
+		DodgeCount--;
+		return;
+	}
+
+	// 让朝向微调 timer 与本次选择保持一致：
+	// 前冲 → 刷新 timer 持续按当前输入微调朝向；原地后闪 → 停掉，避免残留 MW target 干扰后撤闪避
+	if (bPlayingForwardEvade)
+	{
+		GetWorld()->GetTimerManager().SetTimer(EvadeFacingTimer, this, &UGA_Evade::UpdateEvadeFacing, GetWorld()->GetDeltaSeconds(), true);
+	}
+	else
+	{
+		GetWorld()->GetTimerManager().ClearTimer(EvadeFacingTimer);
+	}
+
 	PlayEvadeMontage();
 }
 
