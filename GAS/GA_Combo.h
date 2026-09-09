@@ -5,7 +5,9 @@
 #include "GA_Combo.generated.h"
 
 /**
- * 普攻GA，连段Montage(多段Section，利用SectionName进行跳转)
+ * 普攻连段GA父类：多段 Section 以 SectionName 跳转推进。
+ * 默认手动节奏：进入下一段变更帧只记录 NextComboName，等下一次攻击输入再推进；
+ * 「仍按住攻击键则自动续段」不下沉在此，由派生类（UGA_ComboHeavy）覆写 OnComboSectionChanged 开启。
  */
 UCLASS()
 class  EXTRACTGAMECHARACTER_API UGA_Combo : public UExtraGameplayAbility
@@ -21,6 +23,24 @@ public:
 	//获得ComboChange下的endTag
 	static FGameplayTag GetComboChangedEventEndTag();
 
+protected:
+	// 输入后，若 NextComboName 存在则推进到该 Section（手动点击推进；自动续段路径也复用它）
+	void TryCommitCombo();
+
+	// 进入下一段 Section 的虚钩子（调用时 NextComboName 已记录完毕）。默认空实现 = 纯手动连段；
+	// 派生类覆写此处实现自动连段（仍按住攻击键则立即 TryCommitCombo）
+	virtual void OnComboSectionChanged();
+
+	// 覆写：返回当前可被移动打断的 Montage（即 ComboMontage）
+	virtual UAnimMontage* GetActiveMontageForCancel() const override { return ComboMontage; }
+
+	// 覆写：按当前 Section 选择伤害 GE（未命中 map 时 fallback 到基类 DefaultDamageEffect）
+	virtual TSubclassOf<UGameplayEffect> GetDamageEffect() const override;
+
+	// 虚钩子：基类在权威端播放连段蒙太奇后调用一次，默认空实现。
+	// 派生类（UGA_ComboHeavy）在此追加注册 Montage 事件监听（末段累计 / 重击切入帧）。
+	virtual void SetupComboMontageListeners();
+
 private:
 	//实现一个WaitGameplayEvent，监听 LightAttack InputTag，触发回调 HandleInputPress
 	void SetupWaitComboInputPress();
@@ -29,32 +49,14 @@ private:
 	UFUNCTION()
 	void HandleInputPress(FGameplayEventData EventData);
 
-	//输入后，若NextComboName存在，则设置NextSection为这个Name对应的Section
-	void TryCommitCombo();
-
 	//EventReceived的回调函数，找到下一个Tag的后缀，即NextComboName
 	UFUNCTION()
 	void ComboChangedEventReceived(FGameplayEventData InPayLoad);
 
-	// 进入最后一段 section 时回调：累计「打满」次数（ComboCount +1，封顶 3）
-	UFUNCTION()
-	void OnLastSectionEntered(FGameplayEventData EventData);
-
-	// 最后一段切入帧 Notify 回调：ComboCount 已满 3 且按住攻击键时，触发重击并结束当前 GA
-	UFUNCTION()
-	void OnHeavyTransitionFrame(FGameplayEventData EventData);
-
-	// 攻击键是否仍按住（读取 Character 的 bHoldingAttack）
-	bool IsHoldingAttack() const;
-
-	// 本次按下是否已长按达到重击阈值（读取 Character 的 bLongPressed）
-	bool IsLongPressed() const;
-
-	// 重击所需连段次数（读取 Character 的 HeavyComboCount）
-	float GetRequiredComboCount() const;
+	// 进入最后一段 section / 重击切入帧 Notify 的累计与判定：见派生类 UGA_ComboHeavy
 
 	//对不同Section对应的Montage触发的DamageGE进行不同的设置
-	//（Fallback到基类 DefaultDamageEffect，见 GetDamageEffect 覆写）
+	//（Fallback到基类DefaultDamageEffect，见 GetDamageEffect 覆写）
 	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
 	TMap<FName,TSubclassOf<UGameplayEffect>> DamageEffectMap;
 
@@ -64,11 +66,4 @@ private:
 
 	//获得当前ComboMontage对应的下一个ComboMontage的字面量后缀，同时设置ComboSection的字面量和后缀相等
 	FName NextComboName;
-
-protected:
-	// 覆写：返回当前可被移动打断的 Montage（即 ComboMontage）
-	virtual UAnimMontage* GetActiveMontageForCancel() const override { return ComboMontage; }
-
-	// 覆写：按当前 Section 选择伤害 GE（未命中 map 时 fallback 到基类 DefaultDamageEffect）
-	virtual TSubclassOf<UGameplayEffect> GetDamageEffect() const override;
 };

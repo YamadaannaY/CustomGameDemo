@@ -1,12 +1,9 @@
 #include "GA_Combo.h"
-#include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayTagsManager.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
-#include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
-#include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 
 UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
 {
@@ -29,7 +26,6 @@ UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
 	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
 	bRotateToLockTarget = true;
 
-	// 通过 InputTag 触发
 	FAbilityTriggerData LightAttackTrigger;
 	LightAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
 	LightAttackTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetLightAttackInputTag();
@@ -62,16 +58,8 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		WaitComboChangeEventTask->EventReceived.AddDynamic(this,&ThisClass::ComboChangedEventReceived);
 		WaitComboChangeEventTask->ReadyForActivation();
 
-		//监听进入最后一段 section（最后段第一帧的 Notify 发送），累计「打满」次数。
-		// OnlyTriggerOnce=false：连段循环（最后一段跳回第一段）时，每次进入最后一段都要 +1。
-		UAbilityTask_WaitGameplayEvent* WaitLastSectionTask=UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,UUExtraAbilitySystemStatic::GetComboLastSectionTag(),nullptr,false,true);
-		WaitLastSectionTask->EventReceived.AddDynamic(this,&ThisClass::OnLastSectionEntered);
-		WaitLastSectionTask->ReadyForActivation();
-
-		//监听最后一段的切入帧 Notify：ComboCount 打满段数且按住攻击键时，切入重击。
-		UAbilityTask_WaitGameplayEvent* WaitHeavyTransitionTask=UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,UUExtraAbilitySystemStatic::GetComboHeavyTransitionTag(),nullptr,false,true);
-		WaitHeavyTransitionTask->EventReceived.AddDynamic(this,&ThisClass::OnHeavyTransitionFrame);
-		WaitHeavyTransitionTask->ReadyForActivation();
+		//派生类可在此追加注册 Montage 额外事件监听（形态一重击：末段累计 / 重击切入帧判定）
+		SetupComboMontageListeners();
 
 	}
 
@@ -147,68 +135,16 @@ void UGA_Combo::ComboChangedEventReceived(FGameplayEventData InPayLoad)
 	UGameplayTagsManager::Get().SplitGameplayTagFName(EventTag, TagNames);
 	NextComboName=TagNames.Last();
 
-	// 仍然按住攻击键时，自动跳转到下一段，实现自动连段
-	if (IsHoldingAttack())
-	{
-		TryCommitCombo();
-	}
+	// 仅通知派生类已进入下一段：父类默认手动等下次输入推进；按住自动续段由派生类覆写实现
+	OnComboSectionChanged();
 }
 
-void UGA_Combo::OnLastSectionEntered(FGameplayEventData EventData)
+void UGA_Combo::OnComboSectionChanged()
 {
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!ASC)
-	{
-		return;
-	}
-
-	const float Current = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
-	ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetComboCountAttribute(), FMath::Min(Current + 1.f, GetRequiredComboCount()));
+	// 父类默认手动节奏：进入下一段后不自动推进，等下一次攻击输入触发 TryCommitCombo
 }
 
-void UGA_Combo::OnHeavyTransitionFrame(FGameplayEventData EventData)
+void UGA_Combo::SetupComboMontageListeners()
 {
-	// 「长按达到重击阈值」
-	if (!IsLongPressed())
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!ASC)
-	{
-		return;
-	}
-
-	const float ComboCount = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
-	if (ComboCount < GetRequiredComboCount())
-	{
-		return;
-	}
-
-	// 切入帧：发送重击输入事件，触发重击 GA，并结束当前轻击 GA
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-		GetAvatarActorFromActorInfo(),
-		UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(),
-		FGameplayEventData());
-
-	K2_EndAbility();
-}
-
-bool UGA_Combo::IsHoldingAttack() const
-{
-	const AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-	return PlayerCharacter && PlayerCharacter->IsHoldingAttack();
-}
-
-bool UGA_Combo::IsLongPressed() const
-{
-	const AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-	return PlayerCharacter && PlayerCharacter->IsLongPressed();
-}
-
-float UGA_Combo::GetRequiredComboCount() const
-{
-	const AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-	return PlayerCharacter ? PlayerCharacter->GetHeavyComboCount() : 3.f;
+	// 基类纯连段不注册额外监听；派生类（UGA_ComboHeavy）在此覆写注册末段累计 / 重击切入帧判定
 }
