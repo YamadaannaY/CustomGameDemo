@@ -13,7 +13,6 @@
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
-#include "ExtractGameCharacter/LockOn/ULockOnComponent.h"
 
 UExtraGameplayAbility::UExtraGameplayAbility()
 {
@@ -397,7 +396,7 @@ void UExtraGameplayAbility::DrawAreaDamageDebug(const FVector& Center, const TAr
 	}
 
 	const float Radius = FMath::Max(AreaDamageRadius, 1.f);
-	const float LifeTime = 2.f;
+	const float LifeTime = 4.f;
 	const FColor RangeColor = Targets.Num() > 0 ? FColor::Green : FColor::Red;
 
 	// 地面脚印圈：与实际判定同半径，俯视/平视即可目测波及范围
@@ -408,7 +407,8 @@ void UExtraGameplayAbility::DrawAreaDamageDebug(const FVector& Center, const TAr
 		GroundCenter.Z -= Char->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 2.f;
 	}
 
-	constexpr int32 Segments = 48;
+	//绘制地面圆
+	constexpr int32 Segments = 32;
 	FVector Prev = GroundCenter + FVector(Radius, 0.f, 0.f);
 	for (int32 i = 1; i <= Segments; ++i)
 	{
@@ -418,10 +418,10 @@ void UExtraGameplayAbility::DrawAreaDamageDebug(const FVector& Center, const TAr
 		Prev = Curr;
 	}
 
-	// 判定球体（实际 3D 检测体积）
+	// 判定球体
 	DrawDebugSphere(World, Center, Radius, 16, RangeColor, false, LifeTime);
 
-	// 命中目标：连线 + 打点，直观看出这一圈到底打到谁
+	// 命中目标：连线 + 打点
 	for (const AActor* Target : Targets)
 	{
 		if (!Target)

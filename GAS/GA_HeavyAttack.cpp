@@ -37,7 +37,7 @@ UGA_HeavyAttack::UGA_HeavyAttack()
 	HeavyAttackTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetHeavyAttackInputTag();
 	AbilityTriggers.Add(HeavyAttackTrigger);
 }
-
+ 
 void UGA_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
                                       const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
                                       const FGameplayEventData* TriggerEventData)

@@ -62,6 +62,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Movement | Cancel")
 	bool bEnableMovementCancel = false;
 
+	//在Cancel窗口以移动方式结束GA时，Montage的BlendOut时间
 	UPROPERTY(EditDefaultsOnly, Category = "Movement | Cancel")
 	float MontageCancelBlendOutTime = 0.3f ;
 	
@@ -80,7 +81,7 @@ protected:
 	// 开始监听取消事件（由 PreActivate 自动调用，子类无需手动触发）
 	void SetupMovementCancel();
 
-	// 子类覆写，返回当前在播、可被移动打断的 Montage
+	// 子类覆写，返回当前在播且可被移动打断的 Montage
 	virtual UAnimMontage* GetActiveMontageForCancel() const { return nullptr; }
 
 	// 命中移动打断的瞬间回调。

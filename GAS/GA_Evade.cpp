@@ -23,6 +23,9 @@ UGA_Evade::UGA_Evade()
  // 不可打断Tag存在期间（SkillGA 表现段）不可激活；后摇段放开后，激活时SkillGA 打断其后摇。
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 
+	// 同理：重击 GA 表现段挂霸体时本 GA 无法激活，其 M_End 后摇放开霸体后，激活即打断重击接管
+	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetHeavyAttackAbilityTag());
+
 	// 通过 InputTag 触发
 	FAbilityTriggerData DodgeTrigger;
 	DodgeTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;

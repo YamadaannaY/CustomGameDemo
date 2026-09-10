@@ -6,10 +6,8 @@
 
 /**
  * 在动画帧上对角色施加一个推力（LaunchCharacter）。
- *
- * 不再直接查找当前 GA（LocalPredicted 下 GetPrimaryInstance 不可靠），
- * 改为发送 Push_Self GameplayEvent，附带推力向量 + 覆盖标志（通过 FPushTargetData 承载），
- * 由 UExtraGameplayAbility 在 PreActivate 统一挂载的监听接收并调用 PushSelf。
+ * 发送 Push_Self GameplayEvent，附带推力向量 + 覆盖标志（通过 FPushTargetData 承载），
+ * 由 GA基类 在 PreActivate 统一挂载的监听接收并调用 PushSelf。
  */
 UCLASS()
 class EXTRACTGAMECHARACTER_API UAN_ApplyPush : public UAnimNotify

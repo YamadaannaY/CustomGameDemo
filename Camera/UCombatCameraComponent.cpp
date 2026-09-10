@@ -140,7 +140,7 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	else
 	{
 		// FInterpTo 用「1/时间」作为速度，BlendTime 越小趋近越快。NewValue = Current + (Target - Current) * (1 - e^(-InterpSpeed * DeltaTime))
-		const float InterpSpeed = (BlendTime > KINDA_SMALL_NUMBER) ? (1.f / BlendTime) : 1000.f;
+		const float InterpSpeed = (BlendTime > KINDA_SMALL_NUMBER) ? (1.f / BlendTime) : 100.f;
 
 		CurrentLocationOffset = FMath::VInterpTo(CurrentLocationOffset, TargetLoc, DeltaTime, InterpSpeed);
 		CurrentRotationOffset = FMath::RInterpTo(CurrentRotationOffset, TargetRot, DeltaTime, InterpSpeed);

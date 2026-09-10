@@ -127,7 +127,8 @@ private:
 	float CurrentArmLength = 300.f;
 	float CurrentFOV = 90.f;
 
-	// 无战斗相机时的基准值（首次 PushRequest 时从 SpringArm/Camera 缓存）。
+	// 无战斗相机时的基准值（首次 PushRequest 时从实际 SpringArm/Camera 上缓存）。
+	
 	float BaseArmLength = 300.f;
 	float BaseFOV = 90.f;
 	

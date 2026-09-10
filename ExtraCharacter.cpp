@@ -29,6 +29,7 @@ AExtraCharacter::AExtraCharacter(const FObjectInitializer& ObjectInitializer)
 	OverHeadWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("OverHeadWidget"));
 	OverHeadWidgetComponent->SetupAttachment(GetMesh());
 	OverHeadWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen);
+	OverHeadWidgetComponent->SetDrawAtDesiredSize(false);
 	OverHeadWidgetComponent->SetDrawSize(FVector2D(OverHeadGaugeXSize, OverHeadGaugeYSize));
 	OverHeadWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 190.f));
 	OverHeadWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -92,8 +93,7 @@ void AExtraCharacter::ConfigureOverHeadStatusWidget()
 		OverHeadWidgetComponent->SetHiddenInGame(true);
 		return;
 	}
-
-	// 确保 WidgetClass 已设置（优先使用 C++ 配置项，否则保留 WidgetComponent 上蓝图配置的类）
+	
 	if (OverHeadWidgetClass && OverHeadWidgetComponent->GetWidgetClass() != OverHeadWidgetClass)
 	{
 		OverHeadWidgetComponent->SetWidgetClass(OverHeadWidgetClass);
