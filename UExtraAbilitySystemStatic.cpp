@@ -12,9 +12,11 @@ UE_DEFINE_GAMEPLAY_TAG(Ability_Burst_01, "ability.Burst.01");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Burst_Changestate, "ability.Burst.changestate");
 UE_DEFINE_GAMEPLAY_TAG(State_Airborne, "character.state.airborne");
 UE_DEFINE_GAMEPLAY_TAG(State_Phase1, "State.Phase1");
+UE_DEFINE_GAMEPLAY_TAG(State_Phase2, "State.Phase2");
 UE_DEFINE_GAMEPLAY_TAG(State_BurstReady, "State.BurstReady");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_LightAttack, "InputTag.LightAttack");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_HeavyAttack, "InputTag.HeavyAttack");
+UE_DEFINE_GAMEPLAY_TAG(InputTag_HeavyAttackRelease, "InputTag.HeavyAttackRelease");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_Skill, "InputTag.Skill");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_Ultimate, "InputTag.Ultimate");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_Dodge, "InputTag.Dodge");
@@ -59,6 +61,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetPhase1StateTag()
 	return State_Phase1;
 }
 
+FGameplayTag UUExtraAbilitySystemStatic::GetPhase2StateTag()
+{
+	return State_Phase2;
+}
+
 FGameplayTag UUExtraAbilitySystemStatic::GetBurstReadyTag()
 {
 	return State_BurstReady;
@@ -97,6 +104,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetLightAttackInputTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetHeavyAttackInputTag()
 {
 	return InputTag_HeavyAttack;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHeavyAttackReleaseInputTag()
+{
+	return InputTag_HeavyAttackRelease;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetSkillInputTag()

@@ -519,6 +519,11 @@ void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& Inp
 	{
 		GetWorldTimerManager().ClearTimer(HeavyAttackHoldTimerHandle);
 	}
+
+	// 松手广播：二阶段蓄力重击 GA 监听此事件，收到即停当前段播结束段打出攻击
+	// （无订阅者时无副作用；一阶段重击 GA 不监听）
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+		this, UUExtraAbilitySystemStatic::GetHeavyAttackReleaseInputTag(), FGameplayEventData());
 }
 
 void AExtraPlayerCharacter::OnReachHeavyThreshold()
@@ -530,11 +535,23 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 		return;
 	}
 
-	const float ComboCount = AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
-	if (ComboCount >= HeavyComboCount)
+	// 二阶段：纯长按达阈值即触发重击（无需连段打满），是否真正激活由 GA 的 State.Phase2 门控裁决
+	if (AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetPhase2StateTag()))
 	{
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 			this, UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(), FGameplayEventData());
+		return;
+	}
+
+	// 一阶段：需打满连段（ComboCount 达 HeavyComboCount）才触发重击
+	if (AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetPhase1StateTag()))
+	{
+		const float ComboCount = AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
+		if (ComboCount >= HeavyComboCount)
+		{
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+				this, UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(), FGameplayEventData());
+		}
 	}
 }
 

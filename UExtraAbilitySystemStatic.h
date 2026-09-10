@@ -11,9 +11,11 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_BasicAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Dodge);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Airborne);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Phase1);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Phase2);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_BurstReady);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_LightAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_HeavyAttack);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_HeavyAttackRelease);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Skill);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ultimate);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Dodge);
@@ -52,6 +54,9 @@ public:
 	// 形态状态 Tag：GA_Burst01 等"第一形态专属大招"以它做 ActivationRequiredTags 门控，
 	// 对应武器组把 State.Phase1 放进 AdditionalTags，切到第二形态(Phase2 组)后 tag 移除→大招自然失效
 	static FGameplayTag GetPhase1StateTag();
+	// 第二形态状态 Tag：切到 Phase2 武器组后该 tag 在 ASC 上；
+	// 二阶段重击 GA 以它做 ActivationRequiredTags 门控，Character 长按判定也据此分支
+	static FGameplayTag GetPhase2StateTag();
 
 	// 大招解锁状态 Tag：一次「满足段数(打满 ComboCount)」的重击成功激活时置位；
 	// GA_Burst01 以它做 ActivationRequiredTags 门控，激活时消费移除 → 需重新满段重击才能再放大招。
@@ -63,6 +68,9 @@ public:
 	// 武器组 IA 全局固定，换武器只换背后 GA；GA 通过 AbilityTriggers 声明响应哪个 InputTag
 	static FGameplayTag GetLightAttackInputTag();  // "InputTag.LightAttack"
 	static FGameplayTag GetHeavyAttackInputTag();  // "InputTag.HeavyAttack"
+	// 重击松手 Tag：二阶段蓄力重击 GA 监听，收到即打出结束段。
+	// 注意：不可作为 "InputTag.HeavyAttack" 的子 tag——GA 的 AbilityTriggers 走层级匹配，子 tag 会误触发重击 GA 自身
+	static FGameplayTag GetHeavyAttackReleaseInputTag();  // "InputTag.HeavyAttackRelease"
 	static FGameplayTag GetSkillInputTag();        // "InputTag.Skill"
 	static FGameplayTag GetUltimateInputTag();     // "InputTag.Ultimate"
 	static FGameplayTag GetDodgeInputTag();        // "InputTag.Dodge"
