@@ -10,6 +10,7 @@ FGameplayTag UAN_AreaCheck::GetEventTag() const
 void UAN_AreaCheck::BuildEventData(FGameplayEventData& OutEventData, USkeletalMeshComponent* /*MeshComp*/)
 {
 	FAreaCheckData* AreaData = new FAreaCheckData();
+	AreaData->CenterMode = CenterMode;
 	AreaData->CenterOffset = CenterOffset;
 	AreaData->Radius = Radius;
 

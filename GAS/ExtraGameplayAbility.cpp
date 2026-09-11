@@ -47,9 +47,9 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		{
 			UAnimInstance* AnimInst = GetOwnerAnimInstance();
 			if (AnimInst && AnimInst->Montage_IsPlaying(ActiveMontage))
-			{
+			{ 
 				//采用默认BlendOut
-				AnimInst->Montage_Stop(-1, ActiveMontage);
+				AnimInst->Montage_StopWithBlendOut(ActiveMontage->BlendOut, ActiveMontage);
 			}
 		}
 	}
@@ -311,9 +311,10 @@ void UExtraGameplayAbility::SetupAreaDamageListener()
 
 void UExtraGameplayAbility::OnAreaDamageEventReceived(FGameplayEventData Payload)
 {
-	// 解析 AN 提供的圆心偏移与半径覆写；旧的无载荷事件（AN_SendGameplayEvent）按零偏移 + GA 配置半径处理
+	// 解析 AN 提供的圆心参数与半径覆写
 	FVector CenterOffset = FVector::ZeroVector;
 	float Radius = 0.f;
+	EAreaCenterMode CenterMode = EAreaCenterMode::Inherit;
 
 	const FGameplayAbilityTargetDataHandle& Handle = Payload.TargetData;
 	for (int32 i = 0; i < Handle.Num(); ++i)
@@ -324,14 +325,15 @@ void UExtraGameplayAbility::OnAreaDamageEventReceived(FGameplayEventData Payload
 			const FAreaCheckData* AreaData = static_cast<const FAreaCheckData*>(Data);
 			CenterOffset = AreaData->CenterOffset;
 			Radius = AreaData->Radius;
+			CenterMode = AreaData->CenterMode;
 			break;
 		}
 	}
 
-	PerformAreaDamage(CenterOffset, Radius);
+	PerformAreaDamage(CenterOffset, Radius, CenterMode);
 }
 
-void UExtraGameplayAbility::PerformAreaDamage(const FVector& CenterOffset, float Radius)
+void UExtraGameplayAbility::PerformAreaDamage(const FVector& CenterOffset, float Radius, EAreaCenterMode CenterMode)
 {
 	// 伤害判定只在服务端执行
 	if (!K2_HasAuthority())
@@ -357,10 +359,32 @@ void UExtraGameplayAbility::PerformAreaDamage(const FVector& CenterOffset, float
 		return;
 	}
 
-	// 圆心 = 角色位置 + XY 偏移（Z 沿用角色高度）
+	// AN 未指定圆心来源（Inherit）时用 GA 配置解析
+	if (CenterMode == EAreaCenterMode::Inherit)
+	{
+		CenterMode = bAreaDamageUseLockTargetAsCenter ? EAreaCenterMode::LockTarget : EAreaCenterMode::Owner;
+	}
+
+	// 圆心：LockTarget 且当前有锁定目标时取目标位置（忽略 CenterOffset）；否则角色位置 + XY 偏移（Z 沿用角色高度）
 	FVector Center = Char->GetActorLocation();
-	Center.X += CenterOffset.X;
-	Center.Y += CenterOffset.Y;
+	bool bCenterOnLockTarget = false;
+	if (CenterMode == EAreaCenterMode::LockTarget)
+	{
+		if (const AExtraPlayerCharacter* PlayerChar = GetOwningAvatarCharacter())
+		{
+			if (const AActor* LockTarget = PlayerChar->GetLockTarget())
+			{
+				Center = LockTarget->GetActorLocation();
+				bCenterOnLockTarget = true;
+			}
+		}
+	}
+
+	if (!bCenterOnLockTarget)
+	{
+		Center.X += CenterOffset.X;
+		Center.Y += CenterOffset.Y;
+	}
 
 	// 收集半径内敌方存活单位（与 HeavyAttack 时停判定同口径：不同 Team + Health>0）
 	TArray<AActor*> Targets;

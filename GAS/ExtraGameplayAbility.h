@@ -5,6 +5,7 @@
 #include "Abilities/GameplayAbilityTargetTypes.h"
 #include "Engine/EngineTypes.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
+#include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
 #include "ExtraGameplayAbility.generated.h"
 
 class UAnimMontage;
@@ -48,10 +49,6 @@ protected:
 	// 只需在子类构造函数中置 true，基类会在 PreActivate 自动挂载监听，无需在 ActivateAbility 里手动调用。
 	UPROPERTY(EditDefaultsOnly, Category = "Movement | Cancel")
 	bool bEnableMovementCancel = false;
-
-	//在Cancel窗口以移动方式结束GA时，Montage的BlendOut时间
-	UPROPERTY(EditDefaultsOnly, Category = "Movement | Cancel")
-	float MontageCancelBlendOutTime = 0.3f ;
 	
 	UPROPERTY(EditDefaultsOnly,Category= "MoveMent | MotionWarp")
 	float MotionWarpMaxMoveDist = 150.f  ; 
@@ -203,6 +200,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Area Damage", meta = (ClampMin = "0.0", EditCondition = "bEnableAreaDamage"))
 	float AreaDamageRadius = 0.f;
 
+	// 圆心是否默认采用「锁定目标位置」而非角色位置：
+	// 仅当 AN_AreaCheck 的 CenterMode 为 Inherit（默认）时生效；无锁定目标则回退角色位置。
+	// 单个 AN 想脱离本配置自行指定，把该 AN 的 CenterMode 改成 Owner / LockTarget 即可。
+	UPROPERTY(EditDefaultsOnly, Category = "Area Damage", meta = (EditCondition = "bEnableAreaDamage"))
+	bool bAreaDamageUseLockTargetAsCenter = false;
+
 	// 范围 Debug：开启后 PerformAreaDamage 画「地面脚印圈(半径) + 判定球 + 命中连线/打点」，
 	// 并在屏幕打印当前半径与命中数——可直接目测范围大概有多大。GA 蓝图 Class Defaults 里勾选。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Debug")
@@ -212,9 +215,11 @@ protected:
 	virtual FGameplayTag GetAreaDamageTriggerTag() const;
 
 	// 收集圆心半径内敌方存活单位并统一结算伤害（Debug 开启时附带可视化）。
-	// CenterOffset 为相对角色位置的 XY 偏移（Z 忽略）；Radius <=0 时回退到 AreaDamageRadius。
+	// CenterMode 决定圆心：Inherit→按 bAreaDamageUseLockTargetAsCenter 解析；Owner→角色位置+CenterOffset（XY 偏移，Z 忽略）；
+	// LockTarget→锁定目标位置（无锁定回退角色位置）。Radius <=0 时回退到 AreaDamageRadius。
 	// 内部事件回调调用；子类也可在无 Notify 的时机手动触发（注意只应权威端执行）。
-	void PerformAreaDamage(const FVector& CenterOffset = FVector::ZeroVector, float Radius = 0.f);
+	void PerformAreaDamage(const FVector& CenterOffset = FVector::ZeroVector, float Radius = 0.f,
+	                       EAreaCenterMode CenterMode = EAreaCenterMode::Inherit);
 
 	// 内部：PreActivate 统一挂载范围伤害事件监听
 	void SetupAreaDamageListener();
