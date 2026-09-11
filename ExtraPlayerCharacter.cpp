@@ -478,7 +478,7 @@ void AExtraPlayerCharacter::CancelStopMontageIfPlaying()
 		ActiveMontage == TurnLeft90Montage ||
 		ActiveMontage == TurnRight90Montage)
 	{
-		AnimInst->StopAllMontages(StopMontageBlendOutTime);
+		AnimInst->Montage_StopWithBlendOut(ActiveMontage->BlendOut);
 	}
 }
 

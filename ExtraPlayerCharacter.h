@@ -165,11 +165,7 @@ private:
 	//不选择Stop而是Turn的角度阈值
 	UPROPERTY(EditDefaultsOnly,Category="Animation | Turn")
 	float TurnSharpAngel=110.f;
-
-	// 停步 Montage 被移动输入打断时的 BlendOut 时长（秒）
-	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
-	float StopMontageBlendOutTime = 0.15f;
-
+	
 	// 急停时 Capsule 旋转到目标朝向的插值时间（秒）
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
 	float QuickStopRotationLerpTime = 0.15f;

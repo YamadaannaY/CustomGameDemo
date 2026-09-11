@@ -387,7 +387,7 @@ void UGA_Evade::PollMoveInputForSprint()
 		PlayerChar->SprintTransitionVelocity = SprintDir * PlayerChar->SprintSpeed;
 	}
 
-	AnimInst->Montage_Stop(MontageCancelBlendOutTime, CurrentPlayingMontage);
+	AnimInst->Montage_StopWithBlendOut(CurrentPlayingMontage->BlendOut, CurrentPlayingMontage);
 }
 
 void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -451,7 +451,7 @@ void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGamep
 			UAnimInstance* AnimInst = AvatarChar->GetMesh()->GetAnimInstance();
 			if (AnimInst && AnimInst->Montage_IsPlaying(CurrentPlayingMontage))
 			{
-				AnimInst->Montage_Stop(MontageCancelBlendOutTime, CurrentPlayingMontage);
+				AnimInst->Montage_StopWithBlendOut(CurrentPlayingMontage->BlendOut, CurrentPlayingMontage);
 			}
 		}
 		CurrentPlayingMontage = nullptr;

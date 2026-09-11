@@ -303,15 +303,16 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 	{
 		if (AirAttackLoopMontage && AnimInst->Montage_IsPlaying(AirAttackLoopMontage))
 		{
-			AnimInst->Montage_Stop(MontageCancelBlendOutTime, AirAttackLoopMontage);
+			AnimInst->Montage_StopWithBlendOut(AirAttackLandMontage->BlendOut, AirAttackLoopMontage);
 		}
 		if (AirAttackStartMontage && AnimInst->Montage_IsPlaying(AirAttackStartMontage))
 		{
-			AnimInst->Montage_Stop(MontageCancelBlendOutTime, AirAttackStartMontage);
+			AnimInst->Montage_StopWithBlendOut(AirAttackLandMontage->BlendOut, AirAttackStartMontage);
+			
 		}
 		if (AirAttackLandMontage && AnimInst->Montage_IsPlaying(AirAttackLandMontage))
 		{
-			AnimInst->Montage_Stop(MontageCancelBlendOutTime, AirAttackLandMontage);
+			AnimInst->Montage_StopWithBlendOut(AirAttackLandMontage->BlendOut, AirAttackLandMontage);
 		}
 	}
 
