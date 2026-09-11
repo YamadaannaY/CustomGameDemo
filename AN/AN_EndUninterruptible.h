@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Animation/AnimNotifies/AnimNotify.h"
+#include "AN_SendGameplayEvent.h"
 #include "AN_EndUninterruptible.generated.h"
 
 /**
@@ -12,11 +12,13 @@
  * 从LooseTag中移除 State.Uninterruptible，从而放开对其他GA的阻断（GA默认不可在不可打断Tag存在时触发）
  */
 UCLASS()
-class EXTRACTGAMECHARACTER_API UAN_EndUninterruptible : public UAnimNotify
+class EXTRACTGAMECHARACTER_API UAN_EndUninterruptible : public UAN_SendGameplayEvent
 {
 	GENERATED_BODY()
 
 public:
-	virtual void Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference) override;
+	// 固定发送 ability.uninterruptible.end（硬编码，面板不暴露 EventTag）
+	virtual FGameplayTag GetEventTag() const override;
+
 	virtual FString GetNotifyName_Implementation() const override;
 };

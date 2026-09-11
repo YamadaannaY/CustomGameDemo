@@ -11,19 +11,6 @@ class UAnimMontage;
 class UCharacterMovementComponent;
 class UGameplayEffect;
 
-// 携带「推力」参数的 TargetData：AN_ApplyPush 通过 GameplayEvent 把推力向量 + 覆盖标志进行发送
-USTRUCT()
-struct FPushTargetData : public FGameplayAbilityTargetData
-{
-	GENERATED_BODY()
-
-	FVector PushVelocity = FVector::ZeroVector;
-	bool bOverrideXY = false;
-	bool bOverrideZ = true;
-
-	virtual UScriptStruct* GetScriptStruct() const override { return StaticStruct(); }
-};
-
 /**
  * 自定义GA基类
  * 所有GA的蓝图父类应设为此类。
@@ -131,7 +118,7 @@ protected:
 	bool bGravityDefaultCached = false;
 
 	// 是否启用霸体窗口：激活时以 loose tag 形式把 UninterruptibleTag 加入 ASC owned tags（表现动画段），
-	// 后摇段由 AN_EndUninterruptible 发送事件移除，从而放开其他 GA 通过 CancelAbilitiesWithTag 打断后摇。
+	// 后摇段必须由 AN_EndUninterruptible 发送事件移除，从而放开其他 GA 通过 CancelAbilitiesWithTag 打断后摇。
 	// 子类只需在构造函数里置 bEnableUninterruptible = true，其余由基类在 PreActivate / EndAbility 统一处理。
 	UPROPERTY(EditDefaultsOnly, Category = "Uninterruptible")
 	bool bEnableUninterruptible = false;
@@ -205,13 +192,14 @@ protected:
 
 	// ── 角色中心范围伤害（事件帧驱动）─────────────────────
 	// 是否启用范围伤害：开启后服务端监听 GetAreaDamageTriggerTag() 的 GameplayEvent，
-	// Montage 伤害帧放一个 AN_SendGameplayEvent 触发一次范围判定（一个 AN = 一次）。
-	// 以角色为中心对半径内全部敌方存活单位统一应用 GetDamageEffect() 选出的伤害 GE，
+	// Montage 伤害帧放一个 AN_AreaCheck 触发一次范围判定（一个 AN = 一次）。
+	// 圆心默认取角色位置，AN 可通过 FAreaCheckData 提供 XY 偏移与半径覆写；
+	// 对半径内全部敌方存活单位统一应用 GetDamageEffect() 选出的伤害 GE，
 	// 与武器轨迹伤害（bEnableWeaponDamage）可并存/二选一，共用 DoDamage 结算。
 	UPROPERTY(EditDefaultsOnly, Category = "Area Damage")
 	bool bEnableAreaDamage = false;
 
-	// 范围检测半径（cm）。收到触发事件时若 <=0 仅告警不结算。
+	// 范围检测半径兜底值（cm）：AN_AreaCheck 未指定半径（<=0）时使用；两者都 <=0 则仅告警不结算。
 	UPROPERTY(EditDefaultsOnly, Category = "Area Damage", meta = (ClampMin = "0.0", EditCondition = "bEnableAreaDamage"))
 	float AreaDamageRadius = 0.f;
 
@@ -223,19 +211,20 @@ protected:
 	// 范围伤害触发事件 Tag（默认通用 ability.area.damage；子类如需专属 Tag 可覆写）
 	virtual FGameplayTag GetAreaDamageTriggerTag() const;
 
-	// 以角色为中心收集半径内敌方存活单位并统一结算伤害（Debug 开启时附带可视化）。
+	// 收集圆心半径内敌方存活单位并统一结算伤害（Debug 开启时附带可视化）。
+	// CenterOffset 为相对角色位置的 XY 偏移（Z 忽略）；Radius <=0 时回退到 AreaDamageRadius。
 	// 内部事件回调调用；子类也可在无 Notify 的时机手动触发（注意只应权威端执行）。
-	void PerformAreaDamage();
+	void PerformAreaDamage(const FVector& CenterOffset = FVector::ZeroVector, float Radius = 0.f);
 
 	// 内部：PreActivate 统一挂载范围伤害事件监听
 	void SetupAreaDamageListener();
 
-	// 内部：范围伤害事件回调，转发到 PerformAreaDamage
+	// 内部：范围伤害事件回调，解析负载中的 FAreaCheckData（可缺省）后转发到 PerformAreaDamage
 	UFUNCTION()
 	void OnAreaDamageEventReceived(FGameplayEventData Payload);
 
 	// 内部：Debug 可视化（地面脚印圈 + 判定球 + 命中连线/打点 + 屏幕打印半径/命中数）
-	void DrawAreaDamageDebug(const FVector& Center, const TArray<AActor*>& Targets);
+	void DrawAreaDamageDebug(const FVector& Center, float Radius, const TArray<AActor*>& Targets);
 
 	//获得AvatarCharacter，即Push对象
 	AExtraPlayerCharacter* GetOwningAvatarCharacter();

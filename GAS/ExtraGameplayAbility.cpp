@@ -13,6 +13,7 @@
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
 
 UExtraGameplayAbility::UExtraGameplayAbility()
 {
@@ -39,7 +40,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
 	bool bReplicateEndAbility, bool bWasCancelled)
 {
-	//Cancel机制取消GA时，手动停Montage
+	//因为移动CancelGA时，手动停Montage
 	if (bEndingFromMovement)
 	{
 		if (UAnimMontage* ActiveMontage = GetActiveMontageForCancel())
@@ -47,7 +48,8 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 			UAnimInstance* AnimInst = GetOwnerAnimInstance();
 			if (AnimInst && AnimInst->Montage_IsPlaying(ActiveMontage))
 			{
-				AnimInst->Montage_Stop(MontageCancelBlendOutTime, ActiveMontage);
+				//采用默认BlendOut
+				AnimInst->Montage_Stop(-1, ActiveMontage);
 			}
 		}
 	}
@@ -64,7 +66,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		Char->GetWeaponComponent()->EndWeaponTrace();
 	}
 	
-	// 恢复重力缩放（若本次激活启用了重力缩放）：永远恢复到引擎默认，而非激活前那一刻的值。
+	// 恢复重力缩放,恢复到引擎默认，而非激活前那一刻的值。
 	if (bEnableGravityScale)
 	{
 		if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
@@ -82,13 +84,13 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		ReleaseUninterruptible();
 	}
 
-	// 清理锁定转向刷新定时器（激活失败 / 取消 / 正常结束统一走这里）
+	// 清理锁定转向刷新定时器（激活失败 / 取消 / 正常结束）
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(LockOnWarpRefreshTimerHandle);
 	}
 
-	// 兜底移除已注册的锁定朝向 warp target，避免 GA 结束后残留（幂等）
+	// 兜底移除已注册的锁定朝向 warp target，避免 GA 结束后残留
 	if (Char && Char->GetMotionWarpingComponent())
 	{
 		Char->GetMotionWarpingComponent()->RemoveWarpTarget(LockOnWarpTargetName);
@@ -309,10 +311,27 @@ void UExtraGameplayAbility::SetupAreaDamageListener()
 
 void UExtraGameplayAbility::OnAreaDamageEventReceived(FGameplayEventData Payload)
 {
-	PerformAreaDamage();
+	// 解析 AN 提供的圆心偏移与半径覆写；旧的无载荷事件（AN_SendGameplayEvent）按零偏移 + GA 配置半径处理
+	FVector CenterOffset = FVector::ZeroVector;
+	float Radius = 0.f;
+
+	const FGameplayAbilityTargetDataHandle& Handle = Payload.TargetData;
+	for (int32 i = 0; i < Handle.Num(); ++i)
+	{
+		const FGameplayAbilityTargetData* Data = Handle.Get(i);
+		if (Data && Data->GetScriptStruct() == FAreaCheckData::StaticStruct())
+		{
+			const FAreaCheckData* AreaData = static_cast<const FAreaCheckData*>(Data);
+			CenterOffset = AreaData->CenterOffset;
+			Radius = AreaData->Radius;
+			break;
+		}
+	}
+
+	PerformAreaDamage(CenterOffset, Radius);
 }
 
-void UExtraGameplayAbility::PerformAreaDamage()
+void UExtraGameplayAbility::PerformAreaDamage(const FVector& CenterOffset, float Radius)
 {
 	// 伤害判定只在服务端执行
 	if (!K2_HasAuthority())
@@ -327,14 +346,21 @@ void UExtraGameplayAbility::PerformAreaDamage()
 		return;
 	}
 
-	const float Radius = AreaDamageRadius;
+	// AN 未指定半径时沿用 GA 自身配置
 	if (Radius <= 0.f)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[ExtraGameplayAbility] PerformAreaDamage: AreaDamageRadius <= 0, skip."));
+		Radius = AreaDamageRadius;
+	}
+	if (Radius <= 0.f)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ExtraGameplayAbility] PerformAreaDamage: 半径 <= 0（AN 与 GA 均未配置），skip."));
 		return;
 	}
 
-	const FVector Center = Char->GetActorLocation();
+	// 圆心 = 角色位置 + XY 偏移（Z 沿用角色高度）
+	FVector Center = Char->GetActorLocation();
+	Center.X += CenterOffset.X;
+	Center.Y += CenterOffset.Y;
 
 	// 收集半径内敌方存活单位（与 HeavyAttack 时停判定同口径：不同 Team + Health>0）
 	TArray<AActor*> Targets;
@@ -366,7 +392,7 @@ void UExtraGameplayAbility::PerformAreaDamage()
 
 	if (bShouldDrawDebug)
 	{
-		DrawAreaDamageDebug(Center, Targets);
+		DrawAreaDamageDebug(Center, Radius, Targets);
 	}
 
 	if (Targets.Num() == 0)
@@ -387,7 +413,7 @@ void UExtraGameplayAbility::PerformAreaDamage()
 	DoDamage(EventData);
 }
 
-void UExtraGameplayAbility::DrawAreaDamageDebug(const FVector& Center, const TArray<AActor*>& Targets)
+void UExtraGameplayAbility::DrawAreaDamageDebug(const FVector& Center, float Radius, const TArray<AActor*>& Targets)
 {
 	UWorld* World = GetWorld();
 	if (!World)
@@ -395,7 +421,7 @@ void UExtraGameplayAbility::DrawAreaDamageDebug(const FVector& Center, const TAr
 		return;
 	}
 
-	const float Radius = FMath::Max(AreaDamageRadius, 1.f);
+	Radius = FMath::Max(Radius, 1.f);
 	const float LifeTime = 4.f;
 	const FColor RangeColor = Targets.Num() > 0 ? FColor::Green : FColor::Red;
 

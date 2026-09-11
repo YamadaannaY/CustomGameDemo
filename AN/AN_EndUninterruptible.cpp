@@ -1,23 +1,9 @@
 #include "AN_EndUninterruptible.h"
-#include "AbilitySystemBlueprintLibrary.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 
-void UAN_EndUninterruptible::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference)
+FGameplayTag UAN_EndUninterruptible::GetEventTag() const
 {
-	Super::Notify(MeshComp, Animation, EventReference);
-
-	if (!MeshComp)
-	{
-		return;
-	}
-
-	AActor* Owner = MeshComp->GetOwner();
-	if (!Owner)
-	{
-		return;
-	}
-
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Owner, UUExtraAbilitySystemStatic::GetUninterruptibleEndTag(), FGameplayEventData());
+	return UUExtraAbilitySystemStatic::GetUninterruptibleEndTag();
 }
 
 FString UAN_EndUninterruptible::GetNotifyName_Implementation() const

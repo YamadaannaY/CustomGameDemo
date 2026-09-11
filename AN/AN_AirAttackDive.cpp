@@ -27,11 +27,8 @@ void UAN_AirAttackDive::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBa
 	const float AngleRad = FMath::DegreesToRadians(DiveAngle);
 	const FVector DiveDir = (Forward * FMath::Cos(AngleRad) + Down * FMath::Sin(AngleRad)).GetSafeNormal();
 
-	// 关键：LaunchCharacter 的 bXYOverride / bZOverride 都传 true，覆盖（而非叠加）当前速度，
-	// 清掉起跳/跳跃残余的向上速度，避免「先上飘再下砸」。
+	// 关键：LaunchCharacter 的 bXYOverride / bZOverride 都传 true，覆盖当前残余速度，
 	Character->LaunchCharacter(DiveDir * DiveSpeed, true, true);
-
-	// 落点偏移仅用于参考，暂不强制 teleport，实际落点由速度 + 重力决定
 }
 
 FString UAN_AirAttackDive::GetNotifyName_Implementation() const

@@ -5,6 +5,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemComponent.h"
+#include "ExtractGameCharacter/ExtraGameAnimInstance.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 
@@ -73,6 +74,11 @@ bool UGA_Burst01::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags,
 	const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
+	if (Cast<UExtraGameAnimInstance>(this->GetOwnerAnimInstance())->bIsFalling())
+	{
+		return false ; 
+	}
+	
 	if (SlotMaterialMap.Num()==0) return false ; 
 	if (!BurstMontage) return false ; 
 	
