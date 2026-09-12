@@ -55,7 +55,8 @@ void UGA_ComboHeavy::OnLastSectionEntered(FGameplayEventData EventData)
 			TEXT("打出第三段普攻，获得100点心念"));
 	}
 	const float CurrentEnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
-	ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetEnergyValueAttribute(), FMath::Min(CurrentEnergyValue + 100.f, GetRequiredComboCount()));
+
+	ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetEnergyValueAttribute(), CurrentEnergyValue + 100.f);
 }
 
 void UGA_ComboHeavy::OnHeavyTransitionFrame(FGameplayEventData EventData)
@@ -93,7 +94,7 @@ bool UGA_ComboHeavy::IsLongPressed() const
 	return PlayerCharacter && PlayerCharacter->IsLongPressed();
 }
 
-// 重击所需连段值（读取 Character 的 HeavyComboMaxVal）
+// 重击所需能量值（经 Character 读属性集 EnergyMaxValue）
 float UGA_ComboHeavy::GetRequiredComboCount() const
 {
 	const AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
