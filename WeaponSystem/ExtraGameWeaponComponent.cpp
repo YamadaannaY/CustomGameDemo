@@ -1004,6 +1004,13 @@ void UExtraGameWeaponComponent::TraceSocketSegment(const FName SocketName, const
 				continue;
 			}
 
+			// 只对带 ASC 的可受击单位结算：地形（LandscapeStreamingProxy）、场景道具等
+			// 被武器扫到时不产生伤害事件，否则空挥也会触发命中逻辑。
+			if (!UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor))
+			{
+				continue;
+			}
+
 			// 命中即结算：当帧加入黑名单并立即发事件，GA 收到后当帧应用 GE；
 			// 同一窗口内重复扫到同一目标被黑名单拦下，不重复结算。
 			AlreadyHitActors.Add(TWeakObjectPtr<AActor>(HitActor));
