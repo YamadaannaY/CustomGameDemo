@@ -35,6 +35,10 @@ public:
 	// 属性变化前回调（Clamp 用）
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 
+	// BaseValue 变化前回调：SetNumericAttributeBase / 属性 Setter 走这条路（不触发 PreAttributeChange），
+	// EnergyValue 的写入全部来自这两个入口，封顶在此生效。
+	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
+
 	// 属性变化后回调（BaseValue → CurrentValue，触发 GameplayEffect 执行）
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 
@@ -69,10 +73,16 @@ public:
 	FGameplayAttributeData Shield;
 	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, Shield);
 
-	// 能量值：轻击连段进入最后一段 +100 累积，封顶 HeavyComboMaxVal；满值解锁重击，重击触发后清零。纯本地战斗资源，驱动 UI/材质，不做网络复制。
+	// 能量值：轻击连段进入最后一段 +100 累积，普攻命中亦可累积（子类 GA 配置）；
+	// 封顶 EnergyMaxValue，满值解锁重击，重击触发后清零。纯本地战斗资源，驱动 UI/材质，不做网络复制。
 	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
 	FGameplayAttributeData EnergyValue;
 	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, EnergyValue);
+
+	// 能量上限：DataTable 初始化，EnergyValue 的任何写入都按此封顶。
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat", ReplicatedUsing = OnRep_EnergyMaxValue)
+	FGameplayAttributeData EnergyMaxValue;
+	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, EnergyMaxValue);
 
 protected:
 	UFUNCTION()
@@ -87,6 +97,8 @@ protected:
 	virtual void OnRep_MaxStamina(const FGameplayAttributeData& OldMaxStamina);
 	UFUNCTION()
 	virtual void OnRep_Shield(const FGameplayAttributeData& OldShield);
+	UFUNCTION()
+	virtual void OnRep_EnergyMaxValue(const FGameplayAttributeData& OldEnergyMaxValue);
 	
 	
 	bool bProcessingShieldAbsorption=false;
@@ -122,4 +134,8 @@ struct FExtraCharacterAttributeRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
 	float Shield = 0.f;
+
+	// 能量上限（心念/寒意条满值）：重击所需能量即此值
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
+	float EnergyMaxValue = 300.f;
 };

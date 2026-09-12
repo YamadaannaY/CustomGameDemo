@@ -16,6 +16,7 @@ UExtraGameAttributeSet::UExtraGameAttributeSet()
 	MaxStamina = 100.f;
 	Shield = 0.f;
 	EnergyValue = 0.f;
+	EnergyMaxValue = 300.f;
 }
 
 void UExtraGameAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -28,6 +29,7 @@ void UExtraGameAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, Stamina, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, MaxStamina, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, Shield, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, EnergyMaxValue, COND_None, REPNOTIFY_Always);
 }
 
 void UExtraGameAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -70,6 +72,22 @@ void UExtraGameAttributeSet::PreAttributeChange(const FGameplayAttribute& Attrib
 
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
 	}
+
+	if (Attribute == GetEnergyValueAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, GetEnergyMaxValue());
+	}
+}
+
+void UExtraGameAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
+{
+	Super::PreAttributeBaseChange(Attribute, NewValue);
+
+	// 能量的一切写入（GA 累计 / 重击清零）都走 SetNumericAttributeBase，封顶必须在此兜住
+	if (Attribute == GetEnergyValueAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, GetEnergyMaxValue());
+	}
 }
 
 void UExtraGameAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
@@ -98,6 +116,10 @@ void UExtraGameAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModC
 	else if (Data.EvaluatedData.Attribute == GetStaminaAttribute())
 	{
 		SetStamina(FMath::Clamp(GetStamina(), 0.f, GetMaxStamina()));
+	}
+	else if (Data.EvaluatedData.Attribute == GetEnergyValueAttribute())
+	{
+		SetEnergyValue(FMath::Clamp(GetEnergyValue(), 0.f, GetEnergyMaxValue()));
 	}
 }
 
@@ -131,4 +153,9 @@ void UExtraGameAttributeSet::OnRep_MaxStamina(const FGameplayAttributeData& OldM
 void UExtraGameAttributeSet::OnRep_Shield(const FGameplayAttributeData& OldShield)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UExtraGameAttributeSet, Shield, OldShield);
+}
+
+void UExtraGameAttributeSet::OnRep_EnergyMaxValue(const FGameplayAttributeData& OldEnergyMaxValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UExtraGameAttributeSet, EnergyMaxValue, OldEnergyMaxValue);
 }

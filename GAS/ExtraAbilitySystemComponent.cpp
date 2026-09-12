@@ -90,6 +90,7 @@ void UExtraAbilitySystemComponent::InitializeAttributeFromDataTable(UExtraGameAt
 	AttrSet->SetStamina(BestRow->Stamina);
 	AttrSet->SetMaxStamina(BestRow->MaxStamina);
 	AttrSet->SetShield(BestRow->Shield);
+	AttrSet->SetEnergyMaxValue(BestRow->EnergyMaxValue);
 }
 
 void UExtraAbilitySystemComponent::ApplyInitialEffects()
