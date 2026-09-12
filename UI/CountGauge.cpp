@@ -13,10 +13,10 @@ void UCountGauge::NativeConstruct()
 	UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OwnerPawn);
 	if (!ASC) return;
 
-	SetAndBoundToComboCount(ASC);
+	SetAndBoundToEnergyValue(ASC);
 }
 
-void UCountGauge::SetAndBoundToComboCount(UAbilitySystemComponent* AbilitySystemComponent)
+void UCountGauge::SetAndBoundToEnergyValue(UAbilitySystemComponent* AbilitySystemComponent)
 {
 	if (!AbilitySystemComponent) return;
 
@@ -24,13 +24,13 @@ void UCountGauge::SetAndBoundToComboCount(UAbilitySystemComponent* AbilitySystem
 
 	// 初始化一次当前值
 	const UExtraGameAttributeSet* AttrSet = OwnerASC->GetSet<UExtraGameAttributeSet>();
-	const float InitialValue = AttrSet ? AttrSet->GetComboCount() : 0.f;
+	const float InitialValue = AttrSet ? AttrSet->GetEnergyValue() : 0.f;
 	if (ProgressImage)
 	{
 		ProgressImage->GetDynamicMaterial()->SetScalarParameterValue(PercentMaterialParamName, InitialValue);
 	}
 
-	OwnerASC->GetGameplayAttributeValueChangeDelegate(UExtraGameAttributeSet::GetComboCountAttribute())
+	OwnerASC->GetGameplayAttributeValueChangeDelegate(UExtraGameAttributeSet::GetEnergyValueAttribute())
 		.AddUObject(this, &UCountGauge::UpdateGauge);
 }
 

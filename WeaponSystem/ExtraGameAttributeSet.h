@@ -69,10 +69,10 @@ public:
 	FGameplayAttributeData Shield;
 	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, Shield);
 
-	// 轻击连段「打满」次数（进入最后一段 +1，封顶 3）。打满 3 次解锁重击，重击触发后清零。纯本地战斗资源，驱动 ComboCount UI/材质，不做网络复制。
+	// 能量值：轻击连段进入最后一段 +100 累积，封顶 HeavyComboMaxVal；满值解锁重击，重击触发后清零。纯本地战斗资源，驱动 UI/材质，不做网络复制。
 	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
-	FGameplayAttributeData ComboCount;
-	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, ComboCount);
+	FGameplayAttributeData EnergyValue;
+	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, EnergyValue);
 
 protected:
 	UFUNCTION()

@@ -16,8 +16,8 @@ class EXTRACTGAMECHARACTER_API UCountGauge : public UUserWidget
 public:
 	virtual void NativeConstruct() override;
 
-	// 绑定 ComboCount attribute 变化委托，并初始化一次当前值
-	void SetAndBoundToComboCount(UAbilitySystemComponent* AbilitySystemComponent);
+	// 绑定 EnergyValue attribute 变化委托，并初始化一次当前值
+	void SetAndBoundToEnergyValue(UAbilitySystemComponent* AbilitySystemComponent);
 
 private:
 	UPROPERTY(EditDefaultsOnly,Category="Visual")

@@ -44,16 +44,16 @@ void UGA_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	// 重击成功激活。若此前轻击已「打满」ComboCount（达到要求段数），本次即是一次满足段数的重击：
+	// 重击成功激活。若此前轻击已「打满」EnergyValue（达到要求值），本次即是一次满足条件的重击：
 	// 置位大招解锁 tag（GA_Burst01 以它为 ActivationRequiredTags 门控，激活时消费移除）。
 	// 计数需在清零前读取；tag 仅在未置位时添加，避免多次满段重击把 loose tag 引用计数叠高。
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		const float CurrentComboCount = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
+		const float CurrentEnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
 
 		const AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-		const float RequiredComboCount = PlayerCharacter ? PlayerCharacter->GetHeavyComboCount() : 3.f;
-		if (CurrentComboCount >= RequiredComboCount && ASC->GetTagCount(UUExtraAbilitySystemStatic::GetBurstReadyTag()) == 0)
+		const float RequiredComboCount = PlayerCharacter ? PlayerCharacter->GetHeavyComboCount() : 300.f;
+		if (CurrentEnergyValue >= RequiredComboCount && ASC->GetTagCount(UUExtraAbilitySystemStatic::GetBurstReadyTag()) == 0)
 		{
 			ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetBurstReadyTag());
 
@@ -66,7 +66,7 @@ void UGA_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		}
 
 		// 重击成功激活，消耗打满的被动计数（清零后需重新打满连段才能再重击）
-		ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetComboCountAttribute(), 0.f);
+		ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetEnergyValueAttribute(), 0.f);
 	}
 
 	// 本 GA 按 PerActor 实例复用，跨激活重置时停/快照状态

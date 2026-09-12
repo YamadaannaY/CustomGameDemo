@@ -26,6 +26,8 @@ UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
 
 	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
 	bRotateToLockTarget = true;
+	
+	bRotateToInputWhenNoTarget = true ; 
 
 	FAbilityTriggerData LightAttackTrigger;
 	LightAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;

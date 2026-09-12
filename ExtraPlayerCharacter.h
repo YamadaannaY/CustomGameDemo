@@ -54,7 +54,7 @@ public:
 	FORCEINLINE bool IsLongPressed() const { return bLongPressed; }
 
 	// 重击所需的连段次数（角色BP编辑器可配，默认为3）
-	FORCEINLINE float GetHeavyComboCount() const { return HeavyComboCount; }
+	FORCEINLINE float GetHeavyComboCount() const { return HeavyComboMaxVal; }
 	
 	// 相机组件访问器（供 UCombatCameraComponent 解析写入目标）
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CamBoom; }
@@ -97,7 +97,7 @@ private:
 	UCameraComponent* ViewCam;
 	
 	UPROPERTY(EditDefaultsOnly,Category="Attack | HeavyAttack")
-	float HeavyComboCount = 3.f ; 
+	float HeavyComboMaxVal = 300.f ; 
 
 	// 战斗相机组件：接收 Montage 相机请求，逐帧解算写入 SpringArm/Camera 进行摄像机更新
 	UPROPERTY(VisibleDefaultsOnly,Category="View")

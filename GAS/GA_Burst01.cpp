@@ -27,7 +27,7 @@ UGA_Burst01::UGA_Burst01()
 	ActivationRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetPhase1StateTag());
 
 	// 大招必须先完成一次「满足段数」的重击：
-	// GA_HeavyAttack 在打满 ComboCount 的重击成功激活时置位 State.BurstReady，激活时消费移除。
+	// GA_HeavyAttack 在打满 EnergyValue 的重击成功激活时置位 State.BurstReady，激活时消费移除。
 	ActivationRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetBurstReadyTag());
 
 	bEnableUninterruptible = true;

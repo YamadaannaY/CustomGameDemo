@@ -543,11 +543,11 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 		return;
 	}
 
-	// 一阶段：需打满连段（ComboCount 达 HeavyComboCount）才触发重击
+	// 一阶段：需打满能量（EnergyValue 达 HeavyComboMaxVal）才触发重击
 	if (AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetPhase1StateTag()))
 	{
-		const float ComboCount = AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
-		if (ComboCount >= HeavyComboCount)
+		const float EnergyValue = AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
+		if (EnergyValue >= HeavyComboMaxVal)
 		{
 			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 				this, UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(), FGameplayEventData());

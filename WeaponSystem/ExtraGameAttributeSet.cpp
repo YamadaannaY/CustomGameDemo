@@ -15,7 +15,7 @@ UExtraGameAttributeSet::UExtraGameAttributeSet()
 	Stamina = 100.f;
 	MaxStamina = 100.f;
 	Shield = 0.f;
-	ComboCount = 0.f;
+	EnergyValue = 0.f;
 }
 
 void UExtraGameAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

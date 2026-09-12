@@ -58,7 +58,7 @@ public:
 	// 二阶段重击 GA 以它做 ActivationRequiredTags 门控，Character 长按判定也据此分支
 	static FGameplayTag GetPhase2StateTag();
 
-	// 大招解锁状态 Tag：一次「满足段数(打满 ComboCount)」的重击成功激活时置位；
+	// 大招解锁状态 Tag：一次「满足条件(打满 EnergyValue)」的重击成功激活时置位；
 	// GA_Burst01 以它做 ActivationRequiredTags 门控，激活时消费移除 → 需重新满段重击才能再放大招。
 	static FGameplayTag GetBurstReadyTag();
 	static FGameplayTag GetSkill01Tag();

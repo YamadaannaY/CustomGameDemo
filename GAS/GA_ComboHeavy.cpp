@@ -12,14 +12,14 @@ UGA_ComboHeavy::UGA_ComboHeavy()
 
 void UGA_ComboHeavy::SetupComboMontageListeners()
 {
-	// 监听进入最后一段 section（最后段第一帧的 Notify 发送），累计「打满」次数。
-	// OnlyTriggerOnce=false：连段循环（最后一段跳回第一段）时，每次进入最后一段都要 +1。
+	// 监听进入最后一段 section（最后段第一帧的 Notify 发送），累计能量。
+	// OnlyTriggerOnce=false：连段循环（最后一段跳回第一段）时，每次进入最后一段都要 +100。
 	UAbilityTask_WaitGameplayEvent* WaitLastSectionTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 		this, UUExtraAbilitySystemStatic::GetComboLastSectionTag(), nullptr, false, true);
 	WaitLastSectionTask->EventReceived.AddDynamic(this, &ThisClass::OnLastSectionEntered);
 	WaitLastSectionTask->ReadyForActivation();
 
-	// 监听最后一段的切入帧 Notify：ComboCount 打满段数且长按达标时，切入重击。
+	// 监听最后一段的切入帧 Notify：EnergyValue 打满且长按达标时，切入重击。
 	UAbilityTask_WaitGameplayEvent* WaitHeavyTransitionTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 		this, UUExtraAbilitySystemStatic::GetComboHeavyTransitionTag(), nullptr, false, true);
 	WaitHeavyTransitionTask->EventReceived.AddDynamic(this, &ThisClass::OnHeavyTransitionFrame);
@@ -49,8 +49,13 @@ void UGA_ComboHeavy::OnLastSectionEntered(FGameplayEventData EventData)
 		return;
 	}
 
-	const float Current = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
-	ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetComboCountAttribute(), FMath::Min(Current + 1.f, GetRequiredComboCount()));
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Blue,
+			TEXT("打出第三段普攻，获得100点心念"));
+	}
+	const float CurrentEnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
+	ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetEnergyValueAttribute(), FMath::Min(CurrentEnergyValue + 100.f, GetRequiredComboCount()));
 }
 
 void UGA_ComboHeavy::OnHeavyTransitionFrame(FGameplayEventData EventData)
@@ -67,8 +72,8 @@ void UGA_ComboHeavy::OnHeavyTransitionFrame(FGameplayEventData EventData)
 		return;
 	}
 
-	const float ComboCount = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetComboCountAttribute());
-	if (ComboCount < GetRequiredComboCount())
+	const float EnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
+	if (EnergyValue < GetRequiredComboCount())
 	{
 		return;
 	}
@@ -88,8 +93,9 @@ bool UGA_ComboHeavy::IsLongPressed() const
 	return PlayerCharacter && PlayerCharacter->IsLongPressed();
 }
 
+// 重击所需连段值（读取 Character 的 HeavyComboMaxVal）
 float UGA_ComboHeavy::GetRequiredComboCount() const
 {
 	const AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-	return PlayerCharacter ? PlayerCharacter->GetHeavyComboCount() : 3.f;
+	return PlayerCharacter ? PlayerCharacter->GetHeavyComboCount() : 300.f;
 }
