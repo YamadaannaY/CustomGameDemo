@@ -27,6 +27,9 @@ UE_DEFINE_GAMEPLAY_TAG(Ability_Damage, "ability.damage");
 UE_DEFINE_GAMEPLAY_TAG(Combo_LastSection, "ability.combo.lastsection");
 UE_DEFINE_GAMEPLAY_TAG(Combo_HeavyTransition, "ability.combo.heavytransition");
 UE_DEFINE_GAMEPLAY_TAG(Evade_ToSprint, "Evade.ToSprint");
+UE_DEFINE_GAMEPLAY_TAG(Juhe_PhaseEnd, "Juhe.PhaseEnd");
+UE_DEFINE_GAMEPLAY_TAG(State_Juhe, "State.Juhe");
+UE_DEFINE_GAMEPLAY_TAG(State_JuheReady, "State.JuheReady");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Cancel, "ability.cancel");
 UE_DEFINE_GAMEPLAY_TAG(Push_Self, "ability.push.self");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Passive_Launch, "ability.passive.launch.activate");
@@ -35,6 +38,12 @@ UE_DEFINE_GAMEPLAY_TAG(Uninterruptible_End, "ability.uninterruptible.end");
 UE_DEFINE_GAMEPLAY_TAG(Data_Damage, "Data.Damage");
 UE_DEFINE_GAMEPLAY_TAG(HeavyAttack_Shoot, "ability.heavyattack.shoot");
 UE_DEFINE_GAMEPLAY_TAG(Area_Damage, "ability.area.damage");
+
+// CancelWindow：注意 "ability.cancelwindow.*" 不是 "ability.cancel" 的子级（同前缀但不同分支），
+// 事件按 tag 层级向上广播，因此不会误触发移动打断的监听。
+UE_DEFINE_GAMEPLAY_TAG(State_CancelWindow, "State.CancelWindow");
+UE_DEFINE_GAMEPLAY_TAG(CancelWindow_Begin, "ability.cancelwindow.begin");
+UE_DEFINE_GAMEPLAY_TAG(CancelWindow_End, "ability.cancelwindow.end");
 
 FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 {
@@ -156,6 +165,21 @@ FGameplayTag UUExtraAbilitySystemStatic::GetEvadeToSprintTag()
 	return Evade_ToSprint;
 }
 
+FGameplayTag UUExtraAbilitySystemStatic::GetJuhePhaseEndTag()
+{
+	return Juhe_PhaseEnd;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetJuheStateTag()
+{
+	return State_Juhe;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetJuheReadyStateTag()
+{
+	return State_JuheReady;
+}
+
 FGameplayTag UUExtraAbilitySystemStatic::GetAbilityCancelTag()
 {
 	return Ability_Cancel;
@@ -198,5 +222,20 @@ FGameplayTag UUExtraAbilitySystemStatic::GetHeavyAttackShootTag()
 
 FGameplayTag UUExtraAbilitySystemStatic::GetLaunchedAbilityActivationTag()
 {
-	return Ability_Passive_Launch ; 
+	return Ability_Passive_Launch ;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetCancelWindowStateTag()
+{
+	return State_CancelWindow;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetCancelWindowBeginTag()
+{
+	return CancelWindow_Begin;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetCancelWindowEndTag()
+{
+	return CancelWindow_End;
 }

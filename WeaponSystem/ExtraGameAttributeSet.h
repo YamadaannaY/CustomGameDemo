@@ -138,4 +138,8 @@ struct FExtraCharacterAttributeRow : public FTableRowBase
 	// 能量上限（心念/寒意条满值）：重击所需能量即此值
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
 	float EnergyMaxValue = 300.f;
+
+	// 初始能量值（寒意条当前值），按 EnergyMaxValue 封顶
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute")
+	float EnergyValue = 0.f;
 };

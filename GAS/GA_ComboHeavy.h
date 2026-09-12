@@ -30,7 +30,7 @@ private:
 	// 攻击键是否仍按住（读取 Character 的 bHoldingAttack；按住时本形态自动续段）
 	bool IsHoldingAttack() const;
 
-	// 进入最后一段 section 时回调：累计能量（EnergyValue +100，封顶 HeavyComboMaxVal）
+	// 进入最后一段 section 时回调：累计能量（EnergyValue +100，封顶由属性集按 EnergyMaxValue 处理）
 	UFUNCTION()
 	void OnLastSectionEntered(FGameplayEventData EventData);
 
@@ -41,6 +41,6 @@ private:
 	// 本次按下是否已长按达到重击阈值（读取 Character 的 bLongPressed）
 	bool IsLongPressed() const;
 
-	// 重击所需能量值（读取 Character 的 HeavyComboMaxVal）
+	// 重击所需能量值（经 Character 读属性集 EnergyMaxValue）
 	float GetRequiredComboCount() const;
 };

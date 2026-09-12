@@ -28,6 +28,9 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Damage);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_LastSection);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_HeavyTransition);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Evade_ToSprint);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Juhe_PhaseEnd);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Juhe);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_JuheReady);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Cancel);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Push_Self);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Uninterruptible);
@@ -35,6 +38,11 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Uninterruptible_End);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(HeavyAttack_Shoot);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Area_Damage);
+
+// CancelWindow：后摇段「视为该 GA 已取消」的开关与开/关窗事件
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CancelWindow);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(CancelWindow_Begin);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(CancelWindow_End);
 
 /**
  * 
@@ -82,6 +90,12 @@ public:
 	static FGameplayTag GetComboLastSectionTag();       // "ability.combo.lastsection"
 	static FGameplayTag GetComboHeavyTransitionTag();   // "ability.combo.heavytransition"
 	static FGameplayTag GetEvadeToSprintTag();          // "Evade.ToSprint"
+
+	// 居合（第二形态闪避特化）内部 Tag
+	static FGameplayTag GetJuhePhaseEndTag();           // "Juhe.PhaseEnd"     居合 Montage 后摇起始帧 AN 发的分界事件
+	static FGameplayTag GetJuheStateTag();              // "State.Juhe"        居合进行中，挡住普攻 GA 激活
+	static FGameplayTag GetJuheReadyStateTag();         // "State.JuheReady"   二阶段普攻进 Section 后的 3s 居合窗口
+
 	static FGameplayTag GetAbilityCancelTag();          // "ability.cancel"
 	static FGameplayTag GetPushSelfTag();               // "ability.push.self"
 	static FGameplayTag GetUninterruptibleTag();        // "State.Uninterruptible"
@@ -99,6 +113,13 @@ public:
 
 	// 重击弓射：Montage 内各放箭帧 AN 触发一次本事件，GA 每收到一次生成一支箭
 	static FGameplayTag GetHeavyAttackShootTag();       // "ability.heavyattack.shoot"
+
+	// ── CancelWindow（后摇段：GA 视为已取消，任何输入都能打断此 Montage）──
+	// AN_CancelWindow 在区间 Begin/End 各发一次事件，持有者据此撤销/恢复自身封锁并登记句柄；
+	// 任何 GA 在 CommitAbility 时查询持有者，命中即取消它。移动录入打断仍走 GetAbilityCancelTag。
+	static FGameplayTag GetCancelWindowStateTag();      // "State.CancelWindow"        窗口开启中（松散 tag，供查询/调试）
+	static FGameplayTag GetCancelWindowBeginTag();      // "ability.cancelwindow.begin" 进窗（AN NotifyBegin）
+	static FGameplayTag GetCancelWindowEndTag();        // "ability.cancelwindow.end"   出窗（AN NotifyEnd）
 
 	static FGameplayTag GetLaunchedAbilityActivationTag();
 };
