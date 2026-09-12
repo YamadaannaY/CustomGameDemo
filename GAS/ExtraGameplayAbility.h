@@ -11,6 +11,7 @@
 class UAnimMontage;
 class UCharacterMovementComponent;
 class UGameplayEffect;
+class UMotionWarpingComponent;
 
 /**
  * 自定义GA基类
@@ -141,26 +142,28 @@ protected:
 	void OnUninterruptibleReleaseReceived(FGameplayEventData Payload);
 
 
-	// ── 锁定目标转向（MR）───────────────────────────────────
-	// 激活时对攻击 Montage 设置朝向锁定目标的 MotionWarping warp target，
-	// 动画内由 AnimNotifyState_MotionWarping 区间完成平滑转向。
+	// ── 攻击朝向（MR）───────────────────────────────────
+	// 激活时对攻击 Montage 设置 MotionWarping warp target，动画内由
+	// AnimNotifyState_MotionWarping 区间完成平滑转向。
 	// 子类只需在构造函数置 true，其余由基类在 PreActivate / EndAbility 统一处理。
 	UPROPERTY(EditDefaultsOnly, Category = "LockOn")
 	bool bRotateToLockTarget = false;
+
+	// 无锁定目标但有移动输入时：只 warp 旋转（转向输入方向），位移交回动画自身的根位移。
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (EditCondition = "bRotateToLockTarget"))
+	bool bRotateToInputWhenNoTarget = false;
 
 	// warp target 名称，须与攻击 Montage 里 AnimNotifyState_MotionWarping 的 WarpTargetName 一致
 	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (EditCondition = "bRotateToLockTarget"))
 	FName LockOnWarpTargetName = TEXT("AttackFacing");
 
-	// 激活期间刷新 warp target 的周期（秒），使朝向在动画区间内跟随锁定目标移动
-	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (EditCondition = "bRotateToLockTarget", ClampMin = "0.01"))
-	float LockOnWarpRefreshInterval = 0.1f;
-
-	// 计算锁定目标方向并写入 MotionWarping,注意：只改朝向，Loc保持角色原位置，即MR不开Transition
+	// 按当前状态（锁定目标 / 移动输入）写入 warp target，并同步 modifier 上的位移、旋转开关
 	void UpdateLockOnWarpTarget();
 
-	// 激活期间周期刷新 warp target 的定时器句柄（EndAbility 清理）
-	FTimerHandle LockOnWarpRefreshTimerHandle;
+	// MW 每帧更新 modifier 之前的回调，是设置 modifier 开关的时机
+	// （NMS 区间开始时才创建 modifier 并把开关拷回默认值，不能只在激活时设一次）
+	UFUNCTION()
+	void OnMotionWarpingPreUpdate(UMotionWarpingComponent* MotionWarpingComp);
 
 
 	// ── 通用武器碰撞伤害 ──────────────────────────────────────

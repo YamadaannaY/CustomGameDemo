@@ -8,6 +8,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "MotionWarpingComponent.h"
+#include "RootMotionModifier.h"
 #include "ExtractGameCharacter/ExtraCharacter.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
@@ -84,15 +85,10 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		ReleaseUninterruptible();
 	}
 
-	// 清理锁定转向刷新定时器（激活失败 / 取消 / 正常结束）
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(LockOnWarpRefreshTimerHandle);
-	}
-
-	// 兜底移除已注册的锁定朝向 warp target，避免 GA 结束后残留
+	// 解绑 MW 每帧回调并移除已注册的朝向 warp target，避免 GA 结束后残留
 	if (Char && Char->GetMotionWarpingComponent())
 	{
+		Char->GetMotionWarpingComponent()->OnPreUpdate.RemoveDynamic(this, &ThisClass::OnMotionWarpingPreUpdate);
 		Char->GetMotionWarpingComponent()->RemoveWarpTarget(LockOnWarpTargetName);
 	}
 
@@ -154,20 +150,20 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 		}
 	}
 
-	// 锁定目标转向（MR）：激活即写入朝向 warp target，并周期刷新跟随目标移动。
+	// 攻击朝向（MR）：激活即写入 warp target，并挂上 MW 的每帧回调持续同步
+	// （跟随目标移动 / 跟随输入方向 / 无输入时不再干涉）。
 	// 仅攻击 GA 开启（bRotateToLockTarget），ActivateAbility 阶段播放的 Montage 由动画内 MR 区间完成转向。
 	if (bRotateToLockTarget)
 	{
-		UpdateLockOnWarpTarget();
-		if (UWorld* World = GetWorld())
+		if (AExtraPlayerCharacter* PlayerChar = GetOwningAvatarCharacter())
 		{
-			World->GetTimerManager().SetTimer(
-				LockOnWarpRefreshTimerHandle,
-				this,
-				&ThisClass::UpdateLockOnWarpTarget,
-				LockOnWarpRefreshInterval,
-				true);
+			if (UMotionWarpingComponent* MWC = PlayerChar->GetMotionWarpingComponent())
+			{
+				MWC->OnPreUpdate.AddDynamic(this, &ThisClass::OnMotionWarpingPreUpdate);
+			}
 		}
+
+		UpdateLockOnWarpTarget();
 	}
 }
 
@@ -623,39 +619,79 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 		return;
 	}
 
-	// 目标丢失/超出锁定范围：移除已注册的 warp target，使动画 MR 区间不再强转朝向旧目标。
-	// 下一 tick 若重新锁定到目标，会再次走下方 AddOrUpdate 自动恢复转向。
+	// 三态：有锁定目标 → 位移+旋转都 warp；无目标有输入 → 仅旋转；无目标无输入 → 都不干涉。
 	const AActor* LockTarget = PlayerChar->GetLockTarget();
-	if (!LockTarget)
-	{
-		MWC->RemoveWarpTarget(LockOnWarpTargetName);
-		return;
-	}
 
-	// 水平化：只旋转 Yaw 面向目标，不改变俯仰（角色保持水平站立）
-	FVector FlatDir = LockTarget->GetActorLocation() - PlayerChar->GetActorLocation();
-	FlatDir.Z = 0.f;
-	if (FlatDir.IsNearlyZero())
+	FVector FaceDir = FVector::ZeroVector;
+	FVector WarpLocation = PlayerChar->GetActorLocation();
+	bool bWarpTranslation = false;
+	bool bWarpRotation = false;
+
+	if (LockTarget)
 	{
-		return;
+		// 水平化：只旋转 Yaw 面向目标，不改变俯仰（角色保持水平站立）
+		FVector FlatDir = LockTarget->GetActorLocation() - PlayerChar->GetActorLocation();
+		FlatDir.Z = 0.f;
+		if (FlatDir.IsNearlyZero())
+		{
+			return;
+		}
+
+		// 有限MW追踪：距离不超过上限时 warp 落点在目标身上；超出时把落点钳制到自身朝目标的
+		// MotionWarpMaxMoveDist 处，避免动画强制位移超出设定距离。
+		WarpLocation = LockTarget->GetActorLocation();
+		const float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation(), PlayerChar->GetActorLocation());
+		if (DistanceToTarget > MotionWarpMaxMoveDist)
+		{
+			WarpLocation = PlayerChar->GetActorLocation() + FlatDir.GetSafeNormal() * MotionWarpMaxMoveDist;
+		}
+
+		FaceDir = FlatDir;
+		bWarpTranslation = true;
+		bWarpRotation = true;
+	}
+	else if (bRotateToInputWhenNoTarget && !PlayerChar->GetInputDirection().IsNearlyZero())
+	{
+		// 无目标但有移动输入：只把朝向拧到输入方向，位移交给动画自身的根位移
+		FaceDir = PlayerChar->GetInputDirection();
+		FaceDir.Z = 0.f;
+		if (FaceDir.IsNearlyZero())
+		{
+			return;
+		}
+
+		bWarpRotation = true;
+	}
+	else
+	{
+		// 无目标且无输入：保留 target 但不干涉根运动（等价于没有该 MW）。
+		FaceDir = PlayerChar->GetActorForwardVector();
 	}
 	
 	
-	// 有限MW追踪：距离不超过上限时 warp 落点在目标身上；超出时把落点钳制到自身朝目标的
-	// MotionWarpMaxMoveDist 处，避免动画强制位移超出设定距离。
-	FVector WarpLocation = LockTarget->GetActorLocation();
-	float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation() , PlayerChar->GetActorLocation());
-	if (DistanceToTarget > MotionWarpMaxMoveDist)
-	{
-		WarpLocation = PlayerChar->GetActorLocation() + FlatDir.GetSafeNormal() * MotionWarpMaxMoveDist;
-	}
-
 	FMotionWarpingTarget WarpTarget;
 	WarpTarget.Name = LockOnWarpTargetName;
 	WarpTarget.Location = WarpLocation;
-	WarpTarget.Rotation = FRotationMatrix::MakeFromX(FlatDir).Rotator();
+	WarpTarget.Rotation = FRotationMatrix::MakeFromX(FaceDir).Rotator();
 
 	MWC->AddOrUpdateWarpTarget(WarpTarget);
+
+	// 位移/旋转开关只存在于 modifier 上，且每次 NMS 区间开始都会重建 modifier、
+	// 把开关拷回默认 true，因此每帧按当前状态重设。
+	for (URootMotionModifier* Mod : MWC->GetModifiers())
+	{
+		URootMotionModifier_Warp* WarpMod = Cast<URootMotionModifier_Warp>(Mod);
+		if (WarpMod && WarpMod->WarpTargetName == LockOnWarpTargetName)
+		{
+			WarpMod->bWarpTranslation = bWarpTranslation;
+			WarpMod->bWarpRotation = bWarpRotation;
+		}
+	}
+}
+
+void UExtraGameplayAbility::OnMotionWarpingPreUpdate(UMotionWarpingComponent* MotionWarpingComp)
+{
+	UpdateLockOnWarpTarget();
 }
 
 AExtraPlayerCharacter* UExtraGameplayAbility::GetOwningAvatarCharacter()

@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "AN_SendGameplayEvent.h"
 #include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
-#include "Animation/AnimNotifies/AnimNotify.h"
 #include "AN_AreaCheck.generated.h"
 
 /**
