@@ -14,6 +14,7 @@
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
 
 UExtraGameplayAbility::UExtraGameplayAbility()
@@ -85,6 +86,12 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		ReleaseUninterruptible();
 	}
 
+	// 兜底清理 CancelWindow：蒙太奇被异常掐断时 NotifyEnd 不会到达，这里恢复封锁并解除登记
+	if (bEnableCancelWindow)
+	{
+		ExitCancelWindow();
+	}
+
 	// 解绑 MW 每帧回调并移除已注册的朝向 warp target，避免 GA 结束后残留
 	if (Char && Char->GetMotionWarpingComponent())
 	{
@@ -93,6 +100,30 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	}
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+bool UExtraGameplayAbility::CommitAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo, FGameplayTagContainer* OptionalRelevantTags)
+{
+	if (!Super::CommitAbility(Handle, ActorInfo, ActivationInfo, OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	// CancelWindow 入站取消：窗口内的GA已「视为结束」，任何 GA 提交成功即打断它。
+	if (bCanInterruptCancelWindow)
+	{
+		if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+		{
+			const FGameplayAbilitySpecHandle Holder = ASC->GetCancelWindowHolder();
+			if (Holder.IsValid() && Holder != Handle)
+			{
+				ASC->CancelAbilityHandle(Holder);
+			}
+		}
+	}
+
+	return true;
 }
 
 void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
@@ -105,6 +136,12 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 	if (bEnableMovementCancel)
 	{
 		SetupMovementCancel();
+	}
+
+	// 后摇可打断窗口：监听 ANS_CancelWindow 的开/关窗事件
+	if (bEnableCancelWindow)
+	{
+		SetupCancelWindowListener();
 	}
 
 	// 推力 任何 GA 激活期间统一监听 Push_Self 事件，由 AN_ApplyPush 在动画帧发送。
@@ -142,6 +179,8 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 					{
 						DefaultGravityScale = DefaultMovement->GravityScale;
 					}
+					
+					//第一个激活GA缓存一次即可
 					bGravityDefaultCached = true;
 				}
 
@@ -169,7 +208,7 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 
 void UExtraGameplayAbility::SetupMovementCancel()
 {
-	// 重置跨激活状态为PerActorGA实例复用
+	//重置标记
 	bEndingFromMovement = false;
 
 	UAbilityTask_WaitGameplayEvent* WaitCancelTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, GetMovementCancelTag());
@@ -216,7 +255,7 @@ void UExtraGameplayAbility::ReleaseUninterruptible()
 void UExtraGameplayAbility::SetupUninterruptibleReleaseListener()
 {
 	UAbilityTask_WaitGameplayEvent* WaitUninterruptibleTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetUninterruptibleEndTag(), nullptr, false, false);
+		this, UUExtraAbilitySystemStatic::GetUninterruptibleEndTag(), nullptr, false, true );
 	WaitUninterruptibleTask->EventReceived.AddDynamic(this, &ThisClass::OnUninterruptibleReleaseReceived);
 	WaitUninterruptibleTask->ReadyForActivation();
 }
@@ -594,8 +633,71 @@ void UExtraGameplayAbility::OnMovementCancelNotifyReceived(FGameplayEventData Pa
 	}
 
 	OnMovementCancelTriggered();
-	
+
 	K2_EndAbility();
+}
+
+void UExtraGameplayAbility::SetupCancelWindowListener()
+{
+	bInCancelWindow = false;
+
+	// OnlyMatchExact=true：只接住 AN 发的这两个精确 tag
+	UAbilityTask_WaitGameplayEvent* WaitBeginTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, UUExtraAbilitySystemStatic::GetCancelWindowBeginTag(), nullptr, false, true);
+	WaitBeginTask->EventReceived.AddDynamic(this, &ThisClass::OnCancelWindowBeginReceived);
+	WaitBeginTask->ReadyForActivation();
+
+	UAbilityTask_WaitGameplayEvent* WaitEndTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, UUExtraAbilitySystemStatic::GetCancelWindowEndTag(), nullptr, false, true);
+	WaitEndTask->EventReceived.AddDynamic(this, &ThisClass::OnCancelWindowEndReceived);
+	WaitEndTask->ReadyForActivation();
+}
+
+void UExtraGameplayAbility::OnCancelWindowBeginReceived(FGameplayEventData Payload)
+{
+	EnterCancelWindow();
+}
+
+void UExtraGameplayAbility::OnCancelWindowEndReceived(FGameplayEventData Payload)
+{
+	ExitCancelWindow();
+}
+
+void UExtraGameplayAbility::EnterCancelWindow()
+{
+	if (bInCancelWindow)
+	{
+		return;
+	}
+	bInCancelWindow = true;
+
+	// 「视为已取消」第一步：撤销表现段的封锁。
+	SetShouldBlockOtherAbilities(false);
+
+	// 「视为已取消」第二步：登记自己为可被任意 GA 取消的持有者，其他GA进行Commit时会Cancel窗口内（即持有WindowState）的GA
+	if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+	{
+		ASC->SetCancelWindowHolder(GetCurrentAbilitySpecHandle());
+		ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetCancelWindowStateTag());
+	}
+}
+
+void UExtraGameplayAbility::ExitCancelWindow()
+{
+	if (!bInCancelWindow)
+	{
+		return;
+	}
+	bInCancelWindow = false;
+
+	// 恢复封锁（窗口结束但 GA 仍在播后续段时必须恢复，否则之后永远挡不住同类 GA）
+	SetShouldBlockOtherAbilities(true);
+
+	if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+	{
+		ASC->ClearCancelWindowHolder(GetCurrentAbilitySpecHandle());
+		ASC->RemoveLooseGameplayTag(UUExtraAbilitySystemStatic::GetCancelWindowStateTag());
+	}
 }
 
 void UExtraGameplayAbility::UpdateLockOnWarpTarget()
@@ -643,7 +745,7 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 		const float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation(), PlayerChar->GetActorLocation());
 		if (DistanceToTarget > MotionWarpMaxMoveDist)
 		{
-			WarpLocation = PlayerChar->GetActorLocation() + FlatDir.GetSafeNormal() * MotionWarpMaxMoveDist;
+			WarpLocation = PlayerChar->GetActorLocation() + FlatDir.GetSafeNormal() * MotionWarpMaxMoveDist - 20.f;
 		}
 
 		FaceDir = FlatDir;
@@ -664,7 +766,7 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 	}
 	else
 	{
-		// 无目标且无输入：保留 target 但不干涉根运动（等价于没有该 MW）。
+		// 无目标且无输入：不干涉根运动（等价于没有该 MW）。
 		FaceDir = PlayerChar->GetActorForwardVector();
 	}
 	

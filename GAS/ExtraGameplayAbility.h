@@ -34,6 +34,10 @@ public:
 	// 子类只需在构造函数里置 bEnableMovementCancel = true，无需再在 ActivateAbility 里手动调用 SetupMovementCancel。
 	virtual void PreActivate(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, FOnGameplayAbilityEnded::FDelegate* OnGameplayAbilityEndedDelegate, const FGameplayEventData* TriggerEventData = nullptr) override;
 
+	// 覆写 CommitAbility：提交成功后，若当前有 GA 处于 CancelWindow（后摇可打断窗口），取消它。
+	// 放在提交之后而非 PreActivate，是为了避免本 GA 因消耗/冷却提交失败却白白打断对方。
+	virtual bool CommitAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, FGameplayTagContainer* OptionalRelevantTags) override;
+
 	// 对 Avatar 施加推力（底层 LaunchCharacter）。
 	// bOverrideXY / bOverrideZ 控制是否覆盖对应轴的速度：
 	//   空中二段跳应 bOverrideZ=true、bOverrideXY=false，只改竖直、保留水平速度；
@@ -71,6 +75,40 @@ protected:
 
 	// 命中移动打断的瞬间回调。
 	virtual void OnMovementCancelTriggered() {}
+
+	// ── 后摇可打断窗口（CancelWindow）─────────────────────────────
+	// 开启后：Montage 后摇段放 AN_CancelWindow，进窗即「视为该 GA 已取消」——
+	//   1) 撤销自身 BlockAbilitiesWithTag 封锁（此前被它挡住的 GA 重新可激活，如自身同类）；
+	//   2) 登记为窗口持有者，任何 GA 在 CommitAbility 时发现持有者即取消它；
+	//   3) 移动输入仍走 GetMovementCancelTag() 事件即时打断。
+	// 出窗恢复封锁。子类只需在构造函数置 true，其余由基类在 PreActivate / EndAbility 统一处理。
+	UPROPERTY(EditDefaultsOnly, Category = "Movement | CancelWindow")
+	bool bEnableCancelWindow = false;
+
+	// 本 GA 提交成功时，是否可以取消正处于 CancelWindow 的其他 GA。
+	// 默认 true = 「任何 GA 都能打断」；被动/工具类 GA 若不应打断表现段，置 false 退出。
+	UPROPERTY(EditDefaultsOnly, Category = "Movement | CancelWindow")
+	bool bCanInterruptCancelWindow = true;
+
+	// 监听 AN_CancelWindow 的开/关窗事件（PreActivate 自动调用）
+	void SetupCancelWindowListener();
+
+	// 进窗：撤销自身封锁 + 登记持有者（幂等，重复进窗无副作用）
+	void EnterCancelWindow();
+
+	// 出窗 / GA 结束兜底：恢复封锁 + 解除登记（幂等）
+	void ExitCancelWindow();
+
+	// 开窗事件回调
+	UFUNCTION()
+	void OnCancelWindowBeginReceived(FGameplayEventData Payload);
+
+	// 关窗事件回调
+	UFUNCTION()
+	void OnCancelWindowEndReceived(FGameplayEventData Payload);
+
+	// 本次激活是否处于窗口内（幂等判断 + 调试用）
+	bool bInCancelWindow = false;
 
 	//根据Vel方向向量参数对单施加一个Push效果
 	static void PushTarget(AActor*Target,const FVector& PushVel);

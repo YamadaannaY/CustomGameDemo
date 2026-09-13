@@ -27,7 +27,17 @@ public:
 
 	// UnPossess 时清理天生 GA 和 GE
 	void RemoveInnateAbilities();
-	
+
+	// ── CancelWindow 持有者登记 ──────────────────────────────────
+	// 后摇「可打断窗口」开启期间，持有者把自己登记在这里；任何 GA 在 CommitAbility 时
+	// 查询此句柄，命中且非自身即取消它（窗口内该 GA 视为已取消）。
+	// 同一时刻只可能有一个窗口（一个 Montage 在播），故只存单个句柄。
+	FGameplayAbilitySpecHandle GetCancelWindowHolder() const { return CancelWindowHolder; }
+	void SetCancelWindowHolder(const FGameplayAbilitySpecHandle& InHandle) { CancelWindowHolder = InHandle; }
+
+	// 仅当登记的是 InHandle 时才清除，避免旧 GA 的延迟清理误删新持有者
+	void ClearCancelWindowHolder(const FGameplayAbilitySpecHandle& InHandle);
+
 	// 角色级能力：全部以 INDEX_NONE 授予，触发方式由各 GA 自身的 AbilityTriggers（InputTag）决定。
 	// eg: Dodge(GA_Evade)归这里，不可装卸，武器技能组(Combo/AirAttack等)归 WeaponData 的 GrantedAbilities，可装卸。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Innate")
@@ -57,4 +67,7 @@ private:
 
 	TArray<FGameplayAbilitySpecHandle> InnateAbilityHandles;
 	TArray<FActiveGameplayEffectHandle> InnateEffectHandles;
+
+	// CancelWindow 持有者句柄；Invalid 表示当前无窗口
+	FGameplayAbilitySpecHandle CancelWindowHolder;
 };

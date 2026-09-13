@@ -5,10 +5,13 @@
 #include "AN_CancelWindow.generated.h"
 
 /**
- * 移动输入打断的「区间」标记。
+ * 后摇「可打断窗口」标记。
  *
- * 覆盖在 Montage 后摇段：在 NotifyBegin ~ NotifyEnd 之间，只要检测到移动输入就发送
- * ability.cancel 事件，由UExtraGameplayAbility 接收并提前结束 GA。
+ * 覆盖在 Montage 后摇段，语义为：进入窗口后该 GA 视为已取消——期间
+ *  1) 任何其他 GA 激活打断（NotifyBegin 发 ability.cancelwindow.begin，持有者撤销自身封锁并登记，
+ *     其他 GA 在 CommitAbility 时取消它）；
+ *  2) 移动输入打断（NotifyTick 检测到移动输入即发 ability.cancel）。
+ * NotifyEnd 发 ability.cancelwindow.end，持有者恢复封锁。
  */
 UCLASS()
 class EXTRACTGAMECHARACTER_API UAN_CancelWindow : public UAnimNotifyState
