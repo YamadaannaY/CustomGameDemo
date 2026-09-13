@@ -36,10 +36,26 @@ public:
 	UFUNCTION()
 	void OnAirEvadeLandDetected(const FHitResult& Hit);
 
+protected:
+	// 供居合特化复用：改写 CurrentPlayingMontage 后调用，播/切 Montage 并在播完时结束 GA
+	//（内部会先 EndTask 旧任务，避免其 OnInterrupted 误杀 GA）
+	void PlayEvadeMontage();
+
+	// 无输入时的原地后闪 Montage，居合子类中需要复用，所以提升到protected
+	UPROPERTY(EditDefaultsOnly, Category="Montage")
+	UAnimMontage* BackwardEvadeMontage;
+
+	// 当前正在播放的 Montage
+	UPROPERTY()
+	TObjectPtr<UAnimMontage> CurrentPlayingMontage;
+
+	// 结束时是否施加「连续闪避冷却」GE。居合分支不走基类激活流程、DodgeCount 会残留上次的值，
+	// 故覆写为 false，避免居合结束误触发闪避冷却。
+	virtual bool ShouldApplyDodgeCooldown() const { return true; }
+
 private:
 	// 挂载 Dodge 输入监听（GameplayEvent 方式，类似 GA_Combo 循环监听 LightAttack）
 	void SetupWaitDodgeInputPress();
-	void PlayEvadeMontage();
 
 	// 播放/重播当前 Montage，并接管旧 Montage 被替换时触发的任务回调
 	void HandlePlayMontageTaskDelegates(UAbilityTask_PlayMontageAndWait* Task);
@@ -74,17 +90,11 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Montage")
 	UAnimMontage* ForwardEvadeMontage;
 
-	UPROPERTY(EditDefaultsOnly, Category="Montage")
-	UAnimMontage* BackwardEvadeMontage;
-
 	UPROPERTY(EditDefaultsOnly, Category="Montage|Air")
 	UAnimMontage* ForwardAirEvadeMontage;
 
 	UPROPERTY(EditDefaultsOnly, Category="Montage|Air")
 	UAnimMontage* BackwardAirEvadeMontage;
-
-	UPROPERTY()
-	TObjectPtr<UAnimMontage> CurrentPlayingMontage;
 
 	// 本次激活选择的是前冲（Forward/ForwardAir），用于朝向调整等前冲专属逻辑
 	bool bPlayingForwardEvade = false;

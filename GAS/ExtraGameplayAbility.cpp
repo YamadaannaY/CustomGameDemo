@@ -739,17 +739,11 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 			return;
 		}
 
-		// 有限MW追踪：距离不超过上限时 warp 落点在目标身上；超出时把落点钳制到自身朝目标的
-		// MotionWarpMaxMoveDist 处，避免动画强制位移超出设定距离。
-		WarpLocation = LockTarget->GetActorLocation();
-		const float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation(), PlayerChar->GetActorLocation());
-		if (DistanceToTarget > MotionWarpMaxMoveDist)
-		{
-			WarpLocation = PlayerChar->GetActorLocation() + FlatDir.GetSafeNormal() * MotionWarpMaxMoveDist - 20.f;
-		}
+		// 落点与「是否位移 warp」交给虚函数：默认落在目标位置，居合前冲覆写为穿过目标落在身后
+		WarpLocation = ComputeLockOnWarpLocation(PlayerChar, LockTarget, FlatDir.GetSafeNormal(), bWarpTranslation);
 
-		FaceDir = FlatDir;
-		bWarpTranslation = true;
+		// 朝向同样交给虚函数：默认朝目标，居合前冲覆写为锁定起手方向
+		FaceDir = ComputeLockOnFaceDir(PlayerChar, LockTarget, FlatDir.GetSafeNormal());
 		bWarpRotation = true;
 	}
 	else if (bRotateToInputWhenNoTarget && !PlayerChar->GetInputDirection().IsNearlyZero())
@@ -789,6 +783,31 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 			WarpMod->bWarpRotation = bWarpRotation;
 		}
 	}
+}
+
+FVector UExtraGameplayAbility::ComputeLockOnWarpLocation(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget, bool& bOutWarpTranslation) const
+{
+	bOutWarpTranslation = true;
+
+	if (!PlayerChar || !LockTarget)
+	{
+		return PlayerChar ? PlayerChar->GetActorLocation() : FVector::ZeroVector;
+	}
+
+	// 有限MW追踪：距离不超过上限时 warp 落点在目标身上；超出时把落点钳制到自身朝目标的MotionWarpMaxMoveDist位置，避免动画强制位移超出设定距离。
+	const float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation(), PlayerChar->GetActorLocation());
+	if (DistanceToTarget > MotionWarpMaxMoveDist)
+	{
+		return PlayerChar->GetActorLocation() + DirToTarget * MotionWarpMaxMoveDist - 20.f;
+	}
+
+	return LockTarget->GetActorLocation();
+}
+
+FVector UExtraGameplayAbility::ComputeLockOnFaceDir(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget) const
+{
+	// 默认朝目标
+	return DirToTarget;
 }
 
 void UExtraGameplayAbility::OnMotionWarpingPreUpdate(UMotionWarpingComponent* MotionWarpingComp)

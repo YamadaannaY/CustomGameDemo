@@ -198,6 +198,15 @@ protected:
 	// 按当前状态（锁定目标 / 移动输入）写入 warp target，并同步 modifier 上的位移、旋转开关
 	void UpdateLockOnWarpTarget();
 
+	// 有锁定目标时的 warp 落点计算；bOutWarpTranslation 指示本次是否做位移 warp。
+	// 默认：落点在目标位置（超出 MotionWarpMaxMoveDist 时钳制到该距离处）并做位移。
+	// 特化 GA（如居合前冲的「穿过目标落到身后」）可覆写。
+	virtual FVector ComputeLockOnWarpLocation(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget, bool& bOutWarpTranslation) const;
+
+	// 有锁定目标时的 warp 朝向。默认朝目标。
+	// 特化可覆写（如居合前冲锁定起手方向，避免穿过目标后方向反转导致落点跳变）。
+	virtual FVector ComputeLockOnFaceDir(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget) const;
+
 	// MW 每帧更新 modifier 之前的回调，是设置 modifier 开关的时机
 	// （NMS 区间开始时才创建 modifier 并把开关拷回默认值，不能只在激活时设一次）
 	UFUNCTION()

@@ -235,8 +235,7 @@ void UGA_Evade::HandleDodgeInputPress(FGameplayEventData EventData)
 		DodgeCount--;
 		return;
 	}
-
-	// 让朝向微调 timer 与本次选择保持一致：
+	
 	// 前冲 → 刷新 timer 持续按当前输入微调朝向；原地后闪 → 停掉，避免残留 MW target 干扰后撤闪避
 	if (bPlayingForwardEvade)
 	{
@@ -393,8 +392,8 @@ void UGA_Evade::PollMoveInputForSprint()
 void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
-	//地面使用了连续Evade机制时应用一个冷却GE
-	if (MaxDodgeTriggerCooldownEffect && DodgeCount>=MaxDodgeCount && !bAirborneEvade)
+	//地面使用了连续Evade时应用一个冷却GE
+	if (MaxDodgeTriggerCooldownEffect && DodgeCount>=MaxDodgeCount && !bAirborneEvade && ShouldApplyDodgeCooldown())
 	{
 		if (!K2_HasAuthority())
 		{
