@@ -13,13 +13,17 @@ UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
 	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag());
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirborneTag());
-
+	
 	// 霸体期间（SkillGA 表现段）不可激活；后摇段放开后，激活时取消 SkillGA 打断其后摇。
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetHeavyAttackAbilityTag());
 	
 	// 启用移动打断（基类机制）
 	bEnableMovementCancel = true;
+
+	// 启用后摇可打断窗口（基类机制）：AN_CancelWindow 进窗后视为本 GA 已取消，
+	// 任何 GA 激活或移动输入都能打断；出窗恢复封锁
+	bEnableCancelWindow = true;
 
 	// 启用通用武器碰撞伤害（基类机制）：服务端监听命中事件并按 Section 应用 GE
 	bEnableWeaponDamage = true;

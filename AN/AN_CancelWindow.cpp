@@ -4,9 +4,29 @@
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 
+namespace
+{
+	// 开/关窗事件无负载，只做通知；由 UExtraGameplayAbility 的窗口持有者监听
+	void SendCancelWindowEvent(USkeletalMeshComponent* MeshComp, const FGameplayTag& EventTag)
+	{
+		if (!MeshComp)
+		{
+			return;
+		}
+
+		if (AActor* Owner = MeshComp->GetOwner())
+		{
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Owner, EventTag, FGameplayEventData());
+		}
+	}
+}
+
 void UAN_CancelWindow::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float TotalDuration, const FAnimNotifyEventReference& EventReference)
 {
 	Super::NotifyBegin(MeshComp, Animation, TotalDuration, EventReference);
+
+	// 进窗：持有者据此撤销自身封锁并登记为「可被任何 GA 取消」
+	SendCancelWindowEvent(MeshComp, UUExtraAbilitySystemStatic::GetCancelWindowBeginTag());
 }
 
 void UAN_CancelWindow::NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float FrameDeltaTime, const FAnimNotifyEventReference& EventReference)
@@ -43,6 +63,9 @@ void UAN_CancelWindow::NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequenc
 void UAN_CancelWindow::NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference)
 {
 	Super::NotifyEnd(MeshComp, Animation, EventReference);
+
+	// 出窗：持有者恢复自身封锁、解除登记
+	SendCancelWindowEvent(MeshComp, UUExtraAbilitySystemStatic::GetCancelWindowEndTag());
 }
 
 FString UAN_CancelWindow::GetNotifyName_Implementation() const

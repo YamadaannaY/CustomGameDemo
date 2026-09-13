@@ -33,6 +33,14 @@ void UExtraAbilitySystemComponent::RemoveInnateAbilities()
 	InnateEffectHandles.Empty();
 }
 
+void UExtraAbilitySystemComponent::ClearCancelWindowHolder(const FGameplayAbilitySpecHandle& InHandle)
+{
+	if (CancelWindowHolder == InHandle)
+	{
+		CancelWindowHolder = FGameplayAbilitySpecHandle();
+	}
+}
+
 void UExtraAbilitySystemComponent::InitializeBaseAttribute()
 {
 	// 直接注册基类属性集（不再使用 AttributeSetClass 子类方案）
@@ -91,6 +99,7 @@ void UExtraAbilitySystemComponent::InitializeAttributeFromDataTable(UExtraGameAt
 	AttrSet->SetMaxStamina(BestRow->MaxStamina);
 	AttrSet->SetShield(BestRow->Shield);
 	AttrSet->SetEnergyMaxValue(BestRow->EnergyMaxValue);
+	AttrSet->SetEnergyValue(BestRow->EnergyValue);
 }
 
 void UExtraAbilitySystemComponent::ApplyInitialEffects()

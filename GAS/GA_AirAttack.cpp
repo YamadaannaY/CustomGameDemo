@@ -23,6 +23,9 @@ UGA_AirAttack::UGA_AirAttack()
 	// 启用移动打断
 	bEnableMovementCancel = true;
 
+	// 启用后摇可打断窗口（基类机制）：AN_CancelWindow 进窗后视为本 GA 已取消，任何 GA 激活或移动输入都能打断
+	bEnableCancelWindow = true;
+
 	// 启用重力缩放（空中攻击期间用 AbilityGravityScale 覆盖 GravityScale）
 	bEnableGravityScale = true;
 
