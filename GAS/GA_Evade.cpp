@@ -20,7 +20,7 @@ UGA_Evade::UGA_Evade()
 	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetDodgeAbilityTag());
 
- // 不可打断Tag存在期间（SkillGA 表现段）不可激活；后摇段放开后，激活时SkillGA 打断其后摇。
+	//不可打断Tag存在期间（SkillGA 表现段）不可激活；后摇段放开后，激活时SkillGA 打断其后摇。
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 
 	// 同理：重击 GA 表现段挂霸体时本 GA 无法激活，其 M_End 后摇放开霸体后，激活即打断重击接管
@@ -228,10 +228,9 @@ void UGA_Evade::HandleDodgeInputPress(FGameplayEventData EventData)
 	DodgeCount++;
 
 	// 二次闪避与首次一致：基于此刻的移动输入重新选择 montage 与转向方向，
-	// 而不是复用本次激活触发时锁定的 montage（原地后闪与输入转向各自独立，均不继承上一次朝向基准）。
 	if (!ReselectEvade(bAirborneEvade))
 	{
-		// 防御：当前无可用 montage，回滚计数并保持正在播放的闪避动画继续
+		// 当前无可用 montage，回滚计数并保持正在播放的闪避动画继续
 		DodgeCount--;
 		return;
 	}

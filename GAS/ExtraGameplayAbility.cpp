@@ -98,6 +98,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		Char->GetMotionWarpingComponent()->OnPreUpdate.RemoveDynamic(this, &ThisClass::OnMotionWarpingPreUpdate);
 		Char->GetMotionWarpingComponent()->RemoveWarpTarget(LockOnWarpTargetName);
 	}
+	WarpSwitchBaseline.Reset();
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
@@ -214,6 +215,17 @@ void UExtraGameplayAbility::SetupMovementCancel()
 	UAbilityTask_WaitGameplayEvent* WaitCancelTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, GetMovementCancelTag());
 	WaitCancelTask->EventReceived.AddDynamic(this, &ThisClass::OnMovementCancelNotifyReceived);
 	WaitCancelTask->ReadyForActivation();
+}
+
+void UExtraGameplayAbility::OnMovementCancelTriggered()
+{
+	const FString GAName = GetClass()->GetName();
+	UE_LOG(LogTemp, Log, TEXT("[MovementCancel] %s GA 被取消"), *GAName);
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Yellow,
+			FString::Printf(TEXT("%s GA 被取消"), *GAName));
+	}
 }
 
 void UExtraGameplayAbility::SetupPushSelfListener()
@@ -623,15 +635,7 @@ void UExtraGameplayAbility::OnMovementCancelNotifyReceived(FGameplayEventData Pa
 {
 	// 事件由 AN_CancelWindow 在区间内、且已检测到移动输入时发送，到达即打断。
 	bEndingFromMovement = true;
-
-	const FString GAName = GetClass()->GetName();
-	UE_LOG(LogTemp, Log, TEXT("[MovementCancel] %s GA 被取消"), *GAName);
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Yellow,
-			FString::Printf(TEXT("%s GA 被取消"), *GAName));
-	}
-
+	
 	OnMovementCancelTriggered();
 
 	K2_EndAbility();
@@ -772,16 +776,34 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 
 	MWC->AddOrUpdateWarpTarget(WarpTarget);
 
-	// 位移/旋转开关只存在于 modifier 上，且每次 NMS 区间开始都会重建 modifier、
-	// 把开关拷回默认 true，因此每帧按当前状态重设。
+	// 位移/旋转开关只存在于 modifier 上，且每次 NMS 区间开始都会重建 modifier、把开关拷回动画模板值，
+	// 因此每帧都要同步。但只做「减法」：以 modifier 首次出现时（在 NMS 面板的勾选）为基准，
+	// 仅在本 GA 状态要求关闭时才关，绝不主动开启——这样 NMS 里取消勾选 Warp Translation 的区间
+	// （前后摇等只需朝向的动画）不会被强制追击。
+	for (auto It = WarpSwitchBaseline.CreateIterator(); It; ++It)
+	{
+		if (!It.Key().IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
+
 	for (URootMotionModifier* Mod : MWC->GetModifiers())
 	{
 		URootMotionModifier_Warp* WarpMod = Cast<URootMotionModifier_Warp>(Mod);
-		if (WarpMod && WarpMod->WarpTargetName == LockOnWarpTargetName)
+		if (!WarpMod || WarpMod->WarpTargetName != LockOnWarpTargetName)
 		{
-			WarpMod->bWarpTranslation = bWarpTranslation;
-			WarpMod->bWarpRotation = bWarpRotation;
+			continue;
 		}
+
+		TPair<bool, bool>* Baseline = WarpSwitchBaseline.Find(WarpMod);
+		if (!Baseline)
+		{
+			Baseline = &WarpSwitchBaseline.Add(WarpMod, TPair<bool, bool>(WarpMod->bWarpTranslation, WarpMod->bWarpRotation));
+		}
+
+		WarpMod->bWarpTranslation = Baseline->Key && bWarpTranslation;
+		WarpMod->bWarpRotation = Baseline->Value && bWarpRotation;
 	}
 }
 
@@ -798,10 +820,11 @@ FVector UExtraGameplayAbility::ComputeLockOnWarpLocation(const AExtraPlayerChara
 	const float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation(), PlayerChar->GetActorLocation());
 	if (DistanceToTarget > MotionWarpMaxMoveDist)
 	{
+		//-20避免胶囊体重叠
 		return PlayerChar->GetActorLocation() + DirToTarget * MotionWarpMaxMoveDist - 20.f;
 	}
 
-	return LockTarget->GetActorLocation();
+	return LockTarget->GetActorLocation()-20.f;
 }
 
 FVector UExtraGameplayAbility::ComputeLockOnFaceDir(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget) const

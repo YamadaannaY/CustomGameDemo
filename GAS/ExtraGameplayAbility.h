@@ -12,6 +12,7 @@ class UAnimMontage;
 class UCharacterMovementComponent;
 class UGameplayEffect;
 class UMotionWarpingComponent;
+class URootMotionModifier_Warp;
 
 /**
  * 自定义GA基类
@@ -29,37 +30,28 @@ public:
 	UAnimInstance* GetOwnerAnimInstance() const;
 
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
-
-	// 覆写 PreActivate：在 GA 激活的前置阶段（ActivateAbility 之前）统一挂载移动打断监听。
-	// 子类只需在构造函数里置 bEnableMovementCancel = true，无需再在 ActivateAbility 里手动调用 SetupMovementCancel。
+	
 	virtual void PreActivate(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, FOnGameplayAbilityEnded::FDelegate* OnGameplayAbilityEndedDelegate, const FGameplayEventData* TriggerEventData = nullptr) override;
 
-	// 覆写 CommitAbility：提交成功后，若当前有 GA 处于 CancelWindow（后摇可打断窗口），取消它。
-	// 放在提交之后而非 PreActivate，是为了避免本 GA 因消耗/冷却提交失败却白白打断对方。
 	virtual bool CommitAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, FGameplayTagContainer* OptionalRelevantTags) override;
 
-	// 对 Avatar 施加推力（底层 LaunchCharacter）。
-	// bOverrideXY / bOverrideZ 控制是否覆盖对应轴的速度：
-	//   空中二段跳应 bOverrideZ=true、bOverrideXY=false，只改竖直、保留水平速度；
-	//   需要强力击飞（清掉原有速度）时再同时置 true。
-	// public：供 AnimNotify（如 AN_ApplyPush）在动画帧回调里对当前激活 GA 施加推力。
+	// 对 Avatar 施加推力（底层 LaunchCharacter）。bOverrideXY / bOverrideZ 控制是否覆盖对应轴的速度
 	void PushSelf(const FVector& PushVel, bool bOverrideXY = true, bool bOverrideZ = true);
 
 protected:
-	//默认在所有GA结束时将所有Weapon统一再次进行ClearShow操作
+	//默认在所有GA结束时将所有Weapon统一再次进行ClearShow操作，角色常态不持有武器
 	UPROPERTY(EditAnywhere,Category="Weapon | Visible")
 	bool ClearWeaponShowOnAbilityEnd = true ;
 
-	// 是否启用移动打断机制（开启此项后，使用ability.cancel可以提前结束GA）。
-	// 只需在子类构造函数中置 true，基类会在 PreActivate 自动挂载监听，无需在 ActivateAbility 里手动调用。
+	// 是否启用移动打断机制，开启后CancelWindow内触发移动输入可以取消GA，进而结束Montage并惯性化到状态机
 	UPROPERTY(EditDefaultsOnly, Category = "Movement | Cancel")
 	bool bEnableMovementCancel = false;
 	
+	//MW有限追踪的最大值
 	UPROPERTY(EditDefaultsOnly,Category= "MoveMent | MotionWarp")
 	float MotionWarpMaxMoveDist = 150.f  ; 
 
-	// 是否启用重力缩放：开启后，GA 激活时把角色移动组件的 GravityScale 设为 AbilityGravityScale，
-	// EndAbility 时自动恢复为激活前的原始值。与 bEnableMovementCancel 一样在 PreActivate 统一处理。
+	// 是否启用重力缩放(EndAbility 时自动恢复为激活前的原始值。)
 	UPROPERTY(EditDefaultsOnly, Category = "Gravity Scale")
 	bool bEnableGravityScale = false;
 
@@ -67,36 +59,36 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Gravity Scale", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bEnableGravityScale"))
 	float AbilityGravityScale = 1.0f;
 
-	// 开始监听取消事件（由 PreActivate 自动调用，子类无需手动触发）
+	// 如果开启移动Cancel，开始监听取消事件
 	void SetupMovementCancel();
 
 	// 子类覆写，返回当前在播且可被移动打断的 Montage
 	virtual UAnimMontage* GetActiveMontageForCancel() const { return nullptr; }
 
-	// 命中移动打断的瞬间回调。
-	virtual void OnMovementCancelTriggered() {}
+	// 命中移动打断的瞬间回调
+	virtual void OnMovementCancelTriggered();
 
 	// ── 后摇可打断窗口（CancelWindow）─────────────────────────────
 	// 开启后：Montage 后摇段放 AN_CancelWindow，进窗即「视为该 GA 已取消」——
-	//   1) 撤销自身 BlockAbilitiesWithTag 封锁（此前被它挡住的 GA 重新可激活，如自身同类）；
-	//   2) 登记为窗口持有者，任何 GA 在 CommitAbility 时发现持有者即取消它；
-	//   3) 移动输入仍走 GetMovementCancelTag() 事件即时打断。
-	// 出窗恢复封锁。子类只需在构造函数置 true，其余由基类在 PreActivate / EndAbility 统一处理。
+	//   1) 撤销自身 BlockAbilitiesWithTag 封锁（此前被它挡住的 GA 重新可激活，如自身同类）;
+	//   2) 登记为窗口持有者，任何 GA 在 CommitAbility 时发现持有者即取消它;
+	//   3) 移动输入仍走 GetMovementCancelTag() 事件即时打断;
+	//   4)出窗恢复封锁。
 	UPROPERTY(EditDefaultsOnly, Category = "Movement | CancelWindow")
 	bool bEnableCancelWindow = false;
 
 	// 本 GA 提交成功时，是否可以取消正处于 CancelWindow 的其他 GA。
-	// 默认 true = 「任何 GA 都能打断」；被动/工具类 GA 若不应打断表现段，置 false 退出。
+	// 默认 true = 「任何 GA 都能打断」；被动/工具类 GA 若不应打断表现段，置 false。
 	UPROPERTY(EditDefaultsOnly, Category = "Movement | CancelWindow")
 	bool bCanInterruptCancelWindow = true;
 
-	// 监听 AN_CancelWindow 的开/关窗事件（PreActivate 自动调用）
+	// 监听 AN_CancelWindow 的开/关窗事件
 	void SetupCancelWindowListener();
 
-	// 进窗：撤销自身封锁 + 登记持有者（幂等，重复进窗无副作用）
+	// 进窗：撤销自身Block + 登记持有者（加入ASC中特别维护的数组）
 	void EnterCancelWindow();
 
-	// 出窗 / GA 结束兜底：恢复封锁 + 解除登记（幂等）
+	// 出窗 / GA 结束兜底：恢复Block + 解除登记
 	void ExitCancelWindow();
 
 	// 开窗事件回调
@@ -107,7 +99,7 @@ protected:
 	UFUNCTION()
 	void OnCancelWindowEndReceived(FGameplayEventData Payload);
 
-	// 本次激活是否处于窗口内（幂等判断 + 调试用）
+	// 本次激活是否处于窗口内
 	bool bInCancelWindow = false;
 
 	//根据Vel方向向量参数对单施加一个Push效果
@@ -122,7 +114,6 @@ protected:
 	//从Handle获取Targets根据Loc位置向量参数计算得到方向，施加Push效果
 	void PushTargetsFromLocation(const FGameplayAbilityTargetDataHandle& TargetDataHandle, const FVector& FromLocation ,float PushSpeed);
 	
-	
 	//对象为Actors，封装Loc为AvatarActor的位置
 	void PushTargetsFromOwnerLocation(const TArray<AActor*>& Targets,float PushSpeed);
 	
@@ -136,34 +127,30 @@ protected:
 	void OnMovementCancelNotifyReceived(FGameplayEventData Payload);
 
 	// Push_Self 事件回调：AN_ApplyPush 发送的推力（含向量 + 覆盖标志），解析后调用 PushSelf。
-	// 在 PreActivate 统一挂载监听，任何激活中的 GA 都能响应动画帧推力。
 	UFUNCTION()
 	void OnPushSelfNotifyReceived(FGameplayEventData Payload);
 
-	// 挂载 Push_Self 事件监听（由 PreActivate 统一调用）
+	// 挂载 Push_Self 事件监听
 	void SetupPushSelfListener();
 
 	// 是否因移动输入触发 EndAbility（决定是否停止当前 Montage；停止时使用 Montage 自身 BlendOut 时长）
 	bool bEndingFromMovement = false;
 
-	// 引擎默认重力：首次启用重力缩放的激活时，从移动组件缓存一次（此时尚未被任何 GA 修改），
-	// EndAbility 永远恢复为该默认值，而非激活前那一刻的值，避免多个重力 GA 连续/嵌套时把非 1 的中间值固化。
 	float DefaultGravityScale = 1.0f;
 
-	// 引擎默认重力是否已缓存（实例复用 + 只在第一次GA被调用前读取一次）
+	// 记录引擎默认重力是否已缓存
 	bool bGravityDefaultCached = false;
 
 	// 是否启用霸体窗口：激活时以 loose tag 形式把 UninterruptibleTag 加入 ASC owned tags（表现动画段），
 	// 后摇段必须由 AN_EndUninterruptible 发送事件移除，从而放开其他 GA 通过 CancelAbilitiesWithTag 打断后摇。
-	// 子类只需在构造函数里置 bEnableUninterruptible = true，其余由基类在 PreActivate / EndAbility 统一处理。
 	UPROPERTY(EditDefaultsOnly, Category = "Uninterruptible")
 	bool bEnableUninterruptible = false;
 
-	// 霸体 tag（默认 State.Uninterruptible，作为 ActivationBlockedTags 供被打断方阻断用）
+	// 霸体 tag（默认 State.Uninterruptible）
 	UPROPERTY(EditDefaultsOnly, Category = "Uninterruptible", meta = (EditCondition = "bEnableUninterruptible"))
 	FGameplayTag UninterruptibleTag;
 
-	// 本次激活是否已挂载霸体 tag（防止后摇已放开后 EndAbility 兜底重复 Remove 造成负计数）
+	// 本次激活是否霸体
 	bool bUninterruptibleActive = false;
 
 	// 以 loose tag 形式挂载霸体 tag 到 ASC（PreActivate 自动调用）
@@ -180,10 +167,7 @@ protected:
 	void OnUninterruptibleReleaseReceived(FGameplayEventData Payload);
 
 
-	// ── 攻击朝向（MR）───────────────────────────────────
-	// 激活时对攻击 Montage 设置 MotionWarping warp target，动画内由
-	// AnimNotifyState_MotionWarping 区间完成平滑转向。
-	// 子类只需在构造函数置 true，其余由基类在 PreActivate / EndAbility 统一处理。
+	// 激活后Montage会朝向锁定目标，并应用设定的索敌距离
 	UPROPERTY(EditDefaultsOnly, Category = "LockOn")
 	bool bRotateToLockTarget = false;
 
@@ -195,28 +179,28 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (EditCondition = "bRotateToLockTarget"))
 	FName LockOnWarpTargetName = TEXT("AttackFacing");
 
-	// 按当前状态（锁定目标 / 移动输入）写入 warp target，并同步 modifier 上的位移、旋转开关
+	// 按当前状态（锁定目标 / 移动输入）写入 warp target
 	void UpdateLockOnWarpTarget();
 
+	// 每个 MW modifier 的位移/旋转开关在 NMS 区间开始时复制而来。
+	// 这里记录首次见到的原始值作为基准，每帧只在基准之上做「关闭」，不主动「开启」——
+	// 记录前后摇区间在 NMS 的勾选设置，如果取消 Warp Translation 就能只转向不追击。
+	TMap<TWeakObjectPtr<URootMotionModifier_Warp>, TPair<bool, bool>> WarpSwitchBaseline;
+
 	// 有锁定目标时的 warp 落点计算；bOutWarpTranslation 指示本次是否做位移 warp。
-	// 默认：落点在目标位置（超出 MotionWarpMaxMoveDist 时钳制到该距离处）并做位移。
+	// 默认：落点在目标位置身前（超出 MotionWarpMaxMoveDist 时钳制到该距离处）并做位移。
 	// 特化 GA（如居合前冲的「穿过目标落到身后」）可覆写。
 	virtual FVector ComputeLockOnWarpLocation(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget, bool& bOutWarpTranslation) const;
 
-	// 有锁定目标时的 warp 朝向。默认朝目标。
-	// 特化可覆写（如居合前冲锁定起手方向，避免穿过目标后方向反转导致落点跳变）。
+	// 有锁定目标时的 warp 朝向。默认朝目标，避免穿过目标后方向反转导致落点跳变。
 	virtual FVector ComputeLockOnFaceDir(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget) const;
 
 	// MW 每帧更新 modifier 之前的回调，是设置 modifier 开关的时机
 	// （NMS 区间开始时才创建 modifier 并把开关拷回默认值，不能只在激活时设一次）
 	UFUNCTION()
 	void OnMotionWarpingPreUpdate(UMotionWarpingComponent* MotionWarpingComp);
-
-
-	// ── 通用武器碰撞伤害 ──────────────────────────────────────
+	
 	// 是否启用武器碰撞伤害响应：开启后，服务端监听 GetDamageEventTag() 的命中事件，
-	// 对 TargetData 中每个目标应用 GetDamageEffect() 选出的 GE。
-	// 攻击 GA 只需在构造函数置 true 即可获得通用伤害；非攻击 GA（如 Evade）保持 false。
 	UPROPERTY(EditDefaultsOnly, Category = "Gameplay Effect")
 	bool bEnableWeaponDamage = false;
 
@@ -224,7 +208,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Gameplay Effect")
 	TSubclassOf<UGameplayEffect> DefaultWeaponDamageEffect;
 
-	// 挂载武器伤害监听（由 PreActivate 自动调用，子类无需手动触发）
+	// 挂载武器伤害监听
 	void SetupDamageListener();
 
 	// 当前 GA 响应的伤害事件 Tag（默认通用 ability.damage，子类可覆写为专属 Tag）
@@ -234,7 +218,7 @@ protected:
 	virtual TSubclassOf<UGameplayEffect> GetDamageEffect() const;
 
 	// 对碰撞目标批量应用伤害（通用实现）。
-	// 子类如需追加独有逻辑（击飞/附加效果），先调用 Super::DoDamage(Data) 再补充。
+	// 子类如需追加独有逻辑（击飞/附加效果），先调用 Super::DoDamage(Data)。
 	virtual void DoDamage(const FGameplayEventData& Data);
 
 	// ── 角色中心范围伤害（事件帧驱动）─────────────────────
@@ -242,17 +226,16 @@ protected:
 	// Montage 伤害帧放一个 AN_AreaCheck 触发一次范围判定（一个 AN = 一次）。
 	// 圆心默认取角色位置，AN 可通过 FAreaCheckData 提供 XY 偏移与半径覆写；
 	// 对半径内全部敌方存活单位统一应用 GetDamageEffect() 选出的伤害 GE，
-	// 与武器轨迹伤害（bEnableWeaponDamage）可并存/二选一，共用 DoDamage 结算。
 	UPROPERTY(EditDefaultsOnly, Category = "Area Damage")
 	bool bEnableAreaDamage = false;
 
 	// 范围检测半径兜底值（cm）：AN_AreaCheck 未指定半径（<=0）时使用；两者都 <=0 则仅告警不结算。
 	UPROPERTY(EditDefaultsOnly, Category = "Area Damage", meta = (ClampMin = "0.0", EditCondition = "bEnableAreaDamage"))
-	float AreaDamageRadius = 0.f;
+	float AreaDamageRadius = 300.f;
 
-	// 圆心是否默认采用「锁定目标位置」而非角色位置：
+	// 圆心是否采用「锁定目标位置」而非角色位置：
 	// 仅当 AN_AreaCheck 的 CenterMode 为 Inherit（默认）时生效；无锁定目标则回退角色位置。
-	// 单个 AN 想脱离本配置自行指定，把该 AN 的 CenterMode 改成 Owner / LockTarget 即可。
+	// 单个 AN 想脱离此圆心配置自行指定，把该 AN 的 CenterMode 改成 Owner / LockTarget 。
 	UPROPERTY(EditDefaultsOnly, Category = "Area Damage", meta = (EditCondition = "bEnableAreaDamage"))
 	bool bAreaDamageUseLockTargetAsCenter = false;
 
@@ -261,7 +244,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Debug")
 	bool bShouldDrawDebug = false;
 
-	// 范围伤害触发事件 Tag（默认通用 ability.area.damage；子类如需专属 Tag 可覆写）
+	// 范围伤害触发事件 Tag（默认ability.area.damage；）
 	virtual FGameplayTag GetAreaDamageTriggerTag() const;
 
 	// 收集圆心半径内敌方存活单位并统一结算伤害（Debug 开启时附带可视化）。
@@ -271,10 +254,10 @@ protected:
 	void PerformAreaDamage(const FVector& CenterOffset = FVector::ZeroVector, float Radius = 0.f,
 	                       EAreaCenterMode CenterMode = EAreaCenterMode::Inherit);
 
-	// 内部：PreActivate 统一挂载范围伤害事件监听
+	// 挂载范围伤害事件监听
 	void SetupAreaDamageListener();
 
-	// 内部：范围伤害事件回调，解析负载中的 FAreaCheckData（可缺省）后转发到 PerformAreaDamage
+	// 范围伤害事件回调，解析负载中的 FAreaCheckData（可缺省）后转发到 PerformAreaDamage
 	UFUNCTION()
 	void OnAreaDamageEventReceived(FGameplayEventData Payload);
 
@@ -287,7 +270,7 @@ private:
 	// 武器伤害事件回调（动态委托目标，转发到 virtual DoDamage 供子类覆写）
 	UFUNCTION()
 	void OnDamageEventReceived(FGameplayEventData Data);
-
+·
 	UPROPERTY()
 	TObjectPtr<AExtraPlayerCharacter> AvatarCharacter;
 };
