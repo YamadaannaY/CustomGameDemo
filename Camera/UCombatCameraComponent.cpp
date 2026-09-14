@@ -111,8 +111,8 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		ActiveReq = &DebugOverride;
 	}
 
-	// 目标状态：有请求 → 请求参数；无请求 → 淡出回基准值。
-	FVector TargetLoc = FVector::ZeroVector;
+	// 目标状态：有请求 → 请求参数；无请求 → 淡出回基准值（可能已被「保持机位」改写）。
+	FVector TargetLoc = BaseLocationOffset;
 	FRotator TargetRot = FRotator::ZeroRotator;
 	float TargetArm = BaseArmLength;
 	float TargetFOV = BaseFOV;
@@ -180,9 +180,18 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	{
 		CameraBoom->bUsePawnControlRotation = false;
 
+		// 前置视角（bFrontFacingBasis）：把 Boom 对齐到「角色朝向 + 180°」，相机随之落在角色
+		// 前方并回望。180° 放在 Boom 上（而非相机的 RotationOffset）只有一层旋转在过渡，不会闪现。
+		FRotator DesiredBoomRotation = GetOwner()->GetActorRotation();
+		if (ActiveReq && ActiveReq->bFrontFacingBasis)
+		{
+			DesiredBoomRotation.Yaw += 180.f;
+			DesiredBoomRotation.Normalize();
+		}
+
 		const FQuat NewQuat = FMath::QInterpTo(
 			CameraBoom->GetComponentQuat(),
-			GetOwner()->GetActorRotation().Quaternion(),
+			DesiredBoomRotation.Quaternion(),
 			DeltaTime,
 			CharacterFacingTransitionSpeed);
 		CameraBoom->SetWorldRotation(NewQuat);
@@ -214,9 +223,12 @@ int32 UCombatCameraComponent::PushRequest(const FCombatCameraRequest& Request)
 
 void UCombatCameraComponent::PopRequest(int32 RequestId)
 {
+	bool bKeepRotation = false;
 	if (const FCombatCameraRequest* Req = ActiveRequests.Find(RequestId))
 	{
 		PendingBlendOutTime = Req->BlendOutTime;
+		// 仅当退出的正是当前生效请求时才固化机位，避免低优先级请求退出时篡改视角基准。
+		bKeepRotation = Req->bKeepYawOnEnd && (FindActiveRequest() == Req);
 	}
 	ActiveRequests.Remove(RequestId);
 
@@ -224,7 +236,11 @@ void UCombatCameraComponent::PopRequest(int32 RequestId)
 	// 这保证单个镜头动画结束（NotifyEnd → PopRequest）也能退出，而非只有 GA 打断时才能退出。
 	if (ActiveRequests.Num() == 0 && bCharacterFacingMode)
 	{
-		ExitCharacterFacingMode();
+		ExitCharacterFacingMode(bKeepRotation);
+	}
+	else if (bKeepRotation && !bCharacterFacingMode)
+	{
+		FreezeYawAsBase();
 	}
 }
 
@@ -239,20 +255,49 @@ void UCombatCameraComponent::ClearAllRequests()
 	}
 }
 
-void UCombatCameraComponent::ExitCharacterFacingMode()
+void UCombatCameraComponent::ExitCharacterFacingMode(bool bKeepCurrentCameraState)
 {
 	bCharacterFacingMode = false;
 
 	if (CameraBoom)
 	{
-		// 先把 ControlRotation 同步到 SpringArm 当前世界旋转（正后方），再恢复 bUsePawnControlRotation。
-		// 否则恢复自由镜头瞬间，SpringArm 会采用玩家「进入锁定前」的旧 ControlRotation，镜头跳回旧视角。
-		if (APlayerController* PC = Cast<APlayerController>(GetOwner()->GetInstigatorController()))
+		if (bKeepCurrentCameraState)
 		{
+			// 只保留 Yaw：位置/臂长/FOV/Pitch/Roll 均回归基准，仅水平朝向不跳变。
+			FreezeYawAsBase();
+		}
+		else if (APlayerController* PC = Cast<APlayerController>(GetOwner()->GetInstigatorController()))
+		{
+			// 先把 ControlRotation 同步到 SpringArm 当前世界旋转（正后方），再恢复 bUsePawnControlRotation。
+			// 否则恢复自由镜头瞬间，SpringArm 会采用玩家「进入锁定前」的旧 ControlRotation，镜头跳回旧视角。
 			PC->SetControlRotation(CameraBoom->GetComponentRotation());
 		}
 
 		CameraBoom->bUsePawnControlRotation = true;
+	}
+}
+
+void UCombatCameraComponent::FreezeYawAsBase()
+{
+	if (!CameraBoom || !FollowCamera)
+	{
+		return;
+	}
+
+	// 只保留 Yaw：把相机当前世界朝向的 Yaw 并入 SpringArm 朝向，同时清零相机相对旋转的 Yaw 分量，
+	// 两者抵消 → 水平方向不跳变。Pitch / Roll 分量留在相对偏移里，退出后按基准淡出回归；
+	const FRotator CameraWorldRotation = FollowCamera->GetComponentRotation();
+
+	FRotator NewBoomRotation = CameraBoom->GetComponentRotation();
+	NewBoomRotation.Yaw = CameraWorldRotation.Yaw;
+	CameraBoom->SetWorldRotation(NewBoomRotation);
+
+	CurrentRotationOffset.Yaw = 0.f;
+	FollowCamera->SetRelativeRotation(CurrentRotationOffset);
+
+	if (APlayerController* PC = Cast<APlayerController>(GetOwner()->GetInstigatorController()))
+	{
+		PC->SetControlRotation(NewBoomRotation);
 	}
 }
 

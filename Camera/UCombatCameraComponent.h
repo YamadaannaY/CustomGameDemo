@@ -55,6 +55,11 @@ struct FCombatCameraRequest
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	bool bUseCharacterFacingBasis = false;
 
+	// 前置视角：在正后方模式的基础上把 SpringArm 对齐到「角色朝向 + 180°」，即角色对向
+	// 开启时 LocationOffset / RotationOffset 无需再做 180° 处理。
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta = (EditCondition = "bUseCharacterFacingBasis"))
+	bool bFrontFacingBasis = false;
+
 	// 切换到角色正后方视角的平滑过渡时间（秒）。仅当 bUseCharacterFacingBasis 时生效。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta=(EditCondition="bUseCharacterFacingBasis", ClampMin="0.0"))
 	float CharacterFacingTransitionTime = 0.3f;
@@ -62,6 +67,12 @@ struct FCombatCameraRequest
 	//使用Basis会锁视角，此时look输入无效，如果要打开锁定，则开启此选项
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	bool bUnlockCharacterFacing = false;
+
+	// 结束时保留 Yaw：请求 Pop（窗口结束）时只把相机当前世界朝向的 Yaw 并作新基准
+	// 即「只保留 Yaw」——只有 Yaw 方向的偏移才能脱离窗口永久生效
+	// 注：仅正常窗口结束生效，GA 打断走 ClearAllRequests 的兜底清理时不保持，会回退默认
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
+	bool bKeepYawOnEnd = false;
 };
 
 /**
@@ -128,7 +139,8 @@ private:
 	float CurrentFOV = 90.f;
 
 	// 无战斗相机时的基准值（首次 PushRequest 时从实际 SpringArm/Camera 上缓存）。
-	
+	// 勾选 bKeepRotationOnEnd 的请求结束时，会被改写为当时的相机状态，成为新基准。
+	FVector BaseLocationOffset = FVector::ZeroVector;
 	float BaseArmLength = 300.f;
 	float BaseFOV = 90.f;
 	
@@ -140,7 +152,13 @@ private:
 
 	// 退出「固定正后方」模式：把 control rotation 同步到角色正后方后再交还鼠标控制，
 	// 使摄像机归位到正后方（而非弹回玩家重置之前的位置）。
-	void ExitCharacterFacingMode();
+	// bKeepCurrentCameraState 为 true 时只保留相机当前世界朝向的 Yaw，其余回归基准。
+	void ExitCharacterFacingMode(bool bKeepCurrentCameraState = false);
+
+	// 结束时保留 Yaw：把相机当前世界朝向的 Yaw 并入 SpringArm 朝向，并同帧清零相机相对旋转的
+	// Yaw 分量（两者抵消，水平方向不跳变）。Pitch / Roll 分量留在相对偏移里随后淡出回归；
+	// 位置 / 臂长 / FOV 不作固化，同样淡出回归。
+	void FreezeYawAsBase();
 
 	// 是否处于「固定正后方」模式（由某镜头开启，全局持久到所有请求清空后退出）。
 	bool bCharacterFacingMode = false;
