@@ -91,6 +91,12 @@ private:
 	// 剩余能量是否够再打一段前冲
 	bool HasEnoughEnergyForJuheForward() const;
 
+	// 本段前冲的 MW 落点（含 JuheForwardMaxWarpDist 上限钳制）；无目标时返回角色当前位置
+	FVector ComputeJuheForwardWarpLocation(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& FallbackDir) const;
+
+	// 前冲瞬间判定本次是否会穿过目标，并同步 State.JuhePassThrough，触发战斗镜头
+	void UpdateJuhePassThroughTag(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget);
+
 	// 前冲穿身：让角色胶囊在移动时忽略锁定目标，否则会被目标胶囊挡住
 	void AddJuheForwardCollisionIgnore();
 	void RemoveJuheForwardCollisionIgnore();
