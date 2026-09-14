@@ -30,6 +30,7 @@ UE_DEFINE_GAMEPLAY_TAG(Evade_ToSprint, "Evade.ToSprint");
 UE_DEFINE_GAMEPLAY_TAG(Juhe_PhaseEnd, "Juhe.PhaseEnd");
 UE_DEFINE_GAMEPLAY_TAG(State_Juhe, "State.Juhe");
 UE_DEFINE_GAMEPLAY_TAG(State_JuheReady, "State.JuheReady");
+UE_DEFINE_GAMEPLAY_TAG(State_JuhePassThrough, "State.JuhePassThrough");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Cancel, "ability.cancel");
 UE_DEFINE_GAMEPLAY_TAG(Push_Self, "ability.push.self");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Passive_Launch, "ability.passive.launch.activate");
@@ -178,6 +179,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetJuheStateTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetJuheReadyStateTag()
 {
 	return State_JuheReady;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetJuhePassThroughStateTag()
+{
+	return State_JuhePassThrough;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetAbilityCancelTag()

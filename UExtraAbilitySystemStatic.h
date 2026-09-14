@@ -31,6 +31,7 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Evade_ToSprint);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Juhe_PhaseEnd);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Juhe);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_JuheReady);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_JuhePassThrough);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Cancel);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Push_Self);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Uninterruptible);
@@ -95,6 +96,7 @@ public:
 	static FGameplayTag GetJuhePhaseEndTag();           // "Juhe.PhaseEnd"     居合 Montage 后摇起始帧 AN 发的分界事件
 	static FGameplayTag GetJuheStateTag();              // "State.Juhe"        居合进行中，挡住普攻 GA 激活
 	static FGameplayTag GetJuheReadyStateTag();         // "State.JuheReady"   二阶段普攻进 Section 后的 3s 居合窗口
+	static FGameplayTag GetJuhePassThroughStateTag();   // "State.JuhePassThrough" 本段居合前冲会穿过目标（供 ANS_CombatCamera 条件触发）
 
 	static FGameplayTag GetAbilityCancelTag();          // "ability.cancel"
 	static FGameplayTag GetPushSelfTag();               // "ability.push.self"

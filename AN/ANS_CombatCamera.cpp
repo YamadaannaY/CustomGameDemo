@@ -1,4 +1,6 @@
 #include "ANS_CombatCamera.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
 
 void UANS_CombatCamera::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float TotalDuration, const FAnimNotifyEventReference& EventReference)
 {
@@ -9,6 +11,17 @@ void UANS_CombatCamera::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSeque
 	if (!MeshComp || !MeshComp->GetOwner())
 	{
 		return;
+	}
+
+	// 条件提交：填了 RequiredOwnerTag 时，Owner 的 ASC 没有该 Tag 就整段跳过
+	// （CachedRequestId 保持 INDEX_NONE，NotifyEnd 也不会 Pop）
+	if (RequiredOwnerTag.IsValid())
+	{
+		const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(MeshComp->GetOwner());
+		if (!ASC || !ASC->HasMatchingGameplayTag(RequiredOwnerTag))
+		{
+			return;
+		}
 	}
 
 	if (UCombatCameraComponent* CamComp = MeshComp->GetOwner()->FindComponentByClass<UCombatCameraComponent>())
