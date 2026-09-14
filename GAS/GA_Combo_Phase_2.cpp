@@ -78,7 +78,7 @@ void UGA_Combo_Phase_2::OpenJuheReadyWindow()
 	}
 }
 
-void UGA_Combo_Phase_2::ClearJuheReady()
+void UGA_Combo_Phase_2::ClearJuheReady() const 
 {
 	if (UAbilitySystemComponent* ASC = JuheReadyASC.Get())
 	{

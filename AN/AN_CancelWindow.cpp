@@ -14,10 +14,13 @@ namespace
 			return;
 		}
 
-		if (AActor* Owner = MeshComp->GetOwner())
-		{
-			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Owner, EventTag, FGameplayEventData());
-		}
+		AActor* Owner = MeshComp->GetOwner();
+		if (!Owner) return;
+
+		// 动画编辑器预览等无 ASC 的场合跳过，否则引擎会报 Invalid ability system component
+		if (!UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Owner)) return;
+
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Owner, EventTag, FGameplayEventData());
 	}
 }
 

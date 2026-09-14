@@ -39,7 +39,7 @@ private:
 	void OpenJuheReadyWindow();
 
 	UFUNCTION()
-	void ClearJuheReady();
+	void ClearJuheReady() const ;
 
 	FTimerHandle JuheReadyTimer;
 
