@@ -45,6 +45,11 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CancelWindow);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(CancelWindow_Begin);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(CancelWindow_End);
 
+// 攻击连段「可衔接窗口」：Montage 上的 AN_AttackComboWindow 在区间首尾各发一次，
+// 窗口内收到攻击输入才允许推进下一段，窗口外输入一律丢弃（不做输入缓存）
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(AirAttack_Combo_Begin);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(AirAttack_Combo_End);
+
 /**
  * 
  */
@@ -122,6 +127,10 @@ public:
 	static FGameplayTag GetCancelWindowStateTag();      // "State.CancelWindow"        窗口开启中（松散 tag，供查询/调试）
 	static FGameplayTag GetCancelWindowBeginTag();      // "ability.cancelwindow.begin" 进窗（AN NotifyBegin）
 	static FGameplayTag GetCancelWindowEndTag();        // "ability.cancelwindow.end"   出窗（AN NotifyEnd）
+
+	// 攻击连段可衔接窗口（AN_AttackComboWindow 的 NotifyBegin / NotifyEnd）
+	static FGameplayTag GetAirAttackComboBeginTag();    // "ability.airattack.combo.begin"
+	static FGameplayTag GetAirAttackComboEndTag();      // "ability.airattack.combo.end"
 
 	static FGameplayTag GetLaunchedAbilityActivationTag();
 };

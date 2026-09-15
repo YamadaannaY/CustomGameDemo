@@ -46,6 +46,10 @@ UE_DEFINE_GAMEPLAY_TAG(State_CancelWindow, "State.CancelWindow");
 UE_DEFINE_GAMEPLAY_TAG(CancelWindow_Begin, "ability.cancelwindow.begin");
 UE_DEFINE_GAMEPLAY_TAG(CancelWindow_End, "ability.cancelwindow.end");
 
+// 连段可衔接窗口（二阶段空中连斩等）：与 "ability.basicattack.airattack" 不同分支，互不误触发
+UE_DEFINE_GAMEPLAY_TAG(AirAttack_Combo_Begin, "ability.airattack.combo.begin");
+UE_DEFINE_GAMEPLAY_TAG(AirAttack_Combo_End, "ability.airattack.combo.end");
+
 FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 {
 	return Ability_BasicAttack_Light;
@@ -244,4 +248,14 @@ FGameplayTag UUExtraAbilitySystemStatic::GetCancelWindowBeginTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetCancelWindowEndTag()
 {
 	return CancelWindow_End;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackComboBeginTag()
+{
+	return AirAttack_Combo_Begin;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackComboEndTag()
+{
+	return AirAttack_Combo_End;
 }
