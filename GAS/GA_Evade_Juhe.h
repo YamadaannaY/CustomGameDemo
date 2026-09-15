@@ -97,10 +97,6 @@ private:
 	// 前冲瞬间判定本次是否会穿过目标，并同步 State.JuhePassThrough，触发战斗镜头
 	void UpdateJuhePassThroughTag(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget);
 
-	// 前冲穿身：让角色胶囊在移动时忽略锁定目标，否则会被目标胶囊挡住
-	void AddJuheForwardCollisionIgnore();
-	void RemoveJuheForwardCollisionIgnore();
-
 	// 取本次要播的前冲动画：每段在 前冲1 / 前冲2 间轮切，首段固定为 前冲1
 	UAnimMontage* PickJuheForwardMontage() const;
 
@@ -169,7 +165,4 @@ private:
 	// 本段前冲锁定的冲刺方向（起手时缓存）。穿过目标后「角色→目标」会反向，
 	// 若逐帧跟随会让 warp 落点在穿越瞬间翻转 → 角色位置跳变、镜头抖动。
 	FVector JuheForwardFaceDir = FVector::ZeroVector;
-
-	// 前冲穿身期间被忽略碰撞的角色（用于结束时恢复）
-	TArray<TWeakObjectPtr<AActor>> JuheIgnoredActors;
 };

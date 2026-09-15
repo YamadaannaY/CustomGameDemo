@@ -6,13 +6,11 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
-#include "ExtractGameCharacter/ExtraCharacter.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
-#include "EngineUtils.h"
 #include "TimerManager.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 
@@ -190,7 +188,6 @@ void UGA_Evade_Juhe::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
 {
 	// 兜底：居合没走到分界/窗口结束就结束（被打断 / 动画播完）时也要放行普攻 GA
 	RemoveJuheState();
-	RemoveJuheForwardCollisionIgnore();
 	bEnterJuheBranch = false;
 
 	// 兜底清掉穿身条件 tag，避免残留影响后续动画的 ANS_CombatCamera
@@ -256,9 +253,6 @@ void UGA_Evade_Juhe::OnJuheMontageFinished()
 	if (bPlayingForwardSegment)
 	{
 		bJuheForwarding = false;
-
-		// 位移已结束，恢复与目标的碰撞
-		RemoveJuheForwardCollisionIgnore();
 
 		// 本段动画播完，ANS_CombatCamera 的条件不再需要
 		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
@@ -327,8 +321,6 @@ void UGA_Evade_Juhe::StartJuheForward()
 		return;
 	}
 
-	AddJuheForwardCollisionIgnore();
-
 	AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
 	const AActor* LockTarget = PlayerChar ? PlayerChar->GetLockTarget() : nullptr;
 
@@ -374,48 +366,6 @@ UAnimMontage* UGA_Evade_Juhe::PickJuheForwardMontage() const
 	UAnimMontage* Montage = (JuheForwardIndex % 2 == 0) ? JuheForwardMontage : JuheForwardMontage2;
 	
 	return Montage ? Montage : JuheForwardMontage;
-}
-
-void UGA_Evade_Juhe::AddJuheForwardCollisionIgnore()
-{
-	AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-	UWorld* World = GetWorld();
-	if (!PlayerChar || !World)
-	{
-		return;
-	}
-
-	// 先清掉上一次的忽略，避免残留
-	RemoveJuheForwardCollisionIgnore();
-
-	// 前冲穿身：忽略场上所有 ExtraCharacter（含未锁定的）防止胶囊体碰撞
-	for (TActorIterator<AExtraCharacter> It(World); It; ++It)
-	{
-		AExtraCharacter* Other = *It;
-		if (!Other || Other == PlayerChar)
-		{
-			continue;
-		}
-
-		PlayerChar->MoveIgnoreActorAdd(Other);
-		JuheIgnoredActors.Add(Other);
-	}
-}
-
-void UGA_Evade_Juhe::RemoveJuheForwardCollisionIgnore()
-{
-	if (AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo()))
-	{
-		for (const TWeakObjectPtr<AActor>& Ignored : JuheIgnoredActors)
-		{
-			if (AActor* IgnoredActor = Ignored.Get())
-			{
-				PlayerChar->MoveIgnoreActorRemove(IgnoredActor);
-			}
-		}
-	}
-
-	JuheIgnoredActors.Reset();
 }
 
 bool UGA_Evade_Juhe::CanChainJuheForward() const

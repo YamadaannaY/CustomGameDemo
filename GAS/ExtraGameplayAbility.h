@@ -270,7 +270,7 @@ private:
 	// 武器伤害事件回调（动态委托目标，转发到 virtual DoDamage 供子类覆写）
 	UFUNCTION()
 	void OnDamageEventReceived(FGameplayEventData Data);
-·
+
 	UPROPERTY()
 	TObjectPtr<AExtraPlayerCharacter> AvatarCharacter;
 };
