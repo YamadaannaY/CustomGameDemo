@@ -52,7 +52,7 @@ void UGA_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		const float CurrentEnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
 
 		const AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-		const float RequiredComboCount = PlayerCharacter ? PlayerCharacter->GetHeavyComboCount() : 300.f;
+		const float RequiredComboCount = PlayerCharacter ? PlayerCharacter->GetHeavyComboEnergyNeed() : 300.f;
 		if (CurrentEnergyValue >= RequiredComboCount && ASC->GetTagCount(UUExtraAbilitySystemStatic::GetBurstReadyTag()) == 0)
 		{
 			ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetBurstReadyTag());

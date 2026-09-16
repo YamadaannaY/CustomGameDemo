@@ -98,5 +98,5 @@ bool UGA_ComboHeavy::IsLongPressed() const
 float UGA_ComboHeavy::GetRequiredComboCount() const
 {
 	const AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-	return PlayerCharacter ? PlayerCharacter->GetHeavyComboCount() : 300.f;
+	return PlayerCharacter ? PlayerCharacter->GetHeavyComboEnergyNeed() : 300.f;
 }
