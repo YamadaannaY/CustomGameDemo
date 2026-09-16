@@ -20,6 +20,9 @@ UGA_AirAttack::UGA_AirAttack()
 	
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
 
+	// 居合进行中不可激活：空中居合接管空中输入（普攻 / 闪避），避免同一次输入把空中攻击也带起来
+	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetJuheStateTag());
+
 	// 启用移动打断
 	bEnableMovementCancel = true;
 

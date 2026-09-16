@@ -41,9 +41,12 @@ protected:
 	//（内部会先 EndTask 旧任务，避免其 OnInterrupted 误杀 GA）
 	void PlayEvadeMontage();
 
-	// 无输入时的原地后闪 Montage，居合子类中需要复用，所以提升到protected
+	// 无输入时的原地后闪 Montage（地面 / 空中），居合子类中需要复用，所以提升到protected
 	UPROPERTY(EditDefaultsOnly, Category="Montage")
 	UAnimMontage* BackwardEvadeMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Montage|Air")
+	UAnimMontage* BackwardAirEvadeMontage;
 
 	// 当前正在播放的 Montage
 	UPROPERTY()
@@ -92,9 +95,6 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category="Montage|Air")
 	UAnimMontage* ForwardAirEvadeMontage;
-
-	UPROPERTY(EditDefaultsOnly, Category="Montage|Air")
-	UAnimMontage* BackwardAirEvadeMontage;
 
 	// 本次激活选择的是前冲（Forward/ForwardAir），用于朝向调整等前冲专属逻辑
 	bool bPlayingForwardEvade = false;

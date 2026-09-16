@@ -845,8 +845,10 @@ UExtraGameplayAbility::FForwardOvershootPoint UExtraGameplayAbility::ComputeForw
 		Point.DashDir.Normalize();
 	}
 
-	// 落点 = 目标位置 + 冲刺方向 × OvershootDistance，即穿过目标后继续前进的距离
+	// 落点 = 目标位置 + 冲刺方向 × OvershootDistance，即穿过目标后继续前进的距离。
+	// Z 取角色自身高度而非目标高度：只做水平位移，避免空中 / 高低差场景被拉到目标的垂直位置。
 	FVector WarpLocation = LockTarget->GetActorLocation() + Point.DashDir * OvershootDistance;
+	WarpLocation.Z = PlayerChar->GetActorLocation().Z;
 
 	// 位移上限保护：目标过远时钳到自身朝该方向的 MaxOvershootWarpDist 处
 	if (FVector::Dist2D(WarpLocation, PlayerChar->GetActorLocation()) > MaxOvershootWarpDist)

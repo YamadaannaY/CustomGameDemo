@@ -23,27 +23,21 @@ UGA_Evade_Juhe::UGA_Evade_Juhe()
 	bEnableForwardOvershoot = true;
 }
 
-bool UGA_Evade_Juhe::ShouldEnterJuhe() const
+bool UGA_Evade_Juhe::ShouldEnterJuhe(bool bAirborne) const
 {
-	ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-	if (!AvatarChar)
-	{
-		return false;
-	}
-
-	// TODO 空中居合：空中满足条件也应走居合，空中表现/位移逻辑暂未实现，先回落基类空中 Evade
-	if (AvatarChar->GetCharacterMovement()->IsFalling())
-	{
-		return false;
-	}
-
 	const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	if (!ASC)
 	{
 		return false;
 	}
 
-	// 二阶段普攻每次出手都会开定时窗口；窗口过期后只走普通 Evade，短按闪避进入居合
+	// 空中：浮空 + 能量足够即可，不要求普攻开启的窗口
+	if (bAirborne)
+	{
+		return ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute()) >= JuheEnergyThreshold;
+	}
+
+	// 地面：二阶段普攻每次出手都会开定时窗口；窗口过期后只走普通 Evade
 	if (!ASC->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetJuheReadyStateTag()))
 	{
 		return false;
@@ -55,9 +49,14 @@ bool UGA_Evade_Juhe::ShouldEnterJuhe() const
 void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
+	// 先确定本次是地面还是空中居合（决定用哪套动画）
+	const ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	bAirJuhe = AvatarChar && AvatarChar->GetCharacterMovement()->IsFalling();
+
 	// 条件不满足或未配置居合 Montage：完全交回基类 Evade,即普通闪避
-	if (!ShouldEnterJuhe() || !JuheMontage)
+	if (!ShouldEnterJuhe(bAirJuhe) || !GetActiveJuheMontages().JuheMontage)
 	{
+		bAirJuhe = false;
 		Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 		return;
 	}
@@ -77,6 +76,7 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	}
 	
 	bEnterJuheBranch = true;
+	bInLanding = false;
 	bJuhePhaseEnded = false;
 	bJuheDodgeUsed = false;
 	bPlayingForwardSegment = false;
@@ -88,12 +88,28 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	// 居合进行中：挡住普攻 GA，直到分界事件、前冲链结束或Cancel窗口放行
 	ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetJuheStateTag());
 
-	// 消费居合窗口
-	ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
+	// 地面居合消费普攻开启的窗口；空中不依赖该窗口
+	if (!bAirJuhe)
+	{
+		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
+	}
 
 	if (!HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
 		return;
+	}
+
+	// 空中居合：落地即转入落地段（委托为主，轮询兜底）
+	if (bAirJuhe)
+	{
+		if (ACharacter* Avatar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+		{
+			Avatar->LandedDelegate.AddDynamic(this, &ThisClass::OnJuheLanded);
+		}
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(JuheLandCheckTimer, this, &ThisClass::PollJuheLandCheck, LandCheckInterval, true);
+		}
 	}
 
 	// 普攻输入：架势段接前冲，前冲定时窗口内满足条件可以接下一段
@@ -108,7 +124,7 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	// 居合期间唯一一次 Dodge：延迟一帧挂载，避免触发本次激活的输入被立即接收，用来退出居合
 	GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ThisClass::SetupWaitJuheDodgeInput);
 
-	PlayJuheMontage(JuheMontage, false);
+	PlayJuheMontage(GetActiveJuheMontages().JuheMontage, false);
 }
 
 void UGA_Evade_Juhe::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -116,7 +132,10 @@ void UGA_Evade_Juhe::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
 {
 	// 兜底：居合没走到分界/窗口结束就结束（被打断 / 动画播完）时也要放行普攻 GA
 	RemoveJuheState();
+	ClearJuheLandDetection();
 	bEnterJuheBranch = false;
+	bAirJuhe = false;
+	bInLanding = false;
 
 	if (UWorld* World = GetWorld())
 	{
@@ -128,7 +147,7 @@ void UGA_Evade_Juhe::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
-void UGA_Evade_Juhe::PlayJuheMontage(UAnimMontage* Montage, bool bForwardSegment)
+void UGA_Evade_Juhe::PlayJuheMontage(UAnimMontage* Montage, bool bForwardSegment, bool bDodgeSegment)
 {
 	if (!Montage)
 	{
@@ -140,6 +159,7 @@ void UGA_Evade_Juhe::PlayJuheMontage(UAnimMontage* Montage, bool bForwardSegment
 
 	CurrentPlayingMontage = Montage;
 	bPlayingForwardSegment = bForwardSegment;
+	bPlayingDodgeSegment = bDodgeSegment;
 
 	JuheMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage);
 	JuheMontageTask->OnCompleted.AddDynamic(this, &ThisClass::OnJuheMontageFinished);
@@ -171,20 +191,60 @@ void UGA_Evade_Juhe::StopJuheMontage()
 
 void UGA_Evade_Juhe::OnJuheMontageFinished()
 {
-	// 前冲段播完：还能接续就继续等下一次普攻（即寒意值还大于等于100）；窗口已关或能量不足则结束本 GA
+	// 居合中被 Dodge 打断的后撤 Evade 段：与地面 Evade 一致，播完直接结束 GA
+	// （不按空中居合那样等落地、也不接落地段）
+	if (bPlayingDodgeSegment)
+	{
+		K2_EndAbility();
+		return;
+	}
+
+	// 前冲段播完：还能接续就继续等下一次普攻（即寒意值还大于等于100）；窗口已关或能量不足则收尾
 	if (bPlayingForwardSegment)
 	{
 		bJuheForwarding = false;
 
-		if (!CanChainJuheForward())
+		if (CanChainJuheForward())
 		{
-			K2_EndAbility();
+			return;
 		}
+
+		// 接不了下一段：空中居合还要等落地播完落地动画再结束
+		if (TryHoldForAirLanding())
+		{
+			return;
+		}
+
+		K2_EndAbility();
 		return;
 	}
 
-	// 居合架势段 / 后撤 Evade 段：播完照常结束
+	// 居合架势段 / 后撤 Evade 段 / 落地段：同样先看空中是否还要等落地
+	if (TryHoldForAirLanding())
+	{
+		return;
+	}
+
 	K2_EndAbility();
+}
+
+bool UGA_Evade_Juhe::TryHoldForAirLanding()
+{
+	if (!bAirJuhe || bInLanding)
+	{
+		return false;
+	}
+
+	const ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (AvatarChar && AvatarChar->GetCharacterMovement()->IsFalling())
+	{
+		// 还在空中：不结束 GA，继续等普攻（接前冲）或等落地
+		return true;
+	}
+
+	// 已贴地但落地检测还没轮到：直接进落地段（落地动画播完会再回到这里，此时 bInLanding 已为 true）
+	EnterLandPhase();
+	return true;
 }
 
 void UGA_Evade_Juhe::SetupWaitJuheAttackInput()
@@ -260,12 +320,86 @@ void UGA_Evade_Juhe::StartJuheForward()
 	++JuheForwardIndex;
 }
 
+const FJuheMontageSet& UGA_Evade_Juhe::GetActiveJuheMontages() const
+{
+	return bAirJuhe ? AirMontages : GroundMontages;
+}
+
 UAnimMontage* UGA_Evade_Juhe::PickJuheForwardMontage() const
 {
+	const FJuheMontageSet& Set = GetActiveJuheMontages();
+
 	// 偶数段（含首段）用前冲 1，奇数段用前冲 2
-	UAnimMontage* Montage = (JuheForwardIndex % 2 == 0) ? JuheForwardMontage : JuheForwardMontage2;
-	
-	return Montage ? Montage : JuheForwardMontage;
+	UAnimMontage* Montage = (JuheForwardIndex % 2 == 0) ? Set.ForwardMontage1 : Set.ForwardMontage2;
+
+	// 未配置前冲 2 时回落前冲 1
+	return Montage ? Montage : Set.ForwardMontage1;
+}
+
+void UGA_Evade_Juhe::OnJuheLanded(const FHitResult& Hit)
+{
+	EnterLandPhase();
+}
+
+void UGA_Evade_Juhe::PollJuheLandCheck()
+{
+	// 委托在「激活瞬间已经贴地」这类边界情况下不会触发，靠轮询兜底
+	const ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!AvatarChar)
+	{
+		return;
+	}
+
+	const UCharacterMovementComponent* MoveComp = AvatarChar->GetCharacterMovement();
+	if (MoveComp && !MoveComp->IsFalling())
+	{
+		EnterLandPhase();
+	}
+}
+
+void UGA_Evade_Juhe::EnterLandPhase()
+{
+	// 落地委托与轮询可能同时触达，只处理第一次
+	if (bInLanding)
+	{
+		return;
+	}
+	bInLanding = true;
+
+	ClearJuheLandDetection();
+
+	// 落地即放弃剩余的前冲接续窗口
+	bJuheForwardWindowOpen = false;
+	bJuheForwarding = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(JuheForwardWindowTimer);
+	}
+
+	// 放行普攻 GA：落地动画按普通后摇处理
+	RemoveJuheState();
+
+	if (!AirLandMontage)
+	{
+		K2_EndAbility();
+		return;
+	}
+
+	// 播完自动结束 GA（走 OnJuheMontageFinished 的非前冲段分支）
+	PlayJuheMontage(AirLandMontage, false);
+}
+
+void UGA_Evade_Juhe::ClearJuheLandDetection()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(JuheLandCheckTimer);
+	}
+
+	if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		AvatarChar->LandedDelegate.RemoveDynamic(this, &ThisClass::OnJuheLanded);
+	}
 }
 
 bool UGA_Evade_Juhe::CanChainJuheForward() const
@@ -289,11 +423,19 @@ void UGA_Evade_Juhe::CloseJuheForwardWindow()
 {
 	bJuheForwardWindowOpen = false;
 
-	// 窗口过期时若没有在播前冲，本段居合到此为止（结束即放行普攻 GA）
-	if (!bJuheForwarding)
+	if (bJuheForwarding)
 	{
-		K2_EndAbility();
+		return;
 	}
+
+	// 窗口过期、且没有在播前冲：本段居合到此为止。
+	// 但空中居合还要等落地播完落地动画再结束，否则落地时已经没有 GA 了。
+	if (TryHoldForAirLanding())
+	{
+		return;
+	}
+
+	K2_EndAbility();
 }
 
 void UGA_Evade_Juhe::OnJuhePhaseEnd(FGameplayEventData EventData)
@@ -316,7 +458,9 @@ void UGA_Evade_Juhe::OnJuhePhaseEnd(FGameplayEventData EventData)
 
 void UGA_Evade_Juhe::OnJuheDodgeInput(FGameplayEventData EventData)
 {
-	if (bJuheDodgeUsed || !BackwardEvadeMontage)
+	// 空中居合走空中后撤动画，地面走地面后撤动画
+	UAnimMontage* DodgeMontage = bAirJuhe ? BackwardAirEvadeMontage : BackwardEvadeMontage;
+	if (bJuheDodgeUsed || !DodgeMontage)
 	{
 		return;
 	}
@@ -328,7 +472,7 @@ void UGA_Evade_Juhe::OnJuheDodgeInput(FGameplayEventData EventData)
 	
 	Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo())->GetWeaponComponent()->HideWeapon();
 
-	PlayJuheMontage(BackwardEvadeMontage, false);
+	PlayJuheMontage(DodgeMontage, false, true);
 }
 
 void UGA_Evade_Juhe::RemoveJuheState()

@@ -22,6 +22,9 @@ UGA_AirAttack_Phase2::UGA_AirAttack_Phase2()
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
 
+	// 居合进行中不可激活：空中居合接管空中输入（普攻 / 闪避），避免同一次普攻把空中攻击也带起来
+	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetJuheStateTag());
+
 	// 仅空中（跳跃 / 下落）可触发
 	ActivationRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetAirborneTag());
 	// 仅二阶段形态
