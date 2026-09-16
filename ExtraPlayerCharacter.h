@@ -53,10 +53,10 @@ public:
 	// 本次按下是否已长按达到重击判定阈值
 	FORCEINLINE bool IsLongPressed() const { return bLongPressed; }
 
-	// 重击所需的能量上限（读属性集 EnergyMaxValue，DataTable 配置）
-	float GetHeavyComboCount() const;
+	// 从DT中获取重击所需的能量值
+	float GetHeavyComboEnergyNeed() const;
 	
-	// 相机组件访问器（供 UCombatCameraComponent 解析写入目标）
+	// 相机组件访问器（供 UCombatCameraComponent 解析）
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CamBoom; }
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return ViewCam; }
 
@@ -125,7 +125,7 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	UInputAction* WalkRunSwitchInputAction;
 
-	// -- 武器输入普攻点按=轻击，长按=重击/连续轻击；两个技能：E=技能(Skill)，Q=大招(Ult)--
+	// -- 武器输入普攻点按=轻击，长按=重击/连续轻击；两个技能：E=技能(Skill)，R=大招(Ult)--
 	
 	UPROPERTY(EditDefaultsOnly, Category="Input|Weapon")
 	UInputAction* NormalAttackAction;

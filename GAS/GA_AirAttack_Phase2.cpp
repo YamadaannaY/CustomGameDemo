@@ -1,5 +1,6 @@
 #include "GA_AirAttack_Phase2.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -65,6 +66,8 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	StageIndex = 0;
 	bComboWindowOpen = false;
 	bTransitioning = false;
+	bInLanding = false;
+	bHandingOff = false;
 	CurrentPlayingMontage = nullptr;
 
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
@@ -180,13 +183,46 @@ void UGA_AirAttack_Phase2::OnLightAttackInput(FGameplayEventData Payload)
 		return;
 	}
 
-	// 三段封顶（第三段复用动画1，其上的窗口在此被拦下）
-	if (StageIndex >= MaxComboStages - 1)
+	if (StageIndex >= HandoffStageIndex)
 	{
+		// 第 2 段的窗口内再按一次 → 第三段交给 GA_AirAttack 的下砸，本 GA 结束
+		HandoffToDiveAttack();
 		return;
 	}
 
 	AdvanceToNextStage();
+}
+
+void UGA_AirAttack_Phase2::HandoffToDiveAttack()
+{
+	if (bHandingOff)
+	{
+		return;
+	}
+	bHandingOff = true;
+
+	// 先结束自身：BlockAbilitiesWithTag 对 airattack 的封锁随结束一起释放，
+	// 常驻的 GA_AirAttack 这时才可能被激活
+	K2_EndAbility();
+
+	// 结束栈内直接激活另一个 GA 是重入，错开一帧再触发
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(this, &ThisClass::TriggerDiveHandoff);
+	}
+}
+
+void UGA_AirAttack_Phase2::TriggerDiveHandoff()
+{
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar)
+	{
+		return;
+	}
+
+	// 发空中下砸专属 Tag 触发 GA_AirAttack。
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+		Avatar, UUExtraAbilitySystemStatic::GetAirDiveInputTag(), FGameplayEventData());
 }
 
 void UGA_AirAttack_Phase2::AdvanceToNextStage()

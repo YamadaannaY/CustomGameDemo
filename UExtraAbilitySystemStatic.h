@@ -19,6 +19,9 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_HeavyAttackRelease);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Skill);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ultimate);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Dodge);
+// 空中下砸（GA_AirAttack）专属输入。与 InputTag.LightAttack 平级而非其子级：
+// AbilityTriggers 走层级匹配，做成子 tag 会把空中连打 GA 一起触发
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_AirDive);
 
 // 连击 / 闪避 内部事件 Tag
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Change);
@@ -31,7 +34,7 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Evade_ToSprint);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Juhe_PhaseEnd);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Juhe);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_JuheReady);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_JuhePassThrough);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ForwardOvershoot);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Cancel);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Push_Self);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Uninterruptible);
@@ -88,6 +91,8 @@ public:
 	static FGameplayTag GetSkillInputTag();        // "InputTag.Skill"
 	static FGameplayTag GetUltimateInputTag();     // "InputTag.Ultimate"
 	static FGameplayTag GetDodgeInputTag();        // "InputTag.Dodge"
+	// 空中下砸触发 Tag：一阶段空中轻击、以及二阶段空中连打 GA 交接到第三段时都发它
+	static FGameplayTag GetAirDiveInputTag();      // "InputTag.AirDive"
 
 	// 连击 / 闪避内部事件 Tag
 	static FGameplayTag GetComboChangedEventTag();      // "ability.combo.change"
@@ -101,7 +106,7 @@ public:
 	static FGameplayTag GetJuhePhaseEndTag();           // "Juhe.PhaseEnd"     居合 Montage 后摇起始帧 AN 发的分界事件
 	static FGameplayTag GetJuheStateTag();              // "State.Juhe"        居合进行中，挡住普攻 GA 激活
 	static FGameplayTag GetJuheReadyStateTag();         // "State.JuheReady"   二阶段普攻进 Section 后的 3s 居合窗口
-	static FGameplayTag GetJuhePassThroughStateTag();   // "State.JuhePassThrough" 本段居合前冲会穿过目标（供 ANS_CombatCamera 条件触发）
+	static FGameplayTag GetForwardOvershootStateTag();  // "State.ForwardOvershoot" 穿透区间落点越过目标（供 ANS_CombatCamera 条件触发）
 
 	static FGameplayTag GetAbilityCancelTag();          // "ability.cancel"
 	static FGameplayTag GetPushSelfTag();               // "ability.push.self"

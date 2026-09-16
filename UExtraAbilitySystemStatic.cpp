@@ -20,6 +20,7 @@ UE_DEFINE_GAMEPLAY_TAG(InputTag_HeavyAttackRelease, "InputTag.HeavyAttackRelease
 UE_DEFINE_GAMEPLAY_TAG(InputTag_Skill, "InputTag.Skill");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_Ultimate, "InputTag.Ultimate");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_Dodge, "InputTag.Dodge");
+UE_DEFINE_GAMEPLAY_TAG(InputTag_AirDive, "InputTag.AirDive");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Change, "ability.combo.change");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Change_End, "ability.combo.change.end");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Damage, "ability.combo.damage");
@@ -30,7 +31,7 @@ UE_DEFINE_GAMEPLAY_TAG(Evade_ToSprint, "Evade.ToSprint");
 UE_DEFINE_GAMEPLAY_TAG(Juhe_PhaseEnd, "Juhe.PhaseEnd");
 UE_DEFINE_GAMEPLAY_TAG(State_Juhe, "State.Juhe");
 UE_DEFINE_GAMEPLAY_TAG(State_JuheReady, "State.JuheReady");
-UE_DEFINE_GAMEPLAY_TAG(State_JuhePassThrough, "State.JuhePassThrough");
+UE_DEFINE_GAMEPLAY_TAG(State_ForwardOvershoot, "State.ForwardOvershoot");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Cancel, "ability.cancel");
 UE_DEFINE_GAMEPLAY_TAG(Push_Self, "ability.push.self");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Passive_Launch, "ability.passive.launch.activate");
@@ -140,6 +141,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetDodgeInputTag()
 	return InputTag_Dodge;
 }
 
+FGameplayTag UUExtraAbilitySystemStatic::GetAirDiveInputTag()
+{
+	return InputTag_AirDive;
+}
+
 FGameplayTag UUExtraAbilitySystemStatic::GetComboChangedEventTag()
 {
 	return Combo_Change;
@@ -185,9 +191,9 @@ FGameplayTag UUExtraAbilitySystemStatic::GetJuheReadyStateTag()
 	return State_JuheReady;
 }
 
-FGameplayTag UUExtraAbilitySystemStatic::GetJuhePassThroughStateTag()
+FGameplayTag UUExtraAbilitySystemStatic::GetForwardOvershootStateTag()
 {
-	return State_JuhePassThrough;
+	return State_ForwardOvershoot;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetAbilityCancelTag()

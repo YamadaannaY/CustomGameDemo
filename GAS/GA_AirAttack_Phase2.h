@@ -8,9 +8,13 @@
 class UAnimMontage;
 
 /**
- * 二阶段空中连斩：一次激活内最多连打三段，动画严格 1→2→1。
+ * 二阶段空中连打：本 GA 只负责前两段（Montage1 → Montage2）。
  *
- * 落地播放Land动画。
+ * 在第 2 段的可衔接窗口内再按一次输入时，本 GA 主动结束、把第三段交接给 GA_AirAttack
+ * （下砸：起手 → 循环 → 落地）。两者共用 ability.basicattack.airattack，
+ * 本 GA 的 BlockAbilitiesWithTag 保证交接完成前 GA_AirAttack 不会被激活。
+ *
+ * 段1 / 段2 期间落地播 LandMontage；第三段落地由 GA_AirAttack 自己的落地段处理。
  */
 UCLASS()
 class EXTRACTGAMECHARACTER_API UGA_AirAttack_Phase2 : public UExtraGameplayAbility
@@ -43,8 +47,8 @@ private:
 	// 当前推进到第几段（0 起）
 	int32 StageIndex = 0;
 
-	// 三段封顶：动画 1 → 2 → 1
-	static constexpr int32 MaxComboStages = 3;
+	// 交接段号：推进到第 2 段（索引 1）后再收到输入，即交接给 GA_AirAttack 打第三段
+	static constexpr int32 HandoffStageIndex = 1;
 
 	// 当前是否处于可衔接窗口内（由 AN_AttackComboWindow 的开/关事件切换）
 	bool bComboWindowOpen = false;
@@ -54,6 +58,9 @@ private:
 
 	// 已进入落地段：落地检测只触发一次，落地段结束后才结束 GA
 	bool bInLanding = false;
+
+	// 正在交接第三段给 GA_AirAttack：防止同一帧的重复输入触发两次交接
+	bool bHandingOff = false;
 
 	// 当前在播的段
 	UPROPERTY()
@@ -66,6 +73,13 @@ private:
 
 	// 窗口内输入：推进到下一段
 	void AdvanceToNextStage();
+
+	// 第三段交接：结束本 GA，并安排在下一帧触发常驻的 GA_AirAttack 接管下砸
+	void HandoffToDiveAttack();
+
+	// 交接的实际触发。延迟到下一帧：在 GA 结束的调用栈里再激活另一个 GA 属于重入，GAS 对此敏感
+	UFUNCTION()
+	void TriggerDiveHandoff();
 
 	// 停掉当前段（调用前先置 bTransitioning）
 	void StopCurrentPlayingMontage();
@@ -105,6 +119,7 @@ private:
 	UFUNCTION()
 	void OnLanded(const FHitResult& Hit);
 
+	UFUNCTION()
 	void PollLandCheck();
 
 	// 落地段播完 / 被打断 → 结束 GA

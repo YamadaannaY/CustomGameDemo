@@ -35,11 +35,12 @@ UGA_AirAttack::UGA_AirAttack()
 	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
 	bRotateToLockTarget = true;
 
-	// 通过InputTag +AirBoneTag触发
-	FAbilityTriggerData LightAttackTrigger;
-	LightAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	LightAttackTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetLightAttackInputTag();
-	AbilityTriggers.Add(LightAttackTrigger);
+	// 空中下砸用专属 Tag 触发（不是 InputTag.LightAttack）：空中轻击由角色按形态分派，
+	// 二阶段要让给空中连打 GA，两者若共用 LightAttack 会按 spec 顺序抢输入
+	FAbilityTriggerData AirDiveTrigger;
+	AirDiveTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
+	AirDiveTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetAirDiveInputTag();
+	AbilityTriggers.Add(AirDiveTrigger);
 }
 
 void UGA_AirAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

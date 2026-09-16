@@ -504,9 +504,16 @@ void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& Input
 		HeavyAttackHoldTime,
 		false);
 
-	// 按下即发送轻击输入
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-		this, UUExtraAbilitySystemStatic::GetLightAttackInputTag(), FGameplayEventData());
+	// 按下即发送轻击输入。
+	// 空中按形态分派：一阶段直接打空中攻击，二阶段交给二阶段空中连打 GA，
+	FGameplayTag AttackTag = UUExtraAbilitySystemStatic::GetLightAttackInputTag();
+	if (GetCharacterMovement() && GetCharacterMovement()->IsFalling()
+		&& !AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetPhase2StateTag()))
+	{
+		AttackTag = UUExtraAbilitySystemStatic::GetAirDiveInputTag();
+	}
+
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, AttackTag, FGameplayEventData());
 }
 
 void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& InputActionValue)
@@ -547,7 +554,7 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 	if (AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetPhase1StateTag()))
 	{
 		const float EnergyValue = AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
-		if (EnergyValue >= GetHeavyComboCount())
+		if (EnergyValue >= GetHeavyComboEnergyNeed())
 		{
 			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 				this, UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(), FGameplayEventData());
@@ -555,7 +562,7 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 	}
 }
 
-float AExtraPlayerCharacter::GetHeavyComboCount() const
+float AExtraPlayerCharacter::GetHeavyComboEnergyNeed() const
 {
 	if (AbilitySystemComponent)
 	{
