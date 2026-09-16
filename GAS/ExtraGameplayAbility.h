@@ -179,21 +179,59 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (EditCondition = "bRotateToLockTarget"))
 	FName LockOnWarpTargetName = TEXT("AttackFacing");
 
+	// ── 穿透距离（Forward Overshoot）─────────────────────────────
+	// 开启后额外写入一个独立命名的 warp target：落点为「目标位置 + 冲刺方向 × OvershootDistance」，
+	// 供「穿过目标落到身后」这类动画使用。Montage 里对应 NMS 的 WarpTargetName 要填
+	// ForwardOvershootTargetName；它与 AttackFacing 区间互斥使用（同一时刻只让一段 NMS 生效）。
+	// 方向与落点在该区间开头算一次后固定，不逐帧跟随目标——否则穿身后「角色→目标」反向会让落点翻到另一侧。
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn|ForwardOvershoot")
+	bool bEnableForwardOvershoot = false;
+
+	// 穿透区间使用的 warp target 名（与攻击朝向的 AttackFacing 区分）
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn|ForwardOvershoot", meta = (EditCondition = "bEnableForwardOvershoot"))
+	FName ForwardOvershootTargetName = TEXT("ForwardOvershoot");
+
+	// 穿到目标身后多远（cm）
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn|ForwardOvershoot", meta = (EditCondition = "bEnableForwardOvershoot"))
+	float OvershootDistance = 200.f;
+
+	// 本次穿透位移的上限（cm）
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn|ForwardOvershoot", meta = (EditCondition = "bEnableForwardOvershoot"))
+	float MaxOvershootWarpDist = 600.f;
+
+	// 穿透区间生效期间挂载的状态 Tag：区间开头判定「落点越过目标」时置位，供 ANS_CombatCamera
+	// 之类做条件触发；区间结束或 GA 结束兜底清除。留空则不挂。
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn|ForwardOvershoot", meta = (EditCondition = "bEnableForwardOvershoot"))
+	FGameplayTag ForwardOvershootStateTag;
+
+	// 穿透区间的方向与落点
+	struct FForwardOvershootPoint
+	{
+		FVector DashDir = FVector::ZeroVector;
+		FVector WarpLocation = FVector::ZeroVector;
+		// 落点是否越过目标（即本次会穿身）
+		bool bPassThroughTarget = false;
+	};
+
+	// 按当前锁定目标算出本段穿透的方向与落点（含位移上限钳制）。返回的 DashDir 长度为 0 表示无有效方向。
+	FForwardOvershootPoint ComputeForwardOvershootPoint(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget) const;
+
+	// 同步穿透条件 Tag（用 count 置 0/1，避免 loose tag 计数累加残留）
+	void SetForwardOvershootStateTag(bool bActive);
+
 	// 按当前状态（锁定目标 / 移动输入）写入 warp target
 	void UpdateLockOnWarpTarget();
+
+	// 写入穿透区间的 warp target；区间首次出现时算一次方向与落点并缓存
+	void UpdateForwardOvershootWarpTarget(const AExtraPlayerCharacter* PlayerChar, UMotionWarpingComponent* MWC, const AActor* LockTarget);
 
 	// 每个 MW modifier 的位移/旋转开关在 NMS 区间开始时复制而来。
 	// 这里记录首次见到的原始值作为基准，每帧只在基准之上做「关闭」，不主动「开启」——
 	// 记录前后摇区间在 NMS 的勾选设置，如果取消 Warp Translation 就能只转向不追击。
 	TMap<TWeakObjectPtr<URootMotionModifier_Warp>, TPair<bool, bool>> WarpSwitchBaseline;
 
-	// 有锁定目标时的 warp 落点计算；bOutWarpTranslation 指示本次是否做位移 warp。
-	// 默认：落点在目标位置身前（超出 MotionWarpMaxMoveDist 时钳制到该距离处）并做位移。
-	// 特化 GA（如居合前冲的「穿过目标落到身后」）可覆写。
-	virtual FVector ComputeLockOnWarpLocation(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget, bool& bOutWarpTranslation) const;
-
-	// 有锁定目标时的 warp 朝向。默认朝目标，避免穿过目标后方向反转导致落点跳变。
-	virtual FVector ComputeLockOnFaceDir(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget) const;
+	// 每个穿透区间（modifier）开头锁定的方向与落点
+	TMap<TWeakObjectPtr<URootMotionModifier_Warp>, FForwardOvershootPoint> ForwardOvershootCache;
 
 	// MW 每帧更新 modifier 之前的回调，是设置 modifier 开关的时机
 	// （NMS 区间开始时才创建 modifier 并把开关拷回默认值，不能只在激活时设一次）

@@ -16,82 +16,11 @@
 
 UGA_Evade_Juhe::UGA_Evade_Juhe()
 {
-	// 启用 AttackFacing warp target：居合 Montage 的 MW 区间由基类每帧写入落点与朝向
+	// 居合 Montage 用到两类 MW 区间：
+	//  - AttackFacing：架势 / 后撤段跟随锁定目标朝向；
+	//  - ForwardOvershoot：前冲段穿过目标落到身后（穿透距离区间，Montage 里对应 NMS 填该名字）。
 	bRotateToLockTarget = true;
-}
-
-FVector UGA_Evade_Juhe::ComputeLockOnWarpLocation(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget, bool& bOutWarpTranslation) const
-{
-	if (!PlayerChar)
-	{
-		bOutWarpTranslation = false;
-		return FVector::ZeroVector;
-	}
-
-	// 非前冲段（居合架势 / 后撤 Evade）：只跟随朝向，不做位移 warp，避免被拉向目标
-	if (!bPlayingForwardSegment || !LockTarget)
-	{
-		bOutWarpTranslation = false;
-		return PlayerChar->GetActorLocation();
-	}
-
-	bOutWarpTranslation = true;
-
-	return ComputeJuheForwardWarpLocation(PlayerChar, LockTarget, DirToTarget);
-}
-
-FVector UGA_Evade_Juhe::ComputeJuheForwardWarpLocation(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& FallbackDir) const
-{
-	if (!PlayerChar || !LockTarget)
-	{
-		return PlayerChar ? PlayerChar->GetActorLocation() : FVector::ZeroVector;
-	}
-
-	// 前冲：沿本段锁定的冲刺方向穿过目标，落在目标身后 JuheForwardOvershoot 处。
-	// 不用基类的 MotionWarpMaxMoveDist（那个值针对「落到目标身前」的常规攻击，会把落点钳在目标前），
-	// 改用独立上限 JuheForwardMaxWarpDist 做保护，避免目标过远时瞬移过大。
-	const FVector ForwardDir = JuheForwardFaceDir.IsNearlyZero() ? FallbackDir : JuheForwardFaceDir;
-	const FVector OvershootLocation = LockTarget->GetActorLocation() + ForwardDir * JuheForwardOvershoot;
-
-	const float DistanceToOvershoot = FVector::Dist2D(OvershootLocation, PlayerChar->GetActorLocation());
-	if (DistanceToOvershoot > JuheForwardMaxWarpDist)
-	{
-		return PlayerChar->GetActorLocation() + ForwardDir * JuheForwardMaxWarpDist;
-	}
-
-	return OvershootLocation;
-}
-
-void UGA_Evade_Juhe::UpdateJuhePassThroughTag(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget)
-{
-	bool bWillPassThrough = false;
-
-	if (PlayerChar && LockTarget && !JuheForwardFaceDir.IsNearlyZero())
-	{
-		// 落点落在目标沿本段冲刺方向的正侧 = 会越过目标（即穿身）
-		const FVector WarpLocation = ComputeJuheForwardWarpLocation(PlayerChar, LockTarget, JuheForwardFaceDir);
-		FVector TargetToWarpLocation = WarpLocation - LockTarget->GetActorLocation();
-		TargetToWarpLocation.Z = 0.f;
-
-		bWillPassThrough = FVector::DotProduct(TargetToWarpLocation, JuheForwardFaceDir) > 0.f;
-	}
-
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
-	{
-		// 用 count 直接置 0/1，避免 loose tag 计数累加残留
-		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuhePassThroughStateTag(), bWillPassThrough ? 1 : 0);
-	}
-}
-
-FVector UGA_Evade_Juhe::ComputeLockOnFaceDir(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget) const
-{
-	// 前冲段：朝向锁定为本段起手方向，避免穿身后朝目标方向反转
-	if (bPlayingForwardSegment && !JuheForwardFaceDir.IsNearlyZero())
-	{
-		return JuheForwardFaceDir;
-	}
-
-	return Super::ComputeLockOnFaceDir(PlayerChar, LockTarget, DirToTarget);
+	bEnableForwardOvershoot = true;
 }
 
 bool UGA_Evade_Juhe::ShouldEnterJuhe() const
@@ -155,7 +84,6 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	JuheForwardIndex = 0;
 	bJuheForwarding = false;
 	bJuheForwardWindowOpen = false;
-	JuheForwardFaceDir = FVector::ZeroVector;
 
 	// 居合进行中：挡住普攻 GA，直到分界事件、前冲链结束或Cancel窗口放行
 	ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetJuheStateTag());
@@ -189,12 +117,6 @@ void UGA_Evade_Juhe::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
 	// 兜底：居合没走到分界/窗口结束就结束（被打断 / 动画播完）时也要放行普攻 GA
 	RemoveJuheState();
 	bEnterJuheBranch = false;
-
-	// 兜底清掉穿身条件 tag，避免残留影响后续动画的 ANS_CombatCamera
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
-	{
-		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuhePassThroughStateTag(), 0);
-	}
 
 	if (UWorld* World = GetWorld())
 	{
@@ -253,12 +175,6 @@ void UGA_Evade_Juhe::OnJuheMontageFinished()
 	if (bPlayingForwardSegment)
 	{
 		bJuheForwarding = false;
-
-		// 本段动画播完，ANS_CombatCamera 的条件不再需要
-		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
-		{
-			ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuhePassThroughStateTag(), 0);
-		}
 
 		if (!CanChainJuheForward())
 		{
@@ -321,28 +237,12 @@ void UGA_Evade_Juhe::StartJuheForward()
 		return;
 	}
 
-	AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
-	const AActor* LockTarget = PlayerChar ? PlayerChar->GetLockTarget() : nullptr;
-
-	// 锁定本段冲刺方向：穿过目标后「角色→目标」会反向，逐帧跟随会让 warp 落点在
-	// 穿越瞬间从目标一侧翻到另一侧，角色位置跳变、镜头抖动。故每段起手时定一次。
-	if (PlayerChar && LockTarget)
-	{
-		JuheForwardFaceDir = LockTarget->GetActorLocation() - PlayerChar->GetActorLocation();
-		JuheForwardFaceDir.Z = 0.f;
-		JuheForwardFaceDir.Normalize();
-	}
-
 	// 扣除寒意值（PreAttributeBaseChange 已按 [0, EnergyMaxValue] 封顶）
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		const float CurrentEnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
 		ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetEnergyValueAttribute(), CurrentEnergyValue - JuheEnergyCost);
 	}
-
-	// 前冲瞬间判定本次会不会穿过目标：此刻 MW 落点已确定，直接看落点是否越过目标即可。
-	// 会穿过则打 tag，动画里的 ANS_CombatCamera 据它条件触发切镜头；不会则整段不触发。
-	UpdateJuhePassThroughTag(PlayerChar, LockTarget);
 
 	bJuheForwardStarted = true;
 	bJuheForwarding = true;

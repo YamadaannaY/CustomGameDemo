@@ -26,6 +26,8 @@ UExtraGameplayAbility::UExtraGameplayAbility()
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetUninterruptibleTag());
 	
 	UninterruptibleTag = UUExtraAbilitySystemStatic::GetUninterruptibleTag();
+
+	ForwardOvershootStateTag = UUExtraAbilitySystemStatic::GetForwardOvershootStateTag();
 }
 
 UAnimInstance* UExtraGameplayAbility::GetOwnerAnimInstance() const
@@ -92,13 +94,16 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		ExitCancelWindow();
 	}
 
-	// 解绑 MW 每帧回调并移除已注册的朝向 warp target，避免 GA 结束后残留
+	// 解绑 MW 每帧回调并移除已注册的 warp target，避免 GA 结束后残留
 	if (Char && Char->GetMotionWarpingComponent())
 	{
 		Char->GetMotionWarpingComponent()->OnPreUpdate.RemoveDynamic(this, &ThisClass::OnMotionWarpingPreUpdate);
 		Char->GetMotionWarpingComponent()->RemoveWarpTarget(LockOnWarpTargetName);
+		Char->GetMotionWarpingComponent()->RemoveWarpTarget(ForwardOvershootTargetName);
 	}
 	WarpSwitchBaseline.Reset();
+	ForwardOvershootCache.Reset();
+	SetForwardOvershootStateTag(false);
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
@@ -193,7 +198,7 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 	// 攻击朝向（MR）：激活即写入 warp target，并挂上 MW 的每帧回调持续同步
 	// （跟随目标移动 / 跟随输入方向 / 无输入时不再干涉）。
 	// 仅攻击 GA 开启（bRotateToLockTarget），ActivateAbility 阶段播放的 Montage 由动画内 MR 区间完成转向。
-	if (bRotateToLockTarget)
+	if (bRotateToLockTarget || bEnableForwardOvershoot)
 	{
 		if (AExtraPlayerCharacter* PlayerChar = GetOwningAvatarCharacter())
 		{
@@ -743,11 +748,18 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 			return;
 		}
 
-		// 落点与「是否位移 warp」交给虚函数：默认落在目标位置，居合前冲覆写为穿过目标落在身后
-		WarpLocation = ComputeLockOnWarpLocation(PlayerChar, LockTarget, FlatDir.GetSafeNormal(), bWarpTranslation);
+		// 有限MW追踪：距离不超过上限时 warp 落点在目标身上；超出时把落点钳制到自身朝目标的
+		// MotionWarpMaxMoveDist 处，避免动画强制位移超出设定距离。
+		WarpLocation = LockTarget->GetActorLocation() - 20.f;
+		const float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation(), PlayerChar->GetActorLocation());
+		if (DistanceToTarget > MotionWarpMaxMoveDist)
+		{
+			// -20 避免胶囊体重叠
+			WarpLocation = PlayerChar->GetActorLocation() + FlatDir.GetSafeNormal() * MotionWarpMaxMoveDist - 40.f;
+		}
 
-		// 朝向同样交给虚函数：默认朝目标，居合前冲覆写为锁定起手方向
-		FaceDir = ComputeLockOnFaceDir(PlayerChar, LockTarget, FlatDir.GetSafeNormal());
+		FaceDir = FlatDir;
+		bWarpTranslation = true;
 		bWarpRotation = true;
 	}
 	else if (bRotateToInputWhenNoTarget && !PlayerChar->GetInputDirection().IsNearlyZero())
@@ -805,32 +817,111 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 		WarpMod->bWarpTranslation = Baseline->Key && bWarpTranslation;
 		WarpMod->bWarpRotation = Baseline->Value && bWarpRotation;
 	}
+
+	// 穿透区间（Forward Overshoot）：独立命名的 warp target，与上面的 AttackFacing 互不影响
+	if (bEnableForwardOvershoot)
+	{
+		UpdateForwardOvershootWarpTarget(PlayerChar, MWC, LockTarget);
+	}
 }
 
-FVector UExtraGameplayAbility::ComputeLockOnWarpLocation(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget, bool& bOutWarpTranslation) const
+UExtraGameplayAbility::FForwardOvershootPoint UExtraGameplayAbility::ComputeForwardOvershootPoint(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget) const
 {
-	bOutWarpTranslation = true;
+	FForwardOvershootPoint Point;
 
 	if (!PlayerChar || !LockTarget)
 	{
-		return PlayerChar ? PlayerChar->GetActorLocation() : FVector::ZeroVector;
+		return Point;
 	}
 
-	// 有限MW追踪：距离不超过上限时 warp 落点在目标身上；超出时把落点钳制到自身朝目标的MotionWarpMaxMoveDist位置，避免动画强制位移超出设定距离。
-	const float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation(), PlayerChar->GetActorLocation());
-	if (DistanceToTarget > MotionWarpMaxMoveDist)
+	// 冲刺方向 = 角色 → 目标（水平化）
+	Point.DashDir = LockTarget->GetActorLocation() - PlayerChar->GetActorLocation();
+	Point.DashDir.Z = 0.f;
+	if (!Point.DashDir.Normalize())
 	{
-		//-20避免胶囊体重叠
-		return PlayerChar->GetActorLocation() + DirToTarget * MotionWarpMaxMoveDist - 20.f;
+		// 与目标几乎重合时退化为角色朝向，避免零向量
+		Point.DashDir = PlayerChar->GetActorForwardVector();
+		Point.DashDir.Z = 0.f;
+		Point.DashDir.Normalize();
 	}
 
-	return LockTarget->GetActorLocation()-20.f;
+	// 落点 = 目标位置 + 冲刺方向 × OvershootDistance，即穿过目标后继续前进的距离
+	FVector WarpLocation = LockTarget->GetActorLocation() + Point.DashDir * OvershootDistance;
+
+	// 位移上限保护：目标过远时钳到自身朝该方向的 MaxOvershootWarpDist 处
+	if (FVector::Dist2D(WarpLocation, PlayerChar->GetActorLocation()) > MaxOvershootWarpDist)
+	{
+		WarpLocation = PlayerChar->GetActorLocation() + Point.DashDir * MaxOvershootWarpDist;
+	}
+
+	Point.WarpLocation = WarpLocation;
+
+	// 落点相对目标的方向与冲刺方向同向 = 落在目标另一侧，即本次会穿过目标
+	FVector TargetToWarpLocation = WarpLocation - LockTarget->GetActorLocation();
+	TargetToWarpLocation.Z = 0.f;
+	Point.bPassThroughTarget = FVector::DotProduct(TargetToWarpLocation, Point.DashDir) > 0.f;
+
+	return Point;
 }
 
-FVector UExtraGameplayAbility::ComputeLockOnFaceDir(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget) const
+void UExtraGameplayAbility::SetForwardOvershootStateTag(bool bActive)
 {
-	// 默认朝目标
-	return DirToTarget;
+	if (!ForwardOvershootStateTag.IsValid())
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		// 用 count 直接置 0/1，避免 loose tag 计数累加残留
+		ASC->SetLooseGameplayTagCount(ForwardOvershootStateTag, bActive ? 1 : 0);
+	}
+}
+
+void UExtraGameplayAbility::UpdateForwardOvershootWarpTarget(const AExtraPlayerCharacter* PlayerChar, UMotionWarpingComponent* MWC, const AActor* LockTarget)
+{
+	// 找出当前在跑的穿透区间（一次激活里同一时刻只会有一段）
+	URootMotionModifier_Warp* OvershootMod = nullptr;
+	for (URootMotionModifier* Mod : MWC->GetModifiers())
+	{
+		URootMotionModifier_Warp* WarpMod = Cast<URootMotionModifier_Warp>(Mod);
+		if (WarpMod && WarpMod->WarpTargetName == ForwardOvershootTargetName)
+		{
+			OvershootMod = WarpMod;
+			break;
+		}
+	}
+
+	if (!OvershootMod)
+	{
+		// 区间已结束：清缓存、移除 target 与穿透条件 Tag，避免下一段读到旧状态
+		ForwardOvershootCache.Reset();
+		MWC->RemoveWarpTarget(ForwardOvershootTargetName);
+		SetForwardOvershootStateTag(false);
+		return;
+	}
+
+	if (!PlayerChar || !LockTarget)
+	{
+		return;
+	}
+
+	// 区间开头算一次方向与落点，之后固定，不再跟随目标移动
+	FForwardOvershootPoint* Cached = ForwardOvershootCache.Find(OvershootMod);
+	if (!Cached)
+	{
+		Cached = &ForwardOvershootCache.Add(OvershootMod, ComputeForwardOvershootPoint(PlayerChar, LockTarget));
+
+		// 落点越过目标才挂条件 Tag（供相机等按「是否会穿身」条件触发）
+		SetForwardOvershootStateTag(Cached->bPassThroughTarget);
+	}
+
+	FMotionWarpingTarget Target;
+	Target.Name = ForwardOvershootTargetName;
+	Target.Location = Cached->WarpLocation;
+	Target.Rotation = FRotationMatrix::MakeFromX(Cached->DashDir).Rotator();
+
+	MWC->AddOrUpdateWarpTarget(Target);
 }
 
 void UExtraGameplayAbility::OnMotionWarpingPreUpdate(UMotionWarpingComponent* MotionWarpingComp)

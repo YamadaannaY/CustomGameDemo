@@ -61,13 +61,6 @@ protected:
 	// 居合不参与连续闪避冷却
 	virtual bool ShouldApplyDodgeCooldown() const override { return false; }
 
-	// 前冲穿身：有锁定目标时沿冲刺方向穿过目标，落在其身后 JuheForwardOvershoot 处；
-	// 非前冲段（架势/后撤）只跟随朝向、不做位移 warp。
-	virtual FVector ComputeLockOnWarpLocation(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget, bool& bOutWarpTranslation) const override;
-
-	// 前冲段朝向锁定为本段起手方向；其余段沿用基类（朝目标）
-	virtual FVector ComputeLockOnFaceDir(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& DirToTarget) const override;
-
 private:
 	// 循环监听普攻输入（与 GA_Combo::SetupWaitComboInputPress 同款模式）
 	void SetupWaitJuheAttackInput();
@@ -90,12 +83,6 @@ private:
 
 	// 剩余能量是否够再打一段前冲
 	bool HasEnoughEnergyForJuheForward() const;
-
-	// 本段前冲的 MW 落点（含 JuheForwardMaxWarpDist 上限钳制）；无目标时返回角色当前位置
-	FVector ComputeJuheForwardWarpLocation(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget, const FVector& FallbackDir) const;
-
-	// 前冲瞬间判定本次是否会穿过目标，并同步 State.JuhePassThrough，触发战斗镜头
-	void UpdateJuhePassThroughTag(const AExtraPlayerCharacter* PlayerChar, const AActor* LockTarget);
 
 	// 取本次要播的前冲动画：每段在 前冲1 / 前冲2 间轮切，首段固定为 前冲1
 	UAnimMontage* PickJuheForwardMontage() const;
@@ -123,14 +110,6 @@ private:
 	// 前冲后允许接续下一段前冲的窗口（秒）
 	UPROPERTY(EditDefaultsOnly, Category="Juhe")
 	float JuheForwardWindow = 3.f;
-
-	// 前冲穿过目标后，落点继续越过目标多远的距离（仅前冲段生效，需配 AttackFacing MW 区间）
-	UPROPERTY(EditDefaultsOnly, Category="Juhe")
-	float JuheForwardOvershoot = 200.f;
-
-	// 前冲穿身的位移上限：角色当前位置到落点的最大距离，防止目标过远时瞬移过大
-	UPROPERTY(EditDefaultsOnly, Category="Juhe")
-	float JuheForwardMaxWarpDist = 600.f;
 
 	// 本 GA 的 Montage 任务（自管理，前冲段播完不结束 GA）
 	UPROPERTY()
@@ -161,8 +140,4 @@ private:
 
 	// 前冲接续窗口开启中
 	bool bJuheForwardWindowOpen = false;
-
-	// 本段前冲锁定的冲刺方向（起手时缓存）。穿过目标后「角色→目标」会反向，
-	// 若逐帧跟随会让 warp 落点在穿越瞬间翻转 → 角色位置跳变、镜头抖动。
-	FVector JuheForwardFaceDir = FVector::ZeroVector;
 };
