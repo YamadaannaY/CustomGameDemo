@@ -6,6 +6,9 @@
 #include "GA_AirAttack_Phase2.generated.h"
 
 class UAnimMontage;
+class UGameplayEffect;
+class AExtraSwordQi;
+class UAbilitySystemComponent;
 
 /**
  * 二阶段空中连打：本 GA 只负责前两段（Montage1 → Montage2）。
@@ -44,6 +47,29 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Land")
 	float LandCheckInterval = 0.08f;
 
+	// ── 剑气 ──────────────────────────────────────────────
+	// 生成剑气用的 Actor 类（用蓝图子类挂 Niagara 特效、调判定盒尺寸）
+	UPROPERTY(EditDefaultsOnly, Category = "SwordQi")
+	TSubclassOf<AExtraSwordQi> SwordQiActorClass;
+
+	// 剑在武器组里对应的 WeaponTag（经武器组件 GetWeaponMeshByTag 找到剑的 StaticMesh）
+	UPROPERTY(EditDefaultsOnly, Category = "SwordQi")
+	FGameplayTag SwordWeaponTag;
+
+	// 出剑气的 Socket（挂在剑的 Mesh 上）
+	UPROPERTY(EditDefaultsOnly, Category = "SwordQi")
+	FName SwordQiSpawnSocketName;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SwordQi", meta = (ClampMin = "0.0"))
+	float SwordQiSpeed = 2000.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SwordQi", meta = (ClampMin = "0.0"))
+	float SwordQiLifeTime = 2.f;
+
+	// 剑气命中的伤害 GE（留空 = 剑气只飞不造成伤害）
+	UPROPERTY(EditDefaultsOnly, Category = "SwordQi")
+	TSubclassOf<UGameplayEffect> SwordQiDamageEffect;
+
 	// 当前推进到第几段（0 起）
 	int32 StageIndex = 0;
 
@@ -80,6 +106,17 @@ private:
 	// 交接的实际触发。延迟到下一帧：在 GA 结束的调用栈里再激活另一个 GA 属于重入，GAS 对此敏感
 	UFUNCTION()
 	void TriggerDiveHandoff();
+
+	// ── 剑气 ──────────────────────────────────────────────
+	// 挂上剑气事件监听（Montage 的挥刀帧放 AN 发送）
+	void SetupSwordQiListener();
+
+	// 剑气事件回调：生成一道剑气并斩出
+	UFUNCTION()
+	void HandleSwordQiRequest(FGameplayEventData EventData);
+
+	// 在剑的 Socket 上生成一道剑气；方向优先朝锁定目标，无锁定回退角色正前方
+	void SpawnSwordQi();
 
 	// 停掉当前段（调用前先置 bTransitioning）
 	void StopCurrentPlayingMontage();
@@ -125,4 +162,22 @@ private:
 	// 落地段播完 / 被打断 → 结束 GA
 	UFUNCTION()
 	void OnLandMontageFinished();
+
+	// ── 居合窗口 ──────────────────────────────────────────
+	// 每段出手时开启：给 ASC 挂 State.JuheReady，JuheReadyWindow 秒后清除，
+	// 表示「刚打完普攻，此刻闪避可进居合」。与地面普攻（GA_Combo_Phase_2）同理。
+	// 窗口跨本 GA 结束继续计时，因此 EndAbility 不清理。
+	void OpenJuheReadyWindow();
+
+	// 每段出手后允许触发居合的窗口时长（秒）
+	UPROPERTY(EditDefaultsOnly, Category = "Juhe")
+	float JuheReadyWindow = 3.f;
+
+	UFUNCTION()
+	void ClearJuheReady();
+
+	FTimerHandle JuheReadyTimer;
+
+	// 窗口要跨本 GA 结束继续计时，缓存 ASC 以免到期时拿不到 ActorInfo
+	TWeakObjectPtr<UAbilitySystemComponent> JuheReadyASC;
 };

@@ -6,8 +6,11 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Animation/AnimInstance.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
+#include "ExtractGameCharacter/Projectile/ExtraSwordQi.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TimerManager.h"
@@ -92,6 +95,9 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		WindowEndTask->EventReceived.AddDynamic(this, &ThisClass::OnComboWindowEnd);
 		WindowEndTask->ReadyForActivation();
 
+		// 剑气：Montage 挥刀帧的 AN 触发一次，每收到一次生成一道剑气
+		SetupSwordQiListener();
+
 		PlayStage(0);
 	}
 
@@ -131,12 +137,43 @@ void UGA_AirAttack_Phase2::PlayStage(int32 InIndex)
 	bComboWindowOpen = false;
 	bTransitioning = false;
 
+	// 本段出手即开启居合窗口（与地面普攻一致：每段出手都开，空中居合据此判定可触发）
+	OpenJuheReadyWindow();
+
 	UAbilityTask_PlayMontageAndWait* StageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this, NAME_None, CurrentPlayingMontage);
 	StageTask->OnCompleted.AddDynamic(this, &ThisClass::OnStageMontageCompleted);
 	StageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnStageMontageInterrupted);
 	StageTask->OnCancelled.AddDynamic(this, &ThisClass::OnStageMontageInterrupted);
 	StageTask->ReadyForActivation();
+}
+
+void UGA_AirAttack_Phase2::OpenJuheReadyWindow()
+{
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC)
+	{
+		return;
+	}
+
+	JuheReadyASC = ASC;
+
+	// 用 SetLooseGameplayTagCount 置 1 而非 AddLooseGameplayTag：后者是计数累加语义，
+	// 连续进段会把计数堆到 N，到期只减 1 会残留 tag，导致窗口永不关闭。
+	ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 1);
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(JuheReadyTimer, this, &ThisClass::ClearJuheReady, JuheReadyWindow, false);
+	}
+}
+
+void UGA_AirAttack_Phase2::ClearJuheReady()
+{
+	if (UAbilitySystemComponent* ASC = JuheReadyASC.Get())
+	{
+		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
+	}
 }
 
 void UGA_AirAttack_Phase2::OnStageMontageCompleted()
@@ -226,6 +263,81 @@ void UGA_AirAttack_Phase2::TriggerDiveHandoff()
 	// 发空中下砸专属 Tag 触发 GA_AirAttack。
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 		Avatar, UUExtraAbilitySystemStatic::GetAirDiveInputTag(), FGameplayEventData());
+}
+
+void UGA_AirAttack_Phase2::SetupSwordQiListener()
+{
+	// OnlyMatchExact=true：只接住 AN 发的这一个精确 tag，不误接 ability.airattack.* 下的其他事件
+	UAbilityTask_WaitGameplayEvent* WaitSwordQiTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, UUExtraAbilitySystemStatic::GetAirAttackSwordQiTag(), nullptr, false, true);
+	WaitSwordQiTask->EventReceived.AddDynamic(this, &ThisClass::HandleSwordQiRequest);
+	WaitSwordQiTask->ReadyForActivation();
+}
+
+void UGA_AirAttack_Phase2::HandleSwordQiRequest(FGameplayEventData EventData)
+{
+	SpawnSwordQi();
+}
+
+void UGA_AirAttack_Phase2::SpawnSwordQi()
+{
+	// 权威端生成：AN 的事件两端都会触发，不加判断联机下会双端各生成一道
+	if (!K2_HasAuthority() || !SwordQiActorClass)
+	{
+		return;
+	}
+
+	AExtraPlayerCharacter* Char = GetOwningAvatarCharacter();
+	if (!Char)
+	{
+		return;
+	}
+
+	UExtraGameWeaponComponent* WeaponComp = Char->GetWeaponComponent();
+	if (!WeaponComp)
+	{
+		return;
+	}
+
+	UStaticMeshComponent* SwordMesh = WeaponComp->GetWeaponMeshByTag(SwordWeaponTag);
+	if (!SwordMesh || !SwordMesh->DoesSocketExist(SwordQiSpawnSocketName))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[GA_AirAttack_Phase2] 未找到剑或出剑气 Socket %s"),
+			*SwordQiSpawnSocketName.ToString());
+		return;
+	}
+
+	const FVector SpawnLoc = SwordMesh->GetSocketLocation(SwordQiSpawnSocketName);
+
+	// 方向：有锁定目标就朝目标飞，否则沿角色正前方
+	FVector FireDir = Char->GetActorForwardVector();
+	if (const AActor* LockTarget = Char->GetLockTarget())
+	{
+		const FVector ToTarget = LockTarget->GetActorLocation() - SpawnLoc;
+		if (ToTarget.SizeSquared() > KINDA_SMALL_NUMBER)
+		{
+			FireDir = ToTarget.GetSafeNormal();
+		}
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = Char;
+	SpawnParams.Instigator = Char;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	AExtraSwordQi* SwordQi = World->SpawnActor<AExtraSwordQi>(SwordQiActorClass, SpawnLoc, FireDir.Rotation(), SpawnParams);
+	if (!SwordQi)
+	{
+		return;
+	}
+
+	SwordQi->InitProjectile(Char, SwordQiDamageEffect, static_cast<int32>(GetAbilityLevel()), FireDir, SwordQiSpeed, SwordQiLifeTime);
 }
 
 void UGA_AirAttack_Phase2::AdvanceToNextStage()

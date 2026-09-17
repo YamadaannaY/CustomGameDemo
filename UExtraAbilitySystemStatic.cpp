@@ -40,6 +40,7 @@ UE_DEFINE_GAMEPLAY_TAG(Uninterruptible_End, "ability.uninterruptible.end");
 UE_DEFINE_GAMEPLAY_TAG(Data_Damage, "Data.Damage");
 UE_DEFINE_GAMEPLAY_TAG(HeavyAttack_Shoot, "ability.heavyattack.shoot");
 UE_DEFINE_GAMEPLAY_TAG(Area_Damage, "ability.area.damage");
+UE_DEFINE_GAMEPLAY_TAG(AirAttack_SwordQi, "ability.airattack.swordqi");
 
 // CancelWindow：注意 "ability.cancelwindow.*" 不是 "ability.cancel" 的子级（同前缀但不同分支），
 // 事件按 tag 层级向上广播，因此不会误触发移动打断的监听。
@@ -234,6 +235,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetAreaDamageTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetHeavyAttackShootTag()
 {
 	return HeavyAttack_Shoot;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackSwordQiTag()
+{
+	return AirAttack_SwordQi;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetLaunchedAbilityActivationTag()

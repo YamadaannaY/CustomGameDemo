@@ -43,6 +43,9 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(HeavyAttack_Shoot);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Area_Damage);
 
+// 空中攻击斩出剑气：Montage 的挥刀帧放 AN 触发一次，GA 每收到一次生成一道剑气
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(AirAttack_SwordQi);
+
 // CancelWindow：后摇段「视为该 GA 已取消」的开关与开/关窗事件
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CancelWindow);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(CancelWindow_Begin);
@@ -125,6 +128,9 @@ public:
 
 	// 重击弓射：Montage 内各放箭帧 AN 触发一次本事件，GA 每收到一次生成一支箭
 	static FGameplayTag GetHeavyAttackShootTag();       // "ability.heavyattack.shoot"
+
+	// 空中攻击剑气：Montage 挥刀帧 AN 触发一次，GA 每收到一次生成一道剑气
+	static FGameplayTag GetAirAttackSwordQiTag();       // "ability.airattack.swordqi"
 
 	// ── CancelWindow（后摇段：GA 视为已取消，任何输入都能打断此 Montage）──
 	// AN_CancelWindow 在区间 Begin/End 各发一次事件，持有者据此撤销/恢复自身封锁并登记句柄；
