@@ -259,5 +259,5 @@ void UGA_HeavyAttack::SpawnArrowAtSocket()
 		}
 	}
 
-	Arrow->InitShot(Char, ArrowDamageEffect, static_cast<int32>(GetAbilityLevel()), FireDir, ArrowSpeed, ArrowLifeTime);
+	Arrow->InitProjectile(Char, ArrowDamageEffect, static_cast<int32>(GetAbilityLevel()), FireDir, ArrowSpeed, ArrowLifeTime);
 }
