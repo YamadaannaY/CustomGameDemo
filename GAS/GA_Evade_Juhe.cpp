@@ -23,7 +23,7 @@ UGA_Evade_Juhe::UGA_Evade_Juhe()
 	bEnableForwardOvershoot = true;
 }
 
-bool UGA_Evade_Juhe::ShouldEnterJuhe(bool bAirborne) const
+bool UGA_Evade_Juhe::ShouldEnterJuhe() const
 {
 	const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	if (!ASC)
@@ -31,13 +31,7 @@ bool UGA_Evade_Juhe::ShouldEnterJuhe(bool bAirborne) const
 		return false;
 	}
 
-	// 空中：浮空 + 能量足够即可，不要求普攻开启的窗口
-	if (bAirborne)
-	{
-		return ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute()) >= JuheEnergyThreshold;
-	}
-
-	// 地面：二阶段普攻每次出手都会开定时窗口；窗口过期后只走普通 Evade
+	// 地面 / 空中同一套条件：二阶段普攻每次出手都会开定时窗口；窗口过期后只走普通 Evade
 	if (!ASC->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetJuheReadyStateTag()))
 	{
 		return false;
@@ -54,7 +48,7 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	bAirJuhe = AvatarChar && AvatarChar->GetCharacterMovement()->IsFalling();
 
 	// 条件不满足或未配置居合 Montage：完全交回基类 Evade,即普通闪避
-	if (!ShouldEnterJuhe(bAirJuhe) || !GetActiveJuheMontages().JuheMontage)
+	if (!ShouldEnterJuhe() || !GetActiveJuheMontages().JuheMontage)
 	{
 		bAirJuhe = false;
 		Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
@@ -88,11 +82,8 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	// 居合进行中：挡住普攻 GA，直到分界事件、前冲链结束或Cancel窗口放行
 	ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetJuheStateTag());
 
-	// 地面居合消费普攻开启的窗口；空中不依赖该窗口
-	if (!bAirJuhe)
-	{
-		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
-	}
+	// 消费普攻开启的居合窗口（地面 / 空中一致）
+	ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
 
 	if (!HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
@@ -458,6 +449,7 @@ void UGA_Evade_Juhe::OnJuhePhaseEnd(FGameplayEventData EventData)
 
 void UGA_Evade_Juhe::OnJuheDodgeInput(FGameplayEventData EventData)
 {
+
 	// 空中居合走空中后撤动画，地面走地面后撤动画
 	UAnimMontage* DodgeMontage = bAirJuhe ? BackwardAirEvadeMontage : BackwardEvadeMontage;
 	if (bJuheDodgeUsed || !DodgeMontage)
@@ -469,10 +461,15 @@ void UGA_Evade_Juhe::OnJuheDodgeInput(FGameplayEventData EventData)
 
 	// 居合中再次闪避：走基类正常后撤 Evade 动画，播完结束
 	RemoveJuheState();
-	
+
 	Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo())->GetWeaponComponent()->HideWeapon();
 
 	PlayJuheMontage(DodgeMontage, false, true);
+
+	// 重置重力必须放在切段之后：PlayJuheMontage 会停掉前冲段，而挂在它上面的 ANS_GravityScale
+	// 在那一刻仍会按曲线把重力写回滞空值（NotifyEnd 未勾 RestoreOnEnd 时不会恢复），
+	// 放在切段之前就会被这次写入覆盖，后撤段便一直保持前冲段的滞空重力
+	Cast<ACharacter>(GetAvatarActorFromActorInfo())->GetCharacterMovement()->GravityScale = DefaultGravityScale;
 }
 
 void UGA_Evade_Juhe::RemoveJuheState()
@@ -488,5 +485,5 @@ void UGA_Evade_Juhe::RemoveJuheState()
 		{
 			ASC->RemoveLooseGameplayTag(UUExtraAbilitySystemStatic::GetJuheStateTag());
 		}
-	}
+	} 
 }

@@ -23,7 +23,7 @@ protected:
 	// 覆写：先走基类通用伤害结算，再对「确实打到目标」的这次伤害追加累积能量
 	virtual void DoDamage(const FGameplayEventData& Data) override;
 
-	// 覆写：进入每个 Section 时开启居合窗口（挂 State.JuheReady，窗口到期移除）
+	// 覆写：进入每个 Section 时开启居合窗口（基类 UExtraGameplayAbility::OpenJuheReadyWindow）
 	virtual void OnComboSectionChanged() override;
 
 	// 每次命中目标额外获得的寒意值
@@ -35,11 +35,11 @@ protected:
 	float JuheReadyWindow = 3.f;
 
 private:
-	// 开启（刷新）居合窗口：置 State.JuheReady 计数为 1 并重置 3s 计时
+	// 开启（刷新）居合窗口：置 State.JuheReady 计数为 1 并重置计时
 	void OpenJuheReadyWindow();
 
 	UFUNCTION()
-	void ClearJuheReady() const ;
+	void ClearJuheReady();
 
 	FTimerHandle JuheReadyTimer;
 

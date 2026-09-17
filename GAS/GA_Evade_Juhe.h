@@ -60,8 +60,8 @@ public:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
-	// 是否进入居合分支。空中只看能量；地面还要求二阶段普攻开启的居合窗口未过期。
-	bool ShouldEnterJuhe(bool bAirborne) const;
+	// 是否进入居合分支：二阶段普攻开启的居合窗口未过期，且能量 >= 阈值（地面 / 空中同一套条件）
+	bool ShouldEnterJuhe() const;
 
 	// 居合期间的普攻输入：架势段接第一段前冲，前冲中/窗口内接下一段，分界后不再响应
 	UFUNCTION()

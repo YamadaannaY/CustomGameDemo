@@ -279,7 +279,7 @@ protected:
 
 	// 范围 Debug：开启后 PerformAreaDamage 画「地面脚印圈(半径) + 判定球 + 命中连线/打点」，
 	// 并在屏幕打印当前半径与命中数——可直接目测范围大概有多大。GA 蓝图 Class Defaults 里勾选。
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Debug")
+	UPROPERTY(EditDefaultsOnly,Category = "Debug")
 	bool bShouldDrawDebug = false;
 
 	// 范围伤害触发事件 Tag（默认ability.area.damage；）
