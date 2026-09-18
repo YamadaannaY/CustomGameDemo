@@ -107,9 +107,8 @@ private:
 	UFUNCTION()
 	void TriggerDiveHandoff();
 
-	// ── 剑气 ──────────────────────────────────────────────
 	// 挂上剑气事件监听（Montage 的挥刀帧放 AN 发送）
-	void SetupSwordQiListener();
+	void SetupSwordSlashListener();
 
 	// 剑气事件回调：生成一道剑气并斩出
 	UFUNCTION()

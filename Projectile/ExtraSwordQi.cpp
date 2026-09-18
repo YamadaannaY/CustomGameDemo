@@ -16,7 +16,7 @@ AExtraSwordQi::AExtraSwordQi()
 	Movement->bShouldBounce = false;
 	Movement->ProjectileGravityScale = 0.f;   // 直线飞行，无下坠
 	Movement->InitialSpeed = 0.f;
-	Movement->MaxSpeed = 0.f;                 // InitProjectile 里按实际速度覆盖
+	Movement->MaxSpeed = 0.f;                 // InitProjectile 里覆盖
 
 	// 穿透：命中敌人只结算，撞到静态几何才停
 	HitMode = EProjectileHitMode::PassThrough;

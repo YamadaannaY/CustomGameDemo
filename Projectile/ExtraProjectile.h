@@ -22,11 +22,10 @@ enum class EProjectileHitMode : uint8
 /**
  * 投射物基类：飞行、命中结算、生命周期。
  *
- * 派生类在构造函数里创建自己的碰撞体（球 / 盒）与视觉，再调 SetupProjectileCollision
+ * 派生类在构造函数里自定义碰撞体（球 / 盒）与视觉，再调 SetupProjectileCollision
  * 完成公共配置；生成时由 GA 调 InitProjectile 注入方向、速度与伤害 GE。
  *
- * 注意：伤害由投射物自行结算（写法与 GA 基类 DoDamage 同构），
- * 不会经过攻击 GA 的 DoDamage / GetDamageEffect 覆写——只有生成时注入的这个 GE 生效。
+ * 伤害由投射物自行结算（写法与 GA 基类 DoDamage 同构）
  */
 UCLASS(Abstract)
 class EXTRACTGAMECHARACTER_API AExtraProjectile : public AActor
@@ -36,12 +35,12 @@ class EXTRACTGAMECHARACTER_API AExtraProjectile : public AActor
 public:
 	AExtraProjectile();
 
-	// 生成后注入飞行与伤害参数（BeginPlay 已执行，故在此统一初始化运动）
+	// 生成后注入飞行与伤害参数，公共函数由GA具体配置
 	void InitProjectile(AActor* InSource, TSubclassOf<UGameplayEffect> InDamageEffect, int32 InAbilityLevel,
 	                    const FVector& InDir, float InSpeed, float InLifeTime);
 
 protected:
-	// 派生类构造里建好碰撞体后调用：指定根组件，并按 HitMode 配好碰撞通道与命中回调
+	//并按 HitMode 配好碰撞通道与命中回调
 	void SetupProjectileCollision(UPrimitiveComponent* InCollision, UProjectileMovementComponent* InMovement);
 
 	// 命中一个 Actor：可伤害的敌方且权威端则结算 GE；同一目标只结算一次
@@ -62,7 +61,7 @@ protected:
 	void HandleBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 	                        int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
-	// 命中判定模式，派生类构造里指定（须在 SetupProjectileCollision 之前赋值）
+	// 命中判定模式，派生类构造里指定
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile")
 	EProjectileHitMode HitMode = EProjectileHitMode::StopAndDamage;
 
@@ -72,12 +71,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile")
 	TObjectPtr<UProjectileMovementComponent> ProjectileMovement;
 
-	// 命中后应用的伤害 GE（由 InitProjectile 注入，可留空 = 命中不造成伤害只销毁）
+	// 命中后应用的伤害 GE（由 InitProjectile 注入，留空 = 命中不造成伤害只销毁）
 	UPROPERTY(EditDefaultsOnly, Category = "Projectile|Damage")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
 private:
-	// 伤害源（发起攻击的角色），弱引用：源死亡/销毁后已射出的投射物仍安全飞行
+	// 伤害源，弱引用：源死亡/销毁后已射出的投射物仍安全飞行
 	TWeakObjectPtr<AActor> SourceActor;
 
 	// 穿透型已结算过的目标，避免同一目标被反复结算

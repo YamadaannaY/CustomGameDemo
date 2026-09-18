@@ -17,7 +17,7 @@ AExtraArrow::AExtraArrow()
 	Movement->bShouldBounce = false;
 	Movement->ProjectileGravityScale = 0.f;   // 直线飞行，无下坠
 	Movement->InitialSpeed = 0.f;
-	Movement->MaxSpeed = 0.f;                 // InitProjectile 里按实际速度覆盖
+	Movement->MaxSpeed = 0.f;                 // InitProjectile 里覆盖
 
 	// 箭矢命中即停、随即销毁
 	HitMode = EProjectileHitMode::StopAndDamage;

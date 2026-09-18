@@ -96,7 +96,7 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		WindowEndTask->ReadyForActivation();
 
 		// 剑气：Montage 挥刀帧的 AN 触发一次，每收到一次生成一道剑气
-		SetupSwordQiListener();
+		SetupSwordSlashListener();
 
 		PlayStage(0);
 	}
@@ -265,7 +265,7 @@ void UGA_AirAttack_Phase2::TriggerDiveHandoff()
 		Avatar, UUExtraAbilitySystemStatic::GetAirDiveInputTag(), FGameplayEventData());
 }
 
-void UGA_AirAttack_Phase2::SetupSwordQiListener()
+void UGA_AirAttack_Phase2::SetupSwordSlashListener()
 {
 	// OnlyMatchExact=true：只接住 AN 发的这一个精确 tag，不误接 ability.airattack.* 下的其他事件
 	UAbilityTask_WaitGameplayEvent* WaitSwordQiTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
@@ -300,12 +300,6 @@ void UGA_AirAttack_Phase2::SpawnSwordQi()
 	}
 
 	UStaticMeshComponent* SwordMesh = WeaponComp->GetWeaponMeshByTag(SwordWeaponTag);
-	if (!SwordMesh || !SwordMesh->DoesSocketExist(SwordQiSpawnSocketName))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[GA_AirAttack_Phase2] 未找到剑或出剑气 Socket %s"),
-			*SwordQiSpawnSocketName.ToString());
-		return;
-	}
 
 	const FVector SpawnLoc = SwordMesh->GetSocketLocation(SwordQiSpawnSocketName);
 

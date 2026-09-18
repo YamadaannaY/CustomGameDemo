@@ -8,11 +8,9 @@ class UBoxComponent;
 class UNiagaraComponent;
 
 /**
- * 剑气投射物（空中攻击斩出）
+ * 剑气
  *
  * 飞行与 GE 结算沿用 AExtraProjectile；自身特点：
- *  - 宽而薄的 Box 判定（剑气是一道横斩，用球会把纵向也撑厚）
- *  - Niagara 特效跟随飞行
  *  - 穿透：命中敌人只结算、继续飞，撞到静态几何才停下销毁
  */
 UCLASS()

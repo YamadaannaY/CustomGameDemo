@@ -28,15 +28,13 @@ void AExtraProjectile::SetupProjectileCollision(UPrimitiveComponent* InCollision
 	InCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	InCollision->SetCollisionObjectType(ECC_WorldDynamic);
 	InCollision->SetCollisionResponseToAllChannels(ECR_Ignore);
-
-	// 两种模式的差别就在这里：
-	//   停止型——全部阻挡，靠「撞击停止」收尾；
-	//   穿透型——Pawn 走重叠（命中只结算、继续飞），静态几何仍阻挡（撞墙才停）。
-	// 两个 Actor 的碰撞响应取「更松」的一方，所以这里把 Pawn 设成 Overlap 即可保证不会撞停。
+	
 	const ECollisionResponse PawnResponse =
 		(HitMode == EProjectileHitMode::PassThrough) ? ECR_Overlap : ECR_Block;
 
 	InCollision->SetCollisionResponseToChannel(ECC_Pawn, PawnResponse);
+	
+	//对世界物体响应Block进行销毁
 	InCollision->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 	InCollision->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 
@@ -57,7 +55,7 @@ void AExtraProjectile::InitProjectile(AActor* InSource, TSubclassOf<UGameplayEff
 	AbilityLevel = InAbilityLevel;
 	HitActors.Reset();
 
-	// 忽略来源自身（角色胶囊等），避免出膛瞬间与自身撞停
+	// 忽略来源自身
 	if (CollisionComponent && InSource)
 	{
 		CollisionComponent->IgnoreActorWhenMoving(InSource, true);
