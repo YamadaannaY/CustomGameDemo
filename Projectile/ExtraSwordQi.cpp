@@ -12,7 +12,10 @@ AExtraSwordQi::AExtraSwordQi()
 
 	UProjectileMovementComponent* Movement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
 	Movement->UpdatedComponent = CollisionBox;
-	Movement->bRotationFollowsVelocity = true;
+	
+	// 关掉速度跟随：开着的话它每帧按 velocity 重设 actor 旋转，会把 InitProjectile 设好的 Roll 倾斜冲掉；
+	Movement->bRotationFollowsVelocity = false;
+	
 	Movement->bShouldBounce = false;
 	Movement->ProjectileGravityScale = 0.f;   // 直线飞行，无下坠
 	Movement->InitialSpeed = 0.f;

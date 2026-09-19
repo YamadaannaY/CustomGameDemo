@@ -48,7 +48,7 @@ void AExtraProjectile::SetupProjectileCollision(UPrimitiveComponent* InCollision
 }
 
 void AExtraProjectile::InitProjectile(AActor* InSource, TSubclassOf<UGameplayEffect> InDamageEffect, int32 InAbilityLevel,
-                                      const FVector& InDir, float InSpeed, float InLifeTime)
+                                      const FVector& InDir, float InSpeed, float InLifeTime, float InRollOffset)
 {
 	SourceActor = InSource;
 	DamageEffectClass = InDamageEffect;
@@ -68,9 +68,12 @@ void AExtraProjectile::InitProjectile(AActor* InSource, TSubclassOf<UGameplayEff
 		ProjectileMovement->MaxSpeed = InSpeed;
 		ProjectileMovement->Velocity = SafeDir * InSpeed;
 	}
+	// 朝向飞行方向；Roll 偏移只让投射物绕飞行轴滚转，不影响飞出去的方向
 	if (!SafeDir.IsNearlyZero())
 	{
-		SetActorRotation(SafeDir.Rotation());
+		FRotator FireRot = SafeDir.Rotation();
+		FireRot.Roll += InRollOffset;
+		SetActorRotation(FireRot);
 	}
 
 	if (InLifeTime > 0.f)

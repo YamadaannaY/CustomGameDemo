@@ -114,8 +114,9 @@ private:
 	UFUNCTION()
 	void HandleSwordQiRequest(FGameplayEventData EventData);
 
-	// 在剑的 Socket 上生成一道剑气；方向优先朝锁定目标，无锁定回退角色正前方
-	void SpawnSwordQi();
+	// 在剑的 Socket 上生成一道剑气；方向优先朝锁定目标，无锁定回退角色正前方。
+	// RollOffset：绕飞行轴（X）的滚转角（度），由AN根据动画帧当前刀的方向进行配置
+	void SpawnSwordQi(float RollOffset);
 
 	// 停掉当前段（调用前先置 bTransitioning）
 	void StopCurrentPlayingMontage();
@@ -163,14 +164,14 @@ private:
 	void OnLandMontageFinished();
 
 	// ── 居合窗口 ──────────────────────────────────────────
-	// 每段出手时开启：给 ASC 挂 State.JuheReady，JuheReadyWindow 秒后清除，
+	// 每段出手时开启：给 ASC 挂 State.JuheReady，JuheReadyWindowSeconds 秒后清除，
 	// 表示「刚打完普攻，此刻闪避可进居合」。与地面普攻（GA_Combo_Phase_2）同理。
 	// 窗口跨本 GA 结束继续计时，因此 EndAbility 不清理。
 	void OpenJuheReadyWindow();
 
 	// 每段出手后允许触发居合的窗口时长（秒）
 	UPROPERTY(EditDefaultsOnly, Category = "Juhe")
-	float JuheReadyWindow = 3.f;
+	float JuheReadyWindowSeconds = 3.f;
 
 	UFUNCTION()
 	void ClearJuheReady();

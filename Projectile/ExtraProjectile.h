@@ -36,8 +36,9 @@ public:
 	AExtraProjectile();
 
 	// 生成后注入飞行与伤害参数，公共函数由GA具体配置
+	// InRollOffset：绕飞行轴的滚转偏移（度），只改投射物朝向、不改飞行方向；0 = 不倾斜
 	void InitProjectile(AActor* InSource, TSubclassOf<UGameplayEffect> InDamageEffect, int32 InAbilityLevel,
-	                    const FVector& InDir, float InSpeed, float InLifeTime);
+	                    const FVector& InDir, float InSpeed, float InLifeTime, float InRollOffset = 0.f);
 
 protected:
 	//并按 HitMode 配好碰撞通道与命中回调

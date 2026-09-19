@@ -164,7 +164,7 @@ void UGA_AirAttack_Phase2::OpenJuheReadyWindow()
 
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().SetTimer(JuheReadyTimer, this, &ThisClass::ClearJuheReady, JuheReadyWindow, false);
+		World->GetTimerManager().SetTimer(JuheReadyTimer, this, &ThisClass::ClearJuheReady, JuheReadyWindowSeconds, false);
 	}
 }
 
@@ -276,10 +276,10 @@ void UGA_AirAttack_Phase2::SetupSwordSlashListener()
 
 void UGA_AirAttack_Phase2::HandleSwordQiRequest(FGameplayEventData EventData)
 {
-	SpawnSwordQi();
+	SpawnSwordQi(EventData.EventMagnitude);
 }
 
-void UGA_AirAttack_Phase2::SpawnSwordQi()
+void UGA_AirAttack_Phase2::SpawnSwordQi(float RollOffset)
 {
 	// 权威端生成：AN 的事件两端都会触发，不加判断联机下会双端各生成一道
 	if (!K2_HasAuthority() || !SwordQiActorClass)
@@ -331,7 +331,7 @@ void UGA_AirAttack_Phase2::SpawnSwordQi()
 		return;
 	}
 
-	SwordQi->InitProjectile(Char, SwordQiDamageEffect, static_cast<int32>(GetAbilityLevel()), FireDir, SwordQiSpeed, SwordQiLifeTime);
+	SwordQi->InitProjectile(Char, SwordQiDamageEffect, (GetAbilityLevel()), FireDir, SwordQiSpeed, SwordQiLifeTime, RollOffset);
 }
 
 void UGA_AirAttack_Phase2::AdvanceToNextStage()
