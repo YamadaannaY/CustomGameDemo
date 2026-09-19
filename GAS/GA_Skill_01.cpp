@@ -1,5 +1,6 @@
 #include "GA_Skill_01.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 
 UGA_Skill_01::UGA_Skill_01()
@@ -31,6 +32,12 @@ void UGA_Skill_01::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
+		// 本技能释放后，下一次普攻连段从最后一段起并额外充能
+		if (AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo()))
+		{
+			PlayerCharacter->MarkSkill01ComboBoost();
+		}
+
 		UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this,NAME_None,Skill01Montage);
 		MontageTask->OnBlendOut.AddDynamic(this,&ThisClass::K2_EndAbility);
 		MontageTask->OnInterrupted.AddDynamic(this,&ThisClass::K2_EndAbility);

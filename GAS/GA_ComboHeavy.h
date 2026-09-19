@@ -20,6 +20,9 @@ public:
 	UGA_ComboHeavy();
 
 protected:
+	// 覆写：本次连段起始 Section。消费角色的 Skill01 强化标记，命中则直跳末段并记录强化态
+	virtual FName GetComboStartSectionName() override;
+
 	// 覆写基类虚钩子：权威端播放连段蒙太奇后，注册末段累计 / 重击切入帧监听
 	virtual void SetupComboMontageListeners() override;
 
@@ -43,4 +46,7 @@ private:
 
 	// 重击所需能量值（经 Character 读属性集 EnergyMaxValue）
 	float GetRequiredComboCount() const;
+
+	// 本次激活是否由 Skill01 强化（从末段起播，且末段能量额外 +100）
+	bool bSkill01ComboBoost = false;
 };

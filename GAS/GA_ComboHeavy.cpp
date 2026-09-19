@@ -10,10 +10,25 @@ UGA_ComboHeavy::UGA_ComboHeavy()
 {
 }
 
+FName UGA_ComboHeavy::GetComboStartSectionName()
+{
+	// 跨激活重置（InstancedPerActor 实例复用）
+	bSkill01ComboBoost = false;
+
+	AExtraPlayerCharacter* PlayerCharacter = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
+	if (!PlayerCharacter || !PlayerCharacter->ConsumeSkill01ComboBoost())
+	{
+		return NAME_None;
+	}
+
+	// Skill01 强化：本次普攻跳过前两段，直接从末段（+100 能量那段）起播
+	bSkill01ComboBoost = true;
+	return GetLastComboSectionName();
+}
+
 void UGA_ComboHeavy::SetupComboMontageListeners()
 {
 	// 监听进入最后一段 section（最后段第一帧的 Notify 发送），累计能量。
-	// OnlyTriggerOnce=false：连段循环（最后一段跳回第一段）时，每次进入最后一段都要 +100。
 	UAbilityTask_WaitGameplayEvent* WaitLastSectionTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 		this, UUExtraAbilitySystemStatic::GetComboLastSectionTag(), nullptr, false, true);
 	WaitLastSectionTask->EventReceived.AddDynamic(this, &ThisClass::OnLastSectionEntered);
@@ -49,14 +64,17 @@ void UGA_ComboHeavy::OnLastSectionEntered(FGameplayEventData EventData)
 		return;
 	}
 
+	// 本段基础 +100；Skill01 强化时额外再 +100（封顶由属性集按 EnergyMaxValue 处理）
+	const float EnergyGain = bSkill01ComboBoost ? 200.f : 100.f;
+
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Blue,
-			TEXT("打出第三段普攻，获得100点心念"));
+			FString::Printf(TEXT("打出第三段普攻，获得%g点心念"), EnergyGain));
 	}
 	const float CurrentEnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
 
-	ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetEnergyValueAttribute(), CurrentEnergyValue + 100.f);
+	ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetEnergyValueAttribute(), CurrentEnergyValue + EnergyGain);
 }
 
 void UGA_ComboHeavy::OnHeavyTransitionFrame(FGameplayEventData EventData)

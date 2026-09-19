@@ -27,6 +27,13 @@ protected:
 	// 输入后，若 NextComboName 存在则推进到该 Section（手动点击推进；自动续段路径也复用它）
 	void TryCommitCombo();
 
+	// 虚钩子：本次连段的起始 Section 名（默认 NAME_None = 从蒙太奇首段起播）。
+	// 派生类覆写以指定起始段（形态一：Skill01 强化后直跳末段）
+	virtual FName GetComboStartSectionName();
+
+	// ComboMontage 最后一段的 Section 名
+	FName GetLastComboSectionName() const;
+
 	// 进入下一段 Section 的虚钩子（调用时 NextComboName 已记录完毕）。默认空实现 = 纯手动连段；
 	// 派生类覆写此处实现自动连段（仍按住攻击键则立即 TryCommitCombo）
 	virtual void OnComboSectionChanged();

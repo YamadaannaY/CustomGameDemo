@@ -3,6 +3,7 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Animation/AnimMontage.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 
 UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
@@ -53,7 +54,7 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 	if (HasAuthorityOrPredictionKey(ActorInfo,&ActivationInfo))
 	{
-		UAbilityTask_PlayMontageAndWait* PlayComboMontageTask=UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this,NAME_None,ComboMontage);
+		UAbilityTask_PlayMontageAndWait* PlayComboMontageTask=UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this,NAME_None,ComboMontage,1.f,GetComboStartSectionName());
 		PlayComboMontageTask->OnBlendOut.AddDynamic(this,&ThisClass::K2_EndAbility);
 		PlayComboMontageTask->OnCancelled.AddDynamic(this,&ThisClass::K2_EndAbility);
 		PlayComboMontageTask->OnCompleted.AddDynamic(this,&ThisClass::K2_EndAbility);
@@ -82,6 +83,19 @@ FGameplayTag UGA_Combo::GetComboChangedEventTag()
 FGameplayTag UGA_Combo::GetComboChangedEventEndTag()
 {
 	return UUExtraAbilitySystemStatic::GetComboChangedEventEndTag();
+}
+
+FName UGA_Combo::GetComboStartSectionName()
+{
+	// 基类：从蒙太奇首段起播
+	return NAME_None;
+}
+
+FName UGA_Combo::GetLastComboSectionName() const
+{
+	return ComboMontage && ComboMontage->GetNumSections() > 0
+		? ComboMontage->GetSectionName(ComboMontage->GetNumSections() - 1)
+		: NAME_None;
 }
 
 void UGA_Combo::HandleInputPress(FGameplayEventData EventData)

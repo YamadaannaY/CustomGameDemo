@@ -284,6 +284,20 @@ void AExtraPlayerCharacter::Jump()
 		ASC->CancelAllAbilities(nullptr);
 	}
 
+	// RootMotion 驱动的前冲（Evade 等）会在 Velocity 上算出一个非常快的速度：
+	// Jump 只设置 Z 分量，空中有无水平阻尼，残速会整段滞空生效导致跳得极远。此处收拢到地面速度上限。
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		const FVector HorizontalVelocity(Movement->Velocity.X, Movement->Velocity.Y, 0.f);
+		const float MaxHorizontalSpeed = Movement->MaxWalkSpeed;
+		if (HorizontalVelocity.SizeSquared() > FMath::Square(MaxHorizontalSpeed))
+		{
+			const FVector ClampedVelocity = HorizontalVelocity.GetSafeNormal() * MaxHorizontalSpeed;
+			Movement->Velocity.X = ClampedVelocity.X;
+			Movement->Velocity.Y = ClampedVelocity.Y;
+		}
+	}
+
 	// 跳跃时清除停步请求，防止落地后误触发 Stop
 	if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
 	{
@@ -569,6 +583,13 @@ float AExtraPlayerCharacter::GetHeavyComboEnergyNeed() const
 		return AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyMaxValueAttribute());
 	}
 	return 0.f;
+}
+
+bool AExtraPlayerCharacter::ConsumeSkill01ComboBoost()
+{
+	const bool bPending = bSkill01ComboBoost;
+	bSkill01ComboBoost = false;
+	return bPending;
 }
 
 void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionValue)

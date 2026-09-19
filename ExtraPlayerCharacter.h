@@ -53,6 +53,12 @@ public:
 	// 本次按下是否已长按达到重击判定阈值
 	FORCEINLINE bool IsLongPressed() const { return bLongPressed; }
 
+	// Skill01 释放后置位：下一次普攻连段直接从最后一段起（该段额外充能）
+	void MarkSkill01ComboBoost() { bSkill01ComboBoost = true; }
+
+	// 读取并清位（由 UGA_Combo 激活时调用，保证只有「下一次」普攻受用）
+	bool ConsumeSkill01ComboBoost();
+
 	// 从DT中获取重击所需的能量值
 	float GetHeavyComboEnergyNeed() const;
 	
@@ -250,6 +256,9 @@ private:
 
 	// 本次按下是否已长按达到重击阈值（区分「长按重击」与「高频点按轻击」）
 	bool bLongPressed = false;
+
+	// Skill01 释放后的下一次普攻强化待消费标记（跳末段 + 末段额外充能）
+	bool bSkill01ComboBoost = false;
 
 	// 重击长按阈值定时器
 	FTimerHandle HeavyAttackHoldTimerHandle;
