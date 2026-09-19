@@ -17,6 +17,7 @@ class UExtraGameplayAbility;
 class UGameplayEffect;
 class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
+class UParticleSystemComponent;
 class AActor;
 struct FExtraGameWeaponGroup;
 
@@ -154,6 +155,13 @@ public:
 	// 是否处于攻击扫描窗口内
 	bool IsTraceActive() const { return bTraceActive; }
 
+	// ── 拖尾特效（由攻击窗口驱动，与伤害扫描互相独立） ─────────
+	// 攻击窗口开始：为当前组中配置了拖尾的武器开启拖尾
+	void BeginWeaponTrails();
+
+	// 攻击窗口结束：结束拖尾并停发新粒子
+	void EndWeaponTrails();
+
 	// ── 轨迹扫描配置 ───────────────────────────────────────────
 	// 武器扫描使用的碰撞通道（需在项目设置 Collision 中配置其响应）
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
@@ -188,6 +196,17 @@ private:
 
 	// 销毁武器 Mesh
 	void DestroyWeaponMesh(FGameplayTag WeaponTag);
+
+	// ── 拖尾特效组件管理 ────────────────────────────────────
+	// 已生成的武器拖尾组件（WeaponTag → ParticleSystemComponent）
+	UPROPERTY()
+	TMap<FGameplayTag, TObjectPtr<UParticleSystemComponent>> WeaponTrailComponents;
+
+	// 为武器生成拖尾组件并挂到起始锚点（未配置拖尾 / Socket 缺失时跳过）
+	void SpawnWeaponTrail(const FExtraGameWeaponEntry& Entry, UStaticMeshComponent* MeshComp);
+
+	// 销毁指定武器的拖尾组件
+	void DestroyWeaponTrail(FGameplayTag WeaponTag);
 
 	// 设置指定武器的可见性（同时检查 bWeaponVisible 和 HiddenWeaponEntries）
 	void SetWeaponMeshVisibility(FGameplayTag WeaponTag, bool bVisible);

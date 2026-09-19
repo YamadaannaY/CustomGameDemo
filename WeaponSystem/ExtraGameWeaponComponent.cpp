@@ -11,6 +11,8 @@
 #include "GameFramework/Character.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Particles/ParticleSystemComponent.h"
+#include "Particles/ParticleSystem.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
@@ -74,6 +76,16 @@ void UExtraGameWeaponComponent::EndPlay(const EEndPlayReason::Type EndPlayReason
 		}
 	}
 	SpawnedWeaponMeshes.Empty();
+
+	// 清理拖尾组件
+	for (auto& Pair : WeaponTrailComponents)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->DestroyComponent();
+		}
+	}
+	WeaponTrailComponents.Empty();
 
 	// 清理 Fade 运行时状态与缓存的 DMI
 	WeaponFadeStates.Empty();
@@ -523,7 +535,61 @@ UStaticMeshComponent* UExtraGameWeaponComponent::SpawnWeaponMesh(const FExtraGam
 		}
 	}
 
+	// 拖尾组件挂在武器 Mesh 上，随 Mesh 一起移动 / 显隐
+	SpawnWeaponTrail(Entry, MeshComp);
+
 	return MeshComp;
+}
+
+void UExtraGameWeaponComponent::SpawnWeaponTrail(const FExtraGameWeaponEntry& Entry, UStaticMeshComponent* MeshComp)
+{
+	if (!MeshComp || !Entry.HasTrail())
+	{
+		return;
+	}
+
+	UParticleSystem* TrailTemplate = Entry.TrailTemplate.LoadSynchronous();
+	if (!TrailTemplate)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] SpawnWeaponTrail: failed to load trail template for '%s'."),
+			*Entry.WeaponTag.ToString());
+		return;
+	}
+
+	// 两端锚点必须存在于武器 Mesh 上，否则拖尾无从依附
+	if (!MeshComp->DoesSocketExist(Entry.TrailStartSocket) || !MeshComp->DoesSocketExist(Entry.TrailEndSocket))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] SpawnWeaponTrail: trail socket '%s' / '%s' not found on weapon '%s'."),
+			*Entry.TrailStartSocket.ToString(), *Entry.TrailEndSocket.ToString(), *Entry.WeaponTag.ToString());
+		return;
+	}
+
+	UParticleSystemComponent* TrailComp = NewObject<UParticleSystemComponent>(MeshComp,
+		MakeUniqueObjectName(MeshComp, UParticleSystemComponent::StaticClass(),
+			*FString::Printf(TEXT("WeaponTrail_%s"), *Entry.WeaponTag.GetTagName().ToString())));
+
+	TrailComp->SetTemplate(TrailTemplate);
+	TrailComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// 不在生成时自激活：拖尾由攻击窗口显式开启
+	TrailComp->bAutoActivate = false;
+	TrailComp->RegisterComponent();
+
+	// 挂在武器 Mesh 的起始锚点上：BeginTrails 的两端 Socket 在挂载父级（武器 Mesh）上查询
+	TrailComp->AttachToComponent(MeshComp, FAttachmentTransformRules::KeepRelativeTransform, Entry.TrailStartSocket);
+
+	WeaponTrailComponents.Add(Entry.WeaponTag, TrailComp);
+}
+
+void UExtraGameWeaponComponent::DestroyWeaponTrail(FGameplayTag WeaponTag)
+{
+	if (TObjectPtr<UParticleSystemComponent>* Found = WeaponTrailComponents.Find(WeaponTag))
+	{
+		if (*Found)
+		{
+			(*Found)->DestroyComponent();
+		}
+		WeaponTrailComponents.Remove(WeaponTag);
+	}
 }
 
 void UExtraGameWeaponComponent::DestroyWeaponMesh(FGameplayTag WeaponTag)
@@ -536,6 +602,8 @@ void UExtraGameWeaponComponent::DestroyWeaponMesh(FGameplayTag WeaponTag)
 		}
 		SpawnedWeaponMeshes.Remove(WeaponTag);
 	}
+
+	DestroyWeaponTrail(WeaponTag);
 
 	WeaponFadeStates.Remove(WeaponTag);
 	WeaponDynamicMIs.Remove(WeaponTag);
@@ -806,6 +874,9 @@ void UExtraGameWeaponComponent::UpdateCharacterTags(const FExtraGameWeaponGroup*
 
 void UExtraGameWeaponComponent::BeginWeaponTrace()
 {
+	// 拖尾与伤害扫描解耦：没有 TraceSocket 的武器（如弓）也能有拖尾
+	BeginWeaponTrails();
+
 	// 直接重置并开启：即使上一次窗口因蒙太奇异常终止而未正常关闭，也不会卡死后续扫描
 	if (!GatherTraceSocketsFromCurrentGroup())
 	{
@@ -863,6 +934,8 @@ void UExtraGameWeaponComponent::TickWeaponTrace()
 
 void UExtraGameWeaponComponent::EndWeaponTrace()
 {
+	EndWeaponTrails();
+
 	if (!bTraceActive)
 	{
 		return;
@@ -875,6 +948,71 @@ void UExtraGameWeaponComponent::EndWeaponTrace()
 	ActiveTraceSockets.Empty();
 	ActiveTraceSocketToMesh.Empty();
 	TraceSocketPrevLocations.Empty();
+}
+
+// ──────────────────────────────────────────────────────────────
+// 拖尾特效
+// ──────────────────────────────────────────────────────────────
+
+void UExtraGameWeaponComponent::BeginWeaponTrails()
+{
+	for (const auto& Pair : WeaponTrailComponents)
+	{
+		UParticleSystemComponent* TrailComp = Pair.Value;
+		if (!TrailComp)
+		{
+			continue;
+		}
+
+		const FExtraGameWeaponEntry* Entry = ResolveWeaponEntry(Pair.Key);
+		if (!Entry || !Entry->HasTrail())
+		{
+			continue;
+		}
+
+		// 武器当前不可见（未装备组 / 过场 / 手动隐藏）时不起拖尾
+		const UStaticMeshComponent* MeshComp = GetWeaponMeshByTag(Pair.Key);
+		if (!MeshComp || !MeshComp->IsVisible())
+		{
+			continue;
+		}
+
+		// 长度参数写入起始值（须在 BeginTrails 激活之前就位）
+		if (Entry->TrailLifeTimeParameterName != NAME_None)
+		{
+			TrailComp->SetFloatParameter(Entry->TrailLifeTimeParameterName, Entry->TrailLifeTimeOnBegin);
+		}
+
+		// 每个攻击窗口都要重来一遍：BeginTrails 内部会 ActivateSystem(true)，
+		// 因此上一窗口 EndTrails 停发之后，这里能干净地重新生成拖尾
+		TrailComp->BeginTrails(Entry->TrailStartSocket, Entry->TrailEndSocket,
+			ETrailWidthMode_FromCentre, Entry->TrailWidth);
+	}
+}
+
+void UExtraGameWeaponComponent::EndWeaponTrails()
+{
+	for (const auto& Pair : WeaponTrailComponents)
+	{
+		UParticleSystemComponent* TrailComp = Pair.Value;
+		if (!TrailComp)
+		{
+			continue;
+		}
+
+		// 长度参数归零 → 残余拖尾随之收束（须在 EndTrails 停发之前写入）
+		if (const FExtraGameWeaponEntry* Entry = ResolveWeaponEntry(Pair.Key))
+		{
+			if (Entry->TrailLifeTimeParameterName != NAME_None)
+			{
+				TrailComp->SetFloatParameter(Entry->TrailLifeTimeParameterName, 0.f);
+			}
+		}
+
+		// EndTrails 结束所有拖尾发射器并停发（内部已 DeactivateSystem），
+		// 已在场的拖尾粒子自然消亡，不硬切可见性
+		TrailComp->EndTrails();
+	}
 }
 
 bool UExtraGameWeaponComponent::GatherTraceSocketsFromCurrentGroup()

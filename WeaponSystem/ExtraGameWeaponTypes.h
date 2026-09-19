@@ -8,6 +8,7 @@
 
 class UExtraGameplayAbility;
 class UGameplayEffect;
+class UParticleSystem;
 
 /**
  * 武器轨迹扫描配置（Sweep-based，用于伤害判定）
@@ -77,6 +78,36 @@ struct EXTRACTGAMECHARACTER_API FExtraGameWeaponEntry
 	// 该武器的轨迹扫描配置（球半径 / 子步细分）
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
 	FExtraGameWeaponTraceConfig TraceConfig;
+
+	// ── 拖尾特效 ────────────────────────────────────────────────
+	// 拖尾粒子（Cascade Trail 类型）。留空 = 本武器无拖尾。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trail")
+	TSoftObjectPtr<UParticleSystem> TrailTemplate;
+
+	// 拖尾两端锚点（在武器 StaticMesh 资源上定义，如 柄部 / 剑尖）
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trail")
+	FName TrailStartSocket;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trail")
+	FName TrailEndSocket;
+
+	// 拖尾宽度
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trail")
+	float TrailWidth = 1.f;
+
+	// 粒子中控制拖尾长度的标量参数名（留空 = 不驱动）。
+	// 窗口开始时写入 TrailLifeTimeOnBegin，窗口结束时归零，使拖尾随挥砍收束。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trail")
+	FName TrailLifeTimeParameterName;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trail")
+	float TrailLifeTimeOnBegin = 1.f;
+
+	// 判断辅助：本武器是否配置了完整拖尾
+	bool HasTrail() const
+	{
+		return !TrailTemplate.IsNull() && TrailStartSocket != NAME_None && TrailEndSocket != NAME_None;
+	}
 
 	// 辅助：SocketName 是否属于本武器可用的显示挂点（默认 AttachSocketName 或 AltAttachSockets 之一）
 	bool IsDisplaySocket(const FName SocketName) const
