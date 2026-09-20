@@ -115,9 +115,15 @@ void AExtraProjectile::ProcessHit(AActor* HitActor)
 	}
 	HitActors.Add(HitActor);
 
-	if (HasAuthority() && IsDamageableEnemy(HitActor))
+	const bool bHasAuthorityNow = HasAuthority();
+	const bool bIsEnemy = IsDamageableEnemy(HitActor);
+	
+	if (bHasAuthorityNow && bIsEnemy)
 	{
 		ApplyProjectileDamage(HitActor);
+
+		// 命中确认才加能量（从目标身上擦过去不算）
+		ApplySourceEnergyGain();
 	}
 }
 
@@ -182,6 +188,33 @@ void AExtraProjectile::ApplyProjectileDamage(AActor* Victim) const
 		return;
 	}
 	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+}
+
+void AExtraProjectile::ApplySourceEnergyGain() const
+{
+	if (SourceEnergyPerHit <= 0.f)
+	{
+		return;
+	}
+
+	AActor* Source = SourceActor.Get();
+	if (!Source)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* SourceASC = nullptr;
+	if (const IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Source))
+	{
+		SourceASC = ASI->GetAbilitySystemComponent();
+	}
+	if (!SourceASC)
+	{
+		return;
+	}
+	
+	const FGameplayAttribute EnergyAttribute = UExtraGameAttributeSet::GetEnergyValueAttribute();
+	SourceASC->SetNumericAttributeBase(EnergyAttribute, SourceASC->GetNumericAttribute(EnergyAttribute) + SourceEnergyPerHit);
 }
 
 void AExtraProjectile::DestroyProjectile()

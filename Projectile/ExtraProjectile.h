@@ -51,6 +51,9 @@ protected:
 
 	void ApplyProjectileDamage(AActor* Victim) const;
 
+	// 命中确认后给来源角色加能量（SourceEnergyPerHit <= 0 时什么都不做）
+	void ApplySourceEnergyGain() const;
+
 	void DestroyProjectile();
 
 	// 撞击停止：撞到墙，或非穿透模式下命中目标
@@ -75,6 +78,13 @@ protected:
 	// 命中后应用的伤害 GE（由 InitProjectile 注入，留空 = 命中不造成伤害只销毁）
 	UPROPERTY(EditDefaultsOnly, Category = "Projectile|Damage")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
+
+	// 命中确认后给来源角色加多少能量（0 = 不加）。
+	// 按「每个被命中的目标」各加一次，所以穿透型一剑打中多人会叠多次。
+	// 放在投射物而不是 GA 上：剑气常比 GA 活得久（末段交接后 GA 已结束），
+	// 由 GA 监听命中事件的话，晚期命中就加不到能量了。
+	UPROPERTY(EditDefaultsOnly, Category = "Projectile|Damage", meta = (ClampMin = "0.0"))
+	float SourceEnergyPerHit = 0.f;
 
 private:
 	// 伤害源，弱引用：源死亡/销毁后已射出的投射物仍安全飞行
