@@ -79,6 +79,22 @@ void AExtraPlayerCharacter::Tick(float DeltaTime)
 			// 落地瞬间重置本次浮空的空中闪避预算（下次浮空重新从初始值开始）
 			ResetAirEvadeCharges();
 		}
+
+		// 离开二阶段：清空ProTag,回一阶段后再进二阶段，要从头重新打满三次居合）。
+		if (!AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetPhase2StateTag()))
+		{
+			const FGameplayTag JuheCountTag = UUExtraAbilitySystemStatic::GetProJuheCountTag();
+			if (AbilitySystemComponent->GetTagCount(JuheCountTag) > 0)
+			{
+				AbilitySystemComponent->SetLooseGameplayTagCount(JuheCountTag, 0);
+			}
+
+			const FGameplayTag ProReadyTag = UUExtraAbilitySystemStatic::GetProReadyTag();
+			if (AbilitySystemComponent->HasMatchingGameplayTag(ProReadyTag))
+			{
+				AbilitySystemComponent->SetLooseGameplayTagCount(ProReadyTag, 0);
+			}
+		}
 	}
 }
 
@@ -559,8 +575,17 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 	// 二阶段：纯长按达阈值即触发重击（无需连段打满），是否真正激活由 GA 的 State.Phase2 门控裁决
 	if (AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetPhase2StateTag()))
 	{
+		// 攻击强化就绪时改触发 GA_AttackPro_Phase_2。必须走专属 Tag 分流：
+		// 两个 GA 若都监听 InputTag.HeavyAttack，都空闲时 ASC 会按 spec 顺序挑一个，结果是随机的
+		const bool bAttackProReady =
+			AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetProReadyTag());
+
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-			this, UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(), FGameplayEventData());
+			this,
+			bAttackProReady
+				? UUExtraAbilitySystemStatic::GetAttackProInputTag()
+				: UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(),
+			FGameplayEventData());
 		return;
 	}
 

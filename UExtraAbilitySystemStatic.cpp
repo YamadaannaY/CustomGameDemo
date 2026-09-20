@@ -21,6 +21,7 @@ UE_DEFINE_GAMEPLAY_TAG(InputTag_Skill, "InputTag.Skill");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_Ultimate, "InputTag.Ultimate");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_Dodge, "InputTag.Dodge");
 UE_DEFINE_GAMEPLAY_TAG(InputTag_AirDive, "InputTag.AirDive");
+UE_DEFINE_GAMEPLAY_TAG(InputTag_AttackPro, "InputTag.AttackPro");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Change, "ability.combo.change");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Change_End, "ability.combo.change.end");
 UE_DEFINE_GAMEPLAY_TAG(Combo_Damage, "ability.combo.damage");
@@ -41,6 +42,9 @@ UE_DEFINE_GAMEPLAY_TAG(Data_Damage, "Data.Damage");
 UE_DEFINE_GAMEPLAY_TAG(HeavyAttack_Shoot, "ability.heavyattack.shoot");
 UE_DEFINE_GAMEPLAY_TAG(Area_Damage, "ability.area.damage");
 UE_DEFINE_GAMEPLAY_TAG(AirAttack_SwordQi, "ability.airattack.swordqi");
+UE_DEFINE_GAMEPLAY_TAG(Ability_AttackPro_Phase2, "ability.AttackPro.Phase2");
+UE_DEFINE_GAMEPLAY_TAG(State_ProJuheCount, "State.ProJuheCount");
+UE_DEFINE_GAMEPLAY_TAG(State_ProReady, "State.ProReady");
 
 // CancelWindow：注意 "ability.cancelwindow.*" 不是 "ability.cancel" 的子级（同前缀但不同分支），
 // 事件按 tag 层级向上广播，因此不会误触发移动打断的监听。
@@ -145,6 +149,26 @@ FGameplayTag UUExtraAbilitySystemStatic::GetDodgeInputTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetAirDiveInputTag()
 {
 	return InputTag_AirDive;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetAttackProInputTag()
+{
+	return InputTag_AttackPro;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetProJuheCountTag()
+{
+	return State_ProJuheCount;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetProReadyTag()
+{
+	return State_ProReady;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetAttackProAbilityTag()
+{
+	return Ability_AttackPro_Phase2;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetComboChangedEventTag()

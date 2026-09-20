@@ -309,6 +309,25 @@ void UGA_Evade_Juhe::StartJuheForward()
 
 	// 段序推进，供下一次接续轮切
 	++JuheForwardIndex;
+
+	// 二阶段攻击强化进度：计的是「居合」打出的前冲段（架势段本身不计）——
+	// 每触发一次前冲段算一次，含连段接续的后续段。打满 AttackProJuheRequired 次挂上就绪标记，
+	if (UAbilitySystemComponent* ForwardASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		const int32 ForwardCount = ForwardASC->GetTagCount(UUExtraAbilitySystemStatic::GetProJuheCountTag());
+		
+		//居合次数超过三次不会再进入此if内，即ProReadyTag不再被这段代码修改，永远为1等待爆发重击GA进行消耗。
+		if (ForwardCount < UUExtraAbilitySystemStatic::AttackProJuheRequired)
+		{
+			const int32 NextCount = ForwardCount + 1;
+			ForwardASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetProJuheCountTag(), NextCount);
+
+			if (NextCount >= UUExtraAbilitySystemStatic::AttackProJuheRequired)
+			{
+				ForwardASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetProReadyTag(), 1);
+			}
+		}
+	}
 }
 
 const FJuheMontageSet& UGA_Evade_Juhe::GetActiveJuheMontages() const

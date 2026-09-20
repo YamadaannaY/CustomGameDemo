@@ -23,6 +23,9 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Dodge);
 // AbilityTriggers 走层级匹配，做成子 tag 会把空中连打 GA 一起触发
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_AirDive);
 
+// 二阶段攻击强化（AttackPro）专属输入
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_AttackPro);
+
 // 连击 / 闪避 内部事件 Tag
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Change);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combo_Change_End);
@@ -42,6 +45,13 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Uninterruptible_End);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(HeavyAttack_Shoot);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Area_Damage);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_AttackPro_Phase2);
+
+// 二阶段攻击强化（AttackPro）进度：ProJuheCount 用 tag count 记「本次二阶段已打出的居合前冲段次数」
+// （居合中左键前冲才算，架势段不计），打满 Required 次后挂上 ProReady；
+// 激活 AttackPro 即消费 ProReady（离开二阶段时整组清零）
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ProJuheCount);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ProReady);
 
 // 空中攻击斩出剑气：Montage 的挥刀帧放 AN 触发一次，GA 每收到一次生成一道剑气
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(AirAttack_SwordQi);
@@ -96,6 +106,16 @@ public:
 	static FGameplayTag GetDodgeInputTag();        // "InputTag.Dodge"
 	// 空中下砸触发 Tag：一阶段空中轻击、以及二阶段空中连打 GA 交接到第三段时都发它
 	static FGameplayTag GetAirDiveInputTag();      // "InputTag.AirDive"
+
+	// ── 二阶段攻击强化（AttackPro）──
+	// 解锁所需次数：二阶段内打出这么多次「居合中左键前冲」的前冲段（空中 / 地面都算）即挂上 State.ProReady
+	static constexpr int32 AttackProJuheRequired = 3;
+
+	// 触发 Tag：角色长按达阈值且 State.ProReady 在时发它（与重击 Tag 分流，避免抢输入）
+	static FGameplayTag GetAttackProInputTag();    // "InputTag.AttackPro"
+	static FGameplayTag GetProJuheCountTag();      // "State.ProJuheCount"   进度计数（tag count）
+	static FGameplayTag GetProReadyTag();          // "State.ProReady"       打满三段，可触发
+	static FGameplayTag GetAttackProAbilityTag();  // "ability.AttackPro.Phase2"
 
 	// 连击 / 闪避内部事件 Tag
 	static FGameplayTag GetComboChangedEventTag();      // "ability.combo.change"
