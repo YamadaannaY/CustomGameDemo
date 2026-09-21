@@ -25,6 +25,6 @@ AExtraSwordQi::AExtraSwordQi()
 	HitMode = EProjectileHitMode::PassThrough;
 	SetupProjectileCollision(CollisionBox, Movement);
 
-	QiEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("QiEffect"));
-	QiEffect->SetupAttachment(CollisionBox);
+	SlashNiagaraEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Slash Niagara Effect"));
+	SlashNiagaraEffect->SetupAttachment(CollisionBox);
 }

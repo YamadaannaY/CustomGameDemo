@@ -25,6 +25,7 @@ void AExtraProjectile::SetupProjectileCollision(UPrimitiveComponent* InCollision
 	ProjectileMovement = InMovement;
 	SetRootComponent(InCollision);
 
+	//初始化，投射物本体属于Dynamic类
 	InCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	InCollision->SetCollisionObjectType(ECC_WorldDynamic);
 	InCollision->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -61,6 +62,7 @@ void AExtraProjectile::InitProjectile(AActor* InSource, TSubclassOf<UGameplayEff
 		CollisionComponent->IgnoreActorWhenMoving(InSource, true);
 	}
 
+	//锁定目标方向/正前方
 	const FVector SafeDir = InDir.GetSafeNormal();
 	if (ProjectileMovement && InSpeed > 0.f)
 	{
@@ -76,6 +78,7 @@ void AExtraProjectile::InitProjectile(AActor* InSource, TSubclassOf<UGameplayEff
 		SetActorRotation(FireRot);
 	}
 
+	//销毁定时
 	if (InLifeTime > 0.f)
 	{
 		GetWorldTimerManager().SetTimer(LifeTimerHandle, this, &AExtraProjectile::DestroyProjectile, InLifeTime, false);
@@ -84,6 +87,8 @@ void AExtraProjectile::InitProjectile(AActor* InSource, TSubclassOf<UGameplayEff
 
 void AExtraProjectile::HandleProjectileStopped(const FHitResult& ImpactResult)
 {
+	UE_LOG(LogTemp,Warning,TEXT("Stop Projectile Trigger"));
+	
 	if (AActor* HitActor = ImpactResult.GetActor())
 	{
 		ProcessHit(HitActor);
@@ -108,21 +113,20 @@ void AExtraProjectile::ProcessHit(AActor* HitActor)
 		return;
 	}
 
-	// 穿透型会与同一目标反复重叠，这里挡掉重复结算
+	// 挡掉重复结算
 	if (HitActors.Contains(HitActor))
 	{
 		return;
 	}
 	HitActors.Add(HitActor);
-
+	
 	const bool bHasAuthorityNow = HasAuthority();
 	const bool bIsEnemy = IsDamageableEnemy(HitActor);
 	
 	if (bHasAuthorityNow && bIsEnemy)
 	{
 		ApplyProjectileDamage(HitActor);
-
-		// 命中确认才加能量（从目标身上擦过去不算）
+		
 		ApplySourceEnergyGain();
 	}
 }
@@ -177,17 +181,16 @@ void AExtraProjectile::ApplyProjectileDamage(AActor* Victim) const
 		return;
 	}
 
-	// 与 GA 基类 DoDamage 同构：伤害来源归属为发起攻击的角色
+	//构造GE Context
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddInstigator(Source, Source);
 	Context.AddSourceObject(Source);
 
 	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffectClass, AbilityLevel, Context);
-	if (!SpecHandle.IsValid() || !SpecHandle.Data.Get())
+	if (SpecHandle.Data.Get())
 	{
-		return;
+		SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
 	}
-	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
 }
 
 void AExtraProjectile::ApplySourceEnergyGain() const

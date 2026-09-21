@@ -19,7 +19,7 @@ class EXTRACTGAMECHARACTER_API AExtraArrow : public AExtraProjectile
 public:
 	AExtraArrow();
 
-	// 若需由 GA 侧指定箭身 mesh（未指定时使用蓝图配置的 mesh）
+	// 公开API供 GA 侧指定Mesh（未指定时使用蓝图配置的 mesh）
 	void SetArrowMesh(UStaticMesh* InMesh);
 
 protected:

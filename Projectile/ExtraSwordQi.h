@@ -27,5 +27,5 @@ protected:
 
 	// 剑气特效；具体粒子在蓝图子类里指定
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SwordQi")
-	TObjectPtr<UNiagaraComponent> QiEffect;
+	TObjectPtr<UNiagaraComponent> SlashNiagaraEffect;
 };
