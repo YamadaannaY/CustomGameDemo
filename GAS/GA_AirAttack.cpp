@@ -38,6 +38,10 @@ UGA_AirAttack::UGA_AirAttack()
 	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
 	bRotateToLockTarget = true;
 
+	// 空中下落必须把落点拉出目标胶囊（约两胶囊半径之和 + 余量）：
+	// 落点压在胶囊内时，角色会先被水平拖到目标正上方，再从高空垂直落到胶囊顶面并顺坡滑到身后。
+	LockOnWarpStandoff = 100.f;
+
 	// 空中下砸用专属 Tag 触发（不是 InputTag.LightAttack）：空中轻击由角色按形态分派，
 	// 二阶段要让给空中连打 GA，两者若共用 LightAttack 会按 spec 顺序抢输入
 	FAbilityTriggerData AirDiveTrigger;

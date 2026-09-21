@@ -24,7 +24,24 @@ void UANS_CombatCamera::PushCameraRequest(USkeletalMeshComponent* MeshComp)
 	{
 		if (UCombatCameraComponent* CamComp = MeshComp->GetOwner()->FindComponentByClass<UCombatCameraComponent>())
 		{
-			CachedRequestId = CamComp->PushRequest(CameraRequest);
+			CachedRequestIds.Add(MeshComp, CamComp->PushRequest(CameraRequest));
+		}
+	}
+}
+
+void UANS_CombatCamera::PopRequestForMesh(USkeletalMeshComponent* MeshComp)
+{
+	int32 RequestId = INDEX_NONE;
+	if (!CachedRequestIds.RemoveAndCopyValue(MeshComp, RequestId))
+	{
+		return;
+	}
+
+	if (MeshComp && MeshComp->GetOwner())
+	{
+		if (UCombatCameraComponent* CamComp = MeshComp->GetOwner()->FindComponentByClass<UCombatCameraComponent>())
+		{
+			CamComp->PopRequest(RequestId);
 		}
 	}
 }
@@ -33,18 +50,36 @@ void UANS_CombatCamera::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSeque
 {
 	Super::NotifyBegin(MeshComp, Animation, TotalDuration, EventReference);
 
-	CachedRequestId = INDEX_NONE;
-	bPendingConditionCheck = false;
-
 	if (!MeshComp || !MeshComp->GetOwner())
 	{
 		return;
 	}
 
+	// 顺手清掉已销毁 mesh 留下的条目。TWeakObjectPtr 失效后哈希会变成 0，
+	// 后续 Remove 用原 key 再也命中不了，只能靠这里扫掉，否则长期运行会累积。
+	for (auto It = CachedRequestIds.CreateIterator(); It; ++It)
+	{
+		if (!It.Key().IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
+	for (auto It = PendingMeshComps.CreateIterator(); It; ++It)
+	{
+		if (!It->IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
+
+	// 上一次区间没走到 NotifyEnd（蒙太奇被打断后重播）会留下旧请求，先撤销，避免它滞留在栈里
+	PopRequestForMesh(MeshComp);
+	PendingMeshComps.Remove(MeshComp);
+
 	if (!CheckRequiredTag(MeshComp))
 	{
 		//开头帧增加一次复核操作，解决可能的时序问题
-		bPendingConditionCheck = true;
+		PendingMeshComps.Add(MeshComp);
 		return;
 	}
 
@@ -55,8 +90,13 @@ void UANS_CombatCamera::NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequen
 {
 	Super::NotifyTick(MeshComp, Animation, FrameDeltaTime, EventReference);
 
+	if (!MeshComp)
+	{
+		return;
+	}
+
 	// 已提交，或不在等待复核
-	if (CachedRequestId != INDEX_NONE || !bPendingConditionCheck)
+	if (CachedRequestIds.Contains(MeshComp) || !PendingMeshComps.Contains(MeshComp))
 	{
 		return;
 	}
@@ -67,7 +107,7 @@ void UANS_CombatCamera::NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequen
 	}
 
 	// 条件在区间内满足了：补提交
-	bPendingConditionCheck = false;
+	PendingMeshComps.Remove(MeshComp);
 	PushCameraRequest(MeshComp);
 }
 
@@ -75,22 +115,8 @@ void UANS_CombatCamera::NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequenc
 {
 	Super::NotifyEnd(MeshComp, Animation, EventReference);
 
-	bPendingConditionCheck = false;
-
-	if (CachedRequestId == INDEX_NONE)
-	{
-		return;
-	}
-
-	if (MeshComp && MeshComp->GetOwner())
-	{
-		if (UCombatCameraComponent* CamComp = MeshComp->GetOwner()->FindComponentByClass<UCombatCameraComponent>())
-		{
-			CamComp->PopRequest(CachedRequestId);
-		}
-	}
-
-	CachedRequestId = INDEX_NONE;
+	PendingMeshComps.Remove(MeshComp);
+	PopRequestForMesh(MeshComp);
 }
 
 FString UANS_CombatCamera::GetNotifyName_Implementation() const

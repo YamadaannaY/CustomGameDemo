@@ -66,6 +66,10 @@ public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CamBoom; }
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return ViewCam; }
 
+	// 战斗镜头收尾时把最终臂长交还给 Zoom 体系：夹到 [MinArmLength, MaxArmLength] 后写入 Zoom 目标，
+	// 并中断在途的 Zoom 插值（定时器按值绑定了旧目标，留着会把臂长拉回去）。返回实际生效的长度。
+	float ApplyArmLengthFromCombatCamera(float NewArmLength);
+
 	// 锁定组件访问器（攻击 GA 经此读取锁定目标）
 	FORCEINLINE class ULockOnComponent* GetLockOnComponent() const { return LockOnComponent; }
 

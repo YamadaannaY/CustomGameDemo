@@ -65,19 +65,26 @@ void FCombatCameraDebuggerCategory::DrawData(APlayerController* OwnerPC, FGamepl
 	CanvasContext.Print(FColor::Green, TEXT("--- Combat Camera ---"));
 
 	const FVector LocOffset = CamComp->GetCurrentLocationOffset();
-	const FRotator RotOffset = CamComp->GetCurrentRotationOffset();
+	const FRotator ArmRotOffset = CamComp->GetCurrentArmRotationOffset();
 
 	CanvasContext.Print(
 		FColor::White,
-		FString::Printf(TEXT("LocOffset  (%.0f, %.0f, %.0f)"), LocOffset.X, LocOffset.Y, LocOffset.Z));
+		FString::Printf(TEXT("CamOffset  (%.0f, %.0f, %.0f)"), LocOffset.X, LocOffset.Y, LocOffset.Z));
 
 	CanvasContext.Print(
 		FColor::White,
-		FString::Printf(TEXT("RotOffset  (P=%.1f, Y=%.1f, R=%.1f)"), RotOffset.Pitch, RotOffset.Yaw, RotOffset.Roll));
+		FString::Printf(TEXT("ArmRot     (P=%.1f, Y=%.1f, R=%.1f)"), ArmRotOffset.Pitch, ArmRotOffset.Yaw, ArmRotOffset.Roll));
 
 	CanvasContext.Print(
 		FColor::White,
 		FString::Printf(TEXT("ArmLength  %.0f   FOV  %.1f"), CamComp->GetCurrentArmLength(), CamComp->GetCurrentFOV()));
+
+	// 基准值：勾了「保留最终机位」的镜头退栈后，位置/臂长会停在这里而不是回到初始值
+	const FVector BaseOff = CamComp->GetBaseLocationOffset();
+	CanvasContext.Print(
+		FColor::Cyan,
+		FString::Printf(TEXT("Base       Off(%.0f, %.0f, %.0f)  Arm %.0f"),
+			BaseOff.X, BaseOff.Y, BaseOff.Z, CamComp->GetBaseArmLength()));
 
 	CanvasContext.Print(
 		FColor::White,
@@ -85,11 +92,23 @@ void FCombatCameraDebuggerCategory::DrawData(APlayerController* OwnerPC, FGamepl
 
 	if (const FCombatCameraRequest* Req = CamComp->GetActiveRequest())
 	{
+		// 只打印本镜头实际接管的项，便于确认「是否修改」有没有漏勾
 		CanvasContext.Print(
 			FColor::Yellow,
-			FString::Printf(TEXT("  target Loc (%.0f, %.0f, %.0f)  Arm %.0f  FOV %.1f  BlendIn %.2f  BlendOut %.2f"),
-				Req->LocationOffset.X, Req->LocationOffset.Y, Req->LocationOffset.Z,
-				Req->ArmLength, Req->FOV, Req->BlendInTime, Req->BlendOutTime));
+			FString::Printf(TEXT("  Arm %.0f%s  FOV %.1f%s  CamY %.0f%s  CamZ %.0f%s  ArmRot(P%.0f Y%.0f R%.0f)%s"),
+				Req->ArmLength, Req->bModifyArmLength ? TEXT("*") : TEXT("-"),
+				Req->FOV, Req->bModifyFOV ? TEXT("*") : TEXT("-"),
+				Req->CameraOffsetY, Req->bModifyCameraOffsetY ? TEXT("*") : TEXT("-"),
+				Req->CameraOffsetZ, Req->bModifyCameraOffsetZ ? TEXT("*") : TEXT("-"),
+				Req->ArmRotation.Pitch, Req->ArmRotation.Yaw, Req->ArmRotation.Roll,
+				Req->bModifyArmRotation ? TEXT("*") : TEXT("-")));
+
+		CanvasContext.Print(
+			FColor::Yellow,
+			FString::Printf(TEXT("  FacingBasis %s  LockLook %s  BlendIn %.2f  BlendOut %.2f  Interrupt %.2f"),
+				Req->bUseCharacterFacingBasis ? TEXT("Y") : TEXT("N"),
+				Req->bLockLookInput ? TEXT("Y") : TEXT("N"),
+				Req->BlendInTime, Req->BlendOutTime, Req->InterruptedBlendOutTime));
 	}
 }
 

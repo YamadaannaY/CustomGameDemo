@@ -1,4 +1,5 @@
 #include "ExtraCharacter.h"
+#include "ExtractGameCharacter.h"
 #include "ExtraGameMovementComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -18,6 +19,11 @@ AExtraCharacter::AExtraCharacter(const FObjectInitializer& ObjectInitializer)
 	// 允许被武器轨迹扫描（SweepMultiByChannel ECC_GameTraceChannel1）命中；
 	// 玩家自身由扫描代码 AddIgnoredActor(Owner) 免疫，队友命中需后续按 Team 过滤。
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
+
+	// 相机臂专用通道不遮挡：紧贴敌人时臂若被胶囊挡住，臂长会被压到命中点、相机怼到角色身前
+	// （下砸等前置视角镜头尤其明显）。墙地仍照常挡——该通道默认响应为 Block。
+	// 玩家与 AI 都继承本类，改这一处即可覆盖全部角色。
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_SpringArm, ECR_Ignore);
 
 	// ── GAS ──
 	AbilitySystemComponent = CreateDefaultSubobject<UExtraAbilitySystemComponent>(TEXT("ASC"));

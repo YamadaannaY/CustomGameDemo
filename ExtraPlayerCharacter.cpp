@@ -345,6 +345,14 @@ void AExtraPlayerCharacter::Look(const FInputActionValue& InputActionValue)
 
 void AExtraPlayerCharacter::HandleCameraZoomInput(const FInputActionValue& InputActionValue)
 {
+	// 战斗镜头正在接管臂长时整体忽略输入：两边逐帧写同一个 TargetArmLength 会互相覆盖，臂长抖。
+	// 这里不动 TargetArmLength，镜头组件在不接管时会把自己的基准同步到 SpringArm 实际长度，
+	// 所以退出战斗后滚轮仍然从可见的长度继续。
+	if (CombatCameraComp && CombatCameraComp->IsManagingArmLength())
+	{
+		return;
+	}
+
 	const float ZoomValue=InputActionValue.Get<float>();
 	TargetArmLength=FMath::Clamp(TargetArmLength + ZoomValue * ZoomStepSize, MinArmLength, MaxArmLength);
 
@@ -383,6 +391,18 @@ void AExtraPlayerCharacter::CalculateTargetDelta(float ForwardInput,float RightI
 	TargetDelta = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredYaw);
 }
 
+float AExtraPlayerCharacter::ApplyArmLengthFromCombatCamera(float NewArmLength)
+{
+	// 夹紧到 Zoom 自己的上下限内：战斗镜头可能留下越界值，Zoom 的后续累加必须从合法起点开始
+	TargetArmLength = FMath::Clamp(NewArmLength, MinArmLength, MaxArmLength);
+
+	// 中断在途插值：TickArmLengthLerp 的委托按值绑定了旧 Goal，留着它会把臂长拉回旧目标。
+	// 这里不写 CamBoom->TargetArmLength——臂长正由战斗镜头组件负责落到最终值。
+	GetWorldTimerManager().ClearTimer(ArmLengthLerpTimerHandle);
+
+	return TargetArmLength;
+}
+
 void AExtraPlayerCharacter::LerpArmLength(float Goal)
 {
 	GetWorldTimerManager().ClearTimer(ArmLengthLerpTimerHandle);
@@ -391,6 +411,12 @@ void AExtraPlayerCharacter::LerpArmLength(float Goal)
 
 void AExtraPlayerCharacter::TickArmLengthLerp(float Goal)
 {
+	// 战斗镜头在战斗开始会接管臂长；此时中断已在途的 Zoom 插值，把写入权让出去
+	if (CombatCameraComp && CombatCameraComp->IsManagingArmLength())
+	{
+		return;
+	}
+
 	const float CurrentArmLength=CamBoom->TargetArmLength;
 
 	if (FMath::Abs(CurrentArmLength - Goal) < 1.f)

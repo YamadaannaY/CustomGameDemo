@@ -41,9 +41,12 @@ private:
 	// 在 Owner 的 CombatCameraComponent 上提交请求
 	void PushCameraRequest(USkeletalMeshComponent* MeshComp);
 
-	// Notify Begin 推入请求后缓存其 ID，Notify End 据此移除。
-	int32 CachedRequestId = INDEX_NONE;
+	// 撤销该 mesh 已登记的请求（若有）。NotifyEnd 与「区间重播」两条路径共用。
+	void PopRequestForMesh(USkeletalMeshComponent* MeshComp);
 
-	// 条件尚未满足、等待在区间内复核
-	bool bPendingConditionCheck = false;
+	// 按 mesh 记录各自推入的请求 ID / 待复核状态。
+	// UAnimNotifyState 是动画资产上的共享实例：同一动画被多个 mesh 同时播放（玩家与敌人共用
+	// 攻击动画）时，单一成员会被互相覆盖，导致 NotifyEnd 漏 Pop、请求滞留在相机组件里。
+	TMap<TWeakObjectPtr<USkeletalMeshComponent>, int32> CachedRequestIds;
+	TSet<TWeakObjectPtr<USkeletalMeshComponent>> PendingMeshComps;
 };

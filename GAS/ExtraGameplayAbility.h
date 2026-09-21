@@ -179,6 +179,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (EditCondition = "bRotateToLockTarget"))
 	FName LockOnWarpTargetName = TEXT("AttackFacing");
 
+	// 落点相对目标中心的退让距离（cm），沿「目标 → 自身」方向退开。
+	// 应 ≥ 双方胶囊半径之和，否则落点落在目标胶囊内部：地面贴身攻击靠碰撞挤开无妨，
+	// 但空中下落类攻击会先被水平拖到目标正上方、再垂直落到胶囊顶面并顺坡滑走。
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (EditCondition = "bRotateToLockTarget", ClampMin = "0.0"))
+	float LockOnWarpStandoff = 20.f;
+
 	// ── 穿透距离（Forward Overshoot）─────────────────────────────
 	// 开启后额外写入一个独立命名的 warp target：落点为「目标位置 + 冲刺方向 × OvershootDistance」，
 	// 供「穿过目标落到身后」这类动画使用。Montage 里对应 NMS 的 WarpTargetName 要填

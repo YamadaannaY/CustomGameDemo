@@ -212,7 +212,7 @@ void AExtraProjectile::ApplySourceEnergyGain() const
 	{
 		return;
 	}
-	
+	 
 	const FGameplayAttribute EnergyAttribute = UExtraGameAttributeSet::GetEnergyValueAttribute();
 	SourceASC->SetNumericAttributeBase(EnergyAttribute, SourceASC->GetNumericAttribute(EnergyAttribute) + SourceEnergyPerHit);
 }

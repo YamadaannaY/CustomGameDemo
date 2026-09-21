@@ -16,6 +16,7 @@
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
+#include "ExtractGameCharacter/Camera/UCombatCameraComponent.h"
 
 UExtraGameplayAbility::UExtraGameplayAbility()
 {
@@ -68,6 +69,16 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	if (Char && Char->GetWeaponComponent())
 	{
 		Char->GetWeaponComponent()->EndWeaponTrace();
+	}
+
+	// 兜底：同上，蒙太奇被掐断时 ANS_CombatCamera 的 NotifyEnd 不会到达，相机请求会永久滞留在栈里，
+	// 表现为相机卡在战斗机位、退不回偏移前的状态。请求已空时这里是一次空操作。
+	if (Char)
+	{
+		if (UCombatCameraComponent* CamComp = Char->FindComponentByClass<UCombatCameraComponent>())
+		{
+			CamComp->ClearAllRequests();
+		}
 	}
 	
 	// 恢复重力缩放,恢复到引擎默认，而非激活前那一刻的值。
@@ -748,15 +759,22 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 			return;
 		}
 
-		// 有限MW追踪：距离不超过上限时 warp 落点在目标身上；超出时把落点钳制到自身朝目标的
+		// 有限MW追踪：距离不超过上限时 warp 落点在目标身前；超出时把落点钳制到自身朝目标的
 		// MotionWarpMaxMoveDist 处，避免动画强制位移超出设定距离。
-		WarpLocation = LockTarget->GetActorLocation() - 20.f;
+		// 沿「目标 → 自身」方向退 LockOnWarpStandoff，避免落点压在目标胶囊内。
+		// 不能用 FVector - float：那是分量各减同一值，会把落点整体平移到目标的世界 -XYZ 方向并顺带下沉。
+		const FVector FlatDirNormal = FlatDir.GetSafeNormal();
+		WarpLocation = LockTarget->GetActorLocation() - FlatDirNormal * LockOnWarpStandoff;
+
 		const float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation(), PlayerChar->GetActorLocation());
 		if (DistanceToTarget > MotionWarpMaxMoveDist)
 		{
-			// -20 避免胶囊体重叠
-			WarpLocation = PlayerChar->GetActorLocation() + FlatDir.GetSafeNormal() * MotionWarpMaxMoveDist - 40.f;
+			// 目标过远（本段位移到不了目标，无重叠问题）：落点钳到自身朝目标方向的上限处
+			WarpLocation = PlayerChar->GetActorLocation() + FlatDirNormal * MotionWarpMaxMoveDist;
 		}
+
+		// Z 取自身高度：只做水平追击，避免被拉到目标的垂直位置（与 Forward Overshoot 落点同一约定）
+		WarpLocation.Z = PlayerChar->GetActorLocation().Z;
 
 		FaceDir = FlatDir;
 		bWarpTranslation = true;

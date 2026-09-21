@@ -2,6 +2,7 @@
 #include "Animation/AnimInstance.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "ExtractGameCharacter/ExtraCharacter.h"
 
 void UANS_IgnoreCharacterCollision::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float TotalDuration, const FAnimNotifyEventReference& EventReference)
@@ -65,9 +66,37 @@ void UANS_IgnoreCharacterCollision::ApplyIgnore()
 			continue;
 		}
 
+		// 双向忽略：只忽略 Owner 的话，对方仍把 Owner 当移动阻挡（绕圈时对方被顶开/自身被顶回）
 		OwnerChar->MoveIgnoreActorAdd(Other);
+		Other->MoveIgnoreActorAdd(OwnerChar);
 		IgnoredActors.Add(Other);
+
+		// 位移半径小于两胶囊半径之和时重叠是必然状态，关掉斥力避免每帧被顶开
+		DisablePhysicsInteraction(OwnerChar);
+		DisablePhysicsInteraction(Other);
 	}
+}
+
+void UANS_IgnoreCharacterCollision::DisablePhysicsInteraction(ACharacter* Character)
+{
+	UCharacterMovementComponent* Movement = Character ? Character->GetCharacterMovement() : nullptr;
+	if (!Movement)
+	{
+		return;
+	}
+
+	// 幂等：重复进入区间时保持首次记录的原值，避免把已关闭的状态当成原值
+	for (const TPair<TWeakObjectPtr<UCharacterMovementComponent>, bool>& Backup : PhysicsInteractionBackups)
+	{
+		if (Backup.Key.Get() == Movement)
+		{
+			return;
+		}
+	}
+
+	// bEnablePhysicsInteraction 是 uint8 位域，显式转 bool 以匹配备份表类型
+	PhysicsInteractionBackups.Emplace(Movement, Movement->bEnablePhysicsInteraction != 0);
+	Movement->bEnablePhysicsInteraction = false;
 }
 
 void UANS_IgnoreCharacterCollision::ClearIgnore()
@@ -79,11 +108,26 @@ void UANS_IgnoreCharacterCollision::ClearIgnore()
 			if (AActor* IgnoredActor = Ignored.Get())
 			{
 				OwnerChar->MoveIgnoreActorRemove(IgnoredActor);
+
+				if (ACharacter* IgnoredChar = Cast<ACharacter>(IgnoredActor))
+				{
+					IgnoredChar->MoveIgnoreActorRemove(OwnerChar);
+				}
 			}
 		}
 	}
 
 	IgnoredActors.Reset();
+
+	for (const TPair<TWeakObjectPtr<UCharacterMovementComponent>, bool>& Backup : PhysicsInteractionBackups)
+	{
+		if (UCharacterMovementComponent* Movement = Backup.Key.Get())
+		{
+			Movement->bEnablePhysicsInteraction = Backup.Value;
+		}
+	}
+
+	PhysicsInteractionBackups.Reset();
 }
 
 void UANS_IgnoreCharacterCollision::OnOwnerMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted)
