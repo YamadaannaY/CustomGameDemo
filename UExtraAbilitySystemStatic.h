@@ -92,6 +92,18 @@ public:
 	// GA_Burst01 以它做 ActivationRequiredTags 门控，激活时消费移除 → 需重新满段重击才能再放大招。
 	static FGameplayTag GetBurstReadyTag();
 	static FGameplayTag GetSkill01Tag();
+
+	// ── Skill_02（两层充能：地面升空斩 / 空中落地斩）──
+	static FGameplayTag GetSkill02Tag();          // "ability.Skill.02"
+	
+	// 充能冷却 Tag：Cooldown GE 的 GrantedTags 填它（不要填 GrantedBlockedAbilityTags），
+	// GA 的 CheckCooldown 与角色的层数查询都靠它检索 cooldown GE
+	static FGameplayTag GetSkill02CooldownTag();  // "cooldown.Skill02"
+	
+	static FGameplayTag GetSkill02RiseReadyTag();  // "ability.skill02.riseready"
+	// 充能层数上限：须与 Cooldown GE 的 StackLimitCount 保持一致（两处都要写 2）
+	static constexpr int32 Skill02MaxCharges = 2;
+	
 	static FGameplayTag GetBurst01Tag();
 	static FGameplayTag GetBurstChangeStateTag();
 	// ── 输入触发 Tag（废弃 InputID，改用 AbilityTriggers + GameplayEvent）──

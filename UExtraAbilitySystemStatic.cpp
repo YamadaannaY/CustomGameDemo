@@ -8,6 +8,12 @@ UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack_Light, "ability.basicattack.light");
 UE_DEFINE_GAMEPLAY_TAG(Ability_BasicAttack_Heavy, "ability.basicattack.heavy");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Dodge, "ability.dodge");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Skill_01, "ability.Skill.01");
+UE_DEFINE_GAMEPLAY_TAG(Ability_Skill_02, "ability.Skill.02");
+// Skill_02 充能冷却 Tag：挂在 Cooldown GE 的 GrantedTags 上（不是 GrantedBlockedAbilityTags，
+// 那会变成绕过 CheckCooldown 的真封锁），GA 与角色都靠它检索 cooldown GE
+UE_DEFINE_GAMEPLAY_TAG(Cooldown_Skill02, "cooldown.Skill02");
+// 升空斩的「可衔接落地斩」标记帧（AN_Skill02RiseReady 发出）
+UE_DEFINE_GAMEPLAY_TAG(Skill02_RiseReady, "ability.skill02.riseready");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Burst_01, "ability.Burst.01");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Burst_Changestate, "ability.Burst.changestate");
 UE_DEFINE_GAMEPLAY_TAG(State_Airborne, "character.state.airborne");
@@ -99,6 +105,21 @@ FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackAbilityTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetSkill01Tag()
 {
 	return Ability_Skill_01;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetSkill02Tag()
+{
+	return Ability_Skill_02;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetSkill02CooldownTag()
+{
+	return Cooldown_Skill02;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetSkill02RiseReadyTag()
+{
+	return Skill02_RiseReady;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetBurst01Tag()

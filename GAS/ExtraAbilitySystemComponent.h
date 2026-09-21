@@ -28,6 +28,15 @@ public:
 	// UnPossess 时清理天生 GA 和 GE
 	void RemoveInnateAbilities();
 
+	// ── Skill_02 充能信息的屏幕调试（暂无 UI）─────────────────────
+	// 层数与回充倒计时直接打印在屏幕上：不走角色 Tick，由 cooldown tag 的变化驱动刷新，
+	// 未回满时另用计时器走倒计时（回满即停，最后一条信息靠打印时长留存）。
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Debug")
+	bool bShowSkill02ChargeDebug = true;
+
 	// ── CancelWindow 持有者登记 ──────────────────────────────────
 	// 后摇「可打断窗口」开启期间，持有者把自己登记在这里；任何 GA 在 CommitAbility 时
 	// 查询此句柄，命中且非自身即取消它（窗口内该 GA 视为已取消）。
@@ -52,7 +61,20 @@ public:
 	class UDataTable* AttributeDataTable;
 
 private:
-	
+
+	// Skill_02 充能调试：挂 cooldown tag 变化回调并刷一次显示（仅本地玩家角色）
+	void SetupSkill02ChargeDebug();
+
+	// 按 Cooldown GE 的 stack 数与剩余时间刷新屏幕信息
+	void RefreshSkill02ChargeDebug();
+
+	// cooldown tag 计数变化：只管启停刷新计时器
+	// （tag 计数在 GE 存在期间恒为 1，所以要靠计时器兜住 1→2 层这种计数不变的变化）
+	void OnSkill02ChargeTagChanged(FGameplayTag Tag, int32 NewCount);
+
+	FDelegateHandle Skill02ChargeTagEventHandle;
+	FTimerHandle Skill02ChargeRefreshTimer;
+
 	//将属性集添加到ASC中
 	void InitializeBaseAttribute();
 
