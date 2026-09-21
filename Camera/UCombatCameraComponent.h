@@ -10,11 +10,12 @@ class APlayerController;
 
 /**
  * 战斗相机Request：动画 Notify State（ANS_CombatCamera）在 Montage 期间提交的相机请求。
+ * 
+ * 这是一个栈结构，具有Push和Pop功能，激活最近Push且优先级最高的那一个Request（eg：优先级相同的镜头重叠时，执行后一个镜头）
  *
  * 每项参数都配一个「是否修改」开关：只有勾选的项才由本镜头接管，保证不修改预期外的值，因此一个镜头只写自己关心的那一两项即可。
  * 请求全部出栈后，所有项统一淡出回无战斗相机时的基准值。
  *
- * 这是一个栈结构，具有Push和Pop功能，激活最近Push且优先级最高的那一个Request（eg：优先级相同的镜头重叠时，执行后一个镜头）
  */
 USTRUCT(BlueprintType)
 struct FCombatCameraRequest
@@ -75,8 +76,9 @@ struct FCombatCameraRequest
 	int32 Priority = 0;
 
 	// 偏移参考系是否基于角色面朝方向（正后方），而非跟随镜头朝向。
-	// 进入该镜头时把相机对齐到「角色正后方 (+ 偏移)」，过渡结束后即交还鼠标，之后镜头完全自由
-	// （角色转身不再跟随）。若希望整个镜头期间都钉在正后方并跟随角色转身，同时勾上 bLockLookInput。
+	// 整个请求窗口内相机都钉在「角色朝向（+ 180° 若勾了 bFrontFacingBasis）+ 玩家 look 增量」上：
+	// 角色转身（例如被 MW 扭向锁定目标）时相机跟着一起转，同时玩家仍可自由 look。
+	// 想让鼠标也一起锁住（窗口内完全不能转视角），再勾上 bLockLookInput。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	bool bUseCharacterFacingBasis = false;
 
@@ -94,29 +96,6 @@ struct FCombatCameraRequest
 	//   单独使用 → 冻结在进入瞬间的视角。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	bool bLockLookInput = false;
-
-	// 结束时保留 Yaw：请求 Pop（窗口结束）时只把相机当前世界朝向的 Yaw 并作新基准
-	// 即「只保留 Yaw」——只有 Yaw 方向的偏移才能脱离窗口永久生效
-	// 注：仅正常窗口结束生效，GA 打断走 ClearAllRequests 的兜底清理时不保持，会回退默认
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
-	bool bKeepYawOnEnd = false;
-
-	// 结束时保留最终机位：把本镜头结束那一刻的相机位置偏移并作新基准，相机停在原地，
-	// 而不是淡出回进入本镜头前的位置。手臂长度是否一并保留由 bResetFinalArmLength 决定。
-	//
-	// 不保留的两项及原因：
-	//   旋转——结束时一律把臂朝向交还玩家（想让水平朝向也留下用 bKeepYawOnEnd）；
-	//   FOV——会与冲刺 / 瞄准等改变视场的系统争抢，且永久改变视野观感。
-	// 注：仅正常窗口结束生效；GA 被打断（走 ClearAllRequests 兜底）时不保留，会回退默认。
-	// 想把已保留的偏移撤掉，再发一个 bModifyCameraOffsetY/Z = true 且取 0 的本选项镜头即可。
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
-	bool bKeepCameraPositionOnEnd = false;
-
-	// 上者开启时臂长如何处理：
-	//   true  = 与位置偏移无关，臂长照常淡出回归进入本镜头前的长度；
-	//   false = 保留最终臂长，按角色 Zoom 的 [MinArmLength, MaxArmLength] 夹紧后交给 Zoom 接管。
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta = (EditCondition = "bKeepCameraPositionOnEnd"))
-	bool bResetFinalArmLength = false;
 };
 
 // 相机旋转接管的阶段：None = 未接管；Blending = 过渡中；Holding = 过渡已完成（等待请求结束）
@@ -164,8 +143,6 @@ public:
 	FORCEINLINE FRotator GetCurrentArmRotationOffset() const { return CurrentArmRotationOffset; }
 	FORCEINLINE float GetCurrentArmLength() const { return CurrentArmLength; }
 	FORCEINLINE float GetCurrentFOV() const { return CurrentFOV; }
-	FORCEINLINE FVector GetBaseLocationOffset() const { return BaseLocationOffset; }
-	FORCEINLINE float GetBaseArmLength() const { return BaseArmLength; }
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
@@ -196,8 +173,6 @@ private:
 
 	// 无战斗相机时的基准值（BeginPlay 从实际 SpringArm/Camera 上缓存）。
 	// 所有请求出栈后，各偏移项统一淡出回归到这里的值。
-	// 勾了 bKeepCameraPositionOnEnd 的请求结束时，位置与臂长会被改写为新基准。
-	FVector BaseLocationOffset = FVector::ZeroVector;
 	float BaseArmLength = 300.f;
 	float BaseFOV = 90.f;
 
@@ -208,14 +183,6 @@ private:
 	// 按自己的 BlendOutTime 退场（否则它只在栈彻底清空时才被读到，切换时形同虚设）
 	int32 PrevActiveRequestId = INDEX_NONE;
 	float PrevActiveBlendOutTime = 0.f;
-
-	// 通知结束（PopRequest）时若请求勾了 bKeepYawOnEnd：只把相机当前世界朝向的 Yaw 并作
-	// 玩家视角（ControlRotation）的 Yaw，使水平朝向不跳变；Pitch 随臂旋转偏移一起淡出回归。
-	void FreezeYawAsBase();
-
-	// 通知结束（PopRequest）时若请求勾了 bKeepCameraPositionOnEnd：把当前位置偏移并作新基准，
-	// 相机停在原地而不是淡出回偏移前的位置。bResetArmLength 为 false 时臂长一并保留。
-	void FreezeCameraStateAsBase(bool bResetArmLength);
 
 	// ── 臂朝向接管（对齐角色朝向 / 锁 look / 臂旋转偏移）──────────
 	// 勾了 bUseCharacterFacingBasis 或 bLockLookInput 的镜头由本组件接管臂朝向；

@@ -120,8 +120,8 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	// 目标状态：有请求 → 逐项按「是否修改」门控取值；无请求 → 全部淡出回基准值。
 	// 未勾选「是否修改」的项不是「回归基准」，而是「本镜头不干预」：目标取当前值，等效于冻结不动。
-	// 相机偏移的 X 分量不提供修改能力，恒为 0。
-	FVector TargetLoc = BaseLocationOffset;
+	// 相机位置偏移只有 Y / Z 两个分量，X 恒为 0。
+	FVector TargetLoc = FVector::ZeroVector;
 	FRotator TargetArmRot = FRotator::ZeroRotator;
 	float TargetArm = BaseArmLength;
 	float TargetFOV = BaseFOV;
@@ -204,22 +204,9 @@ int32 UCombatCameraComponent::PushRequest(const FCombatCameraRequest& Request)
 
 void UCombatCameraComponent::PopRequest(int32 RequestId)
 {
-	bool bKeepYaw = false;
-	bool bKeepPosition = false;
-	bool bResetArmLength = true;
-
 	if (const FCombatCameraRequest* Req = ActiveRequests.Find(RequestId))
 	{
 		PendingBlendOutTime = Req->BlendOutTime;
-
-		// 仅当退出的正是当前生效请求时才固化机位：低优先级请求退出时屏幕上显示的是别人的状态，
-		// 拿它去改写基准会篡改视角。
-		if (FindActiveRequest() == Req)
-		{
-			bKeepYaw = Req->bKeepYawOnEnd;
-			bKeepPosition = Req->bKeepCameraPositionOnEnd;
-			bResetArmLength = Req->bResetFinalArmLength;
-		}
 	}
 	ActiveRequests.Remove(RequestId);
 
@@ -227,16 +214,6 @@ void UCombatCameraComponent::PopRequest(int32 RequestId)
 	if (HijackRequestId == RequestId)
 	{
 		EndRotationHijack();
-	}
-
-	if (bKeepPosition)
-	{
-		FreezeCameraStateAsBase(bResetArmLength);
-	}
-
-	if (bKeepYaw)
-	{
-		FreezeYawAsBase();
 	}
 }
 
@@ -278,16 +255,14 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 		BeginRotationHijack(*ActiveReq, ActiveReqId);
 	}
 
-	// 本帧臂朝向是否由接管给出：
-	// 「只对齐一次」的镜头在过渡完成（Holding）后就把基础朝向交回玩家，之后不再干预；
-	// 锁 look 的镜头则在 Holding 后长期持有。
-	const bool bHijackDrives = bWantHijack
-		&& !(HijackPhase == EHijackPhase::Holding && !bHijackLockLook);
-
+	// 接管在整个请求窗口内都持有臂朝向：FacingBasis 要逐帧跟随角色转身，LockLook 要一直钉住
+	// 进入时的视角。不能「对齐一次就交还」——交还后臂就不再跟角色走，角色被 MW 扭向目标时
+	// 相机只能停在原地，相对角色就偏到侧面去了（交还还会把 ControlRotation 同步成当时的臂朝向，
+	// 那之后臂与角色彻底脱钩）。
 	FRotator BoomBase = FRotator::ZeroRotator;
-	if (bHijackDrives)
+	if (bWantHijack)
 	{
-		// 锁 look + 角色朝向基准 → 逐帧跟随角色转身；否则目标固定（进入瞬间的视角或角色朝向）
+		// 角色朝向基准 → 目标随角色转身逐帧变化；否则目标固定（进入瞬间的视角）
 		FRotator Target = bHijackUseFacingBasis
 			? GetCharacterFacingRotation(bHijackFrontFacing)
 			: HijackFrozenRotation;
@@ -305,7 +280,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 
 		if (HijackPhase == EHijackPhase::Holding)
 		{
-			// 长期持有阶段（锁 look）：目标随角色转身每帧变化，用平滑跟随而不是直接赋值——
+			// 已就位：目标随角色逐帧变化，用平滑跟随而不是直接赋值——
 			// 否则角色急转（MW 旋转、根位移）时镜头会硬跟着瞬移。
 			const FRotator CurrentBoom = (CameraBoom->GetComponentRotation() - CurrentArmRotationOffset).GetNormalized();
 			const float FollowSpeed = (HijackBlendTime > KINDA_SMALL_NUMBER) ? (1.f / HijackBlendTime) : 1000.f;
@@ -313,7 +288,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 		}
 		else
 		{
-			// 过渡用 Slerp + 显式进度而非指数插值：TransitionTime 内一定转完，不会因角度大而拖长
+			// 进入时的过渡用 Slerp + 显式进度而非指数插值：TransitionTime 内一定转完，不会因角度大而拖长
 			HijackElapsed += DeltaTime;
 			const float Alpha = (HijackBlendTime > KINDA_SMALL_NUMBER)
 				? FMath::Clamp(HijackElapsed / HijackBlendTime, 0.f, 1.f)
@@ -322,8 +297,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 
 			if (Alpha >= 1.f)
 			{
-				// 保留来源 ID 与 Holding 相位作为「本请求已对齐过」的标记；
-				// 若这里清掉 ID，下一帧会被当成新来源重新对齐一次。
+				// 切到 Holding：之后改用平滑跟随去追随角色变化的目标，不再重跑这段 Slerp 过渡
 				HijackPhase = EHijackPhase::Holding;
 			}
 		}
@@ -336,7 +310,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 			: CameraBoom->GetComponentRotation();
 	}
 
-	if (bHijackDrives || bArmOffsetHeld)
+	if (bWantHijack || bArmOffsetHeld)
 	{
 		CameraBoom->bUsePawnControlRotation = false;
 		CameraBoom->SetWorldRotation(BoomBase + CurrentArmRotationOffset);
@@ -422,46 +396,6 @@ APlayerController* UCombatCameraComponent::GetOwningPlayerController() const
 {
 	const AActor* Owner = GetOwner();
 	return Owner ? Cast<APlayerController>(Owner->GetInstigatorController()) : nullptr;
-}
-
-void UCombatCameraComponent::FreezeCameraStateAsBase(bool bResetArmLength)
-{
-	// 保留位置：把当前偏移并作新基准。相机本来就停在这一点上，不需要过渡；
-	// 之后任何请求出栈都是朝这个新基准淡出，而不是回到进入本镜头前的旧位置。
-	BaseLocationOffset = CurrentLocationOffset;
-
-	if (bResetArmLength)
-	{
-		return;
-	}
-
-	// 保留臂长：只把新基准设在夹紧后的最终长度上，不动 CurrentArmLength——
-	// 若最终长度超出 Zoom 的上下限，让下面既有的淡出让相机平滑收到边界，而不是原地跳一下。
-	// 臂长本来就由本组件负责落到最终值，这里不需要（也不应该）直接写 SpringArm。
-	float FinalArmLength = CurrentArmLength;
-	if (AExtraPlayerCharacter* Char = Cast<AExtraPlayerCharacter>(GetOwner()))
-	{
-		FinalArmLength = Char->ApplyArmLengthFromCombatCamera(CurrentArmLength);
-	}
-	BaseArmLength = FinalArmLength;
-}
-
-void UCombatCameraComponent::FreezeYawAsBase()
-{
-	if (!FollowCamera)
-	{
-		return;
-	}
-
-	// 只保留 Yaw：把相机当前世界朝向的 Yaw 并进玩家视角。因为相机朝向就等于臂朝向（相机层不再
-	// 承担旋转偏移），臂旋转偏移带来的 Yaw 会在合成里被抵消，水平方向不跳变；
-	// Pitch 不保留，随臂旋转偏移一起淡出回归。
-	if (APlayerController* PC = GetOwningPlayerController())
-	{
-		FRotator NewControlRotation = PC->GetControlRotation();
-		NewControlRotation.Yaw = FollowCamera->GetComponentRotation().Yaw;
-		PC->SetControlRotation(NewControlRotation);
-	}
 }
 
 const FCombatCameraRequest* UCombatCameraComponent::FindActiveRequest(int32* OutRequestId) const

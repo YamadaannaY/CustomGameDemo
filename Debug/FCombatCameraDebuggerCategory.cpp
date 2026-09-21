@@ -79,13 +79,6 @@ void FCombatCameraDebuggerCategory::DrawData(APlayerController* OwnerPC, FGamepl
 		FColor::White,
 		FString::Printf(TEXT("ArmLength  %.0f   FOV  %.1f"), CamComp->GetCurrentArmLength(), CamComp->GetCurrentFOV()));
 
-	// 基准值：勾了「保留最终机位」的镜头退栈后，位置/臂长会停在这里而不是回到初始值
-	const FVector BaseOff = CamComp->GetBaseLocationOffset();
-	CanvasContext.Print(
-		FColor::Cyan,
-		FString::Printf(TEXT("Base       Off(%.0f, %.0f, %.0f)  Arm %.0f"),
-			BaseOff.X, BaseOff.Y, BaseOff.Z, CamComp->GetBaseArmLength()));
-
 	CanvasContext.Print(
 		FColor::White,
 		FString::Printf(TEXT("ActiveReq  %s"), CamComp->HasActiveRequest() ? TEXT("YES") : TEXT("NO")));

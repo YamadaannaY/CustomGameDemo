@@ -391,18 +391,6 @@ void AExtraPlayerCharacter::CalculateTargetDelta(float ForwardInput,float RightI
 	TargetDelta = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredYaw);
 }
 
-float AExtraPlayerCharacter::ApplyArmLengthFromCombatCamera(float NewArmLength)
-{
-	// 夹紧到 Zoom 自己的上下限内：战斗镜头可能留下越界值，Zoom 的后续累加必须从合法起点开始
-	TargetArmLength = FMath::Clamp(NewArmLength, MinArmLength, MaxArmLength);
-
-	// 中断在途插值：TickArmLengthLerp 的委托按值绑定了旧 Goal，留着它会把臂长拉回旧目标。
-	// 这里不写 CamBoom->TargetArmLength——臂长正由战斗镜头组件负责落到最终值。
-	GetWorldTimerManager().ClearTimer(ArmLengthLerpTimerHandle);
-
-	return TargetArmLength;
-}
-
 void AExtraPlayerCharacter::LerpArmLength(float Goal)
 {
 	GetWorldTimerManager().ClearTimer(ArmLengthLerpTimerHandle);
