@@ -51,9 +51,7 @@ UCombatCameraComponent::UCombatCameraComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = true;
-	
-	// 暂停（PIE pause）时仍 Tick，便于在某一帧暂停下调参实时定位相机。
-	PrimaryComponentTick.bTickEvenWhenPaused = true;
+
 }
 
 void UCombatCameraComponent::BeginPlay()
@@ -62,7 +60,7 @@ void UCombatCameraComponent::BeginPlay()
 	
 	CacheCameraComponents();
 
-	// 从实际 SpringArm/Camera 读取初始值，而非硬编码 300/90值，这两个值只是意外读不到初始值时的默认值：
+	// 从实际 SpringArm/Camera 读取初始值
 	if (CameraBoom)
 	{
 		BaseArmLength = CameraBoom->TargetArmLength;
@@ -114,6 +112,8 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		DebugOverride.InterruptedBlendOutTime = 0.2f;
 		DebugOverride.bUseCharacterFacingBasis = (CVarCombatCameraDebugUseCharacterFacing.GetValueOnGameThread() != 0);
 		DebugOverride.CharacterFacingTransitionTime = CVarCombatCameraDebugCharacterFacingTransitionTime.GetValueOnGameThread();
+		
+		//更新Req，直接替换栈顶部
 		ActiveReq = &DebugOverride;
 		ActiveReqId = -1;
 	}
@@ -137,8 +137,7 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		TargetFOV = ActiveReq->bModifyFOV ? ActiveReq->FOV : CurrentFOV;
 		BlendTime = ActiveReq->BlendInTime;
 
-		// 镜头重叠切换：新镜头用 BlendInTime 进场，被它顶下去的旧镜头用 BlendOutTime 退场。
-		// 取较长者，否则配在旧镜头上的淡出时间永远不会生效——它只在栈彻底清空时才被读到。
+		// 镜头重叠切换：新镜头用 BlendInTime 进场，被它顶下去的旧镜头用 BlendOutTime 退场，二者取较长者
 		if (PrevActiveRequestId != INDEX_NONE && PrevActiveRequestId != ActiveReqId)
 		{
 			BlendTime = FMath::Max(BlendTime, PrevActiveBlendOutTime);
@@ -146,7 +145,7 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	}
 
 	// 暂停（PIE pause）+ 调试覆盖时，世界时间冻结、DeltaTime 为 0，插值会原地不动。
-	// 这种情况下直接 snap 到目标，命令一改相机立刻到位，便于逐帧定位。
+	// 这种情况下直接 snap 到目标，命令一改相机一帧到位，便于逐帧修改相机参数。
 	const bool bPaused = GetWorld() && GetWorld()->IsPaused();
 	if (bPaused && bDebugOverride)
 	{
@@ -158,26 +157,28 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	else
 	{
 		// FInterpTo 用「1/时间」作为速度，BlendTime 越小趋近越快。NewValue = Current + (Target - Current) * (1 - e^(-InterpSpeed * DeltaTime))
-		const float InterpSpeed = (BlendTime > KINDA_SMALL_NUMBER) ? (1.f / BlendTime) : 100.f;
-
+		const float InterpSpeed = (BlendTime > KINDA_SMALL_NUMBER) ? (1.f / BlendTime) : 10.f;
+		
+		//Vector
 		CurrentLocationOffset = FMath::VInterpTo(CurrentLocationOffset, TargetLoc, DeltaTime, InterpSpeed);
+		//Rotator
 		CurrentArmRotationOffset = FMath::RInterpTo(CurrentArmRotationOffset, TargetArmRot, DeltaTime, InterpSpeed);
+		//Float
 		CurrentArmLength = FMath::FInterpTo(CurrentArmLength, TargetArm, DeltaTime, InterpSpeed);
 		CurrentFOV = FMath::FInterpTo(CurrentFOV, TargetFOV, DeltaTime, InterpSpeed);
 	}
 
-	// 相机只承接位置偏移，朝向偏移由臂旋转统一负责（见 UpdateBoomRotation）
 	FollowCamera->SetRelativeLocation(CurrentLocationOffset);
 	FollowCamera->SetFieldOfView(CurrentFOV);
 
 	// 臂朝向接管：对齐角色朝向 / 锁 look / 臂旋转偏移
 	UpdateBoomRotation(DeltaTime, ActiveReq, ActiveReqId);
 
-	// ArmLength 与 Zoom 共享 SpringArm->TargetArmLength，仅在有请求或尚未淡出回基准值时接管；
+	// ArmLength 与 Zoom 共享 SpringArm->TargetArmLength，仅在有请求或尚未淡出回基准值时接管
 	// 到达基准值后停止写入，把 ArmLength 交还给 Zoom 逻辑。
 	bManagingArmLength = (ActiveReq != nullptr)
 		|| (FMath::Abs(CurrentArmLength - BaseArmLength) > 1.f);
-
+	
 	if (bManagingArmLength)
 	{
 		CameraBoom->TargetArmLength = CurrentArmLength;
@@ -219,7 +220,7 @@ void UCombatCameraComponent::PopRequest(int32 RequestId)
 
 void UCombatCameraComponent::ClearAllRequests()
 {
-	// 打断淡出用独立时长：镜头被异常掐断（GA Cancel）与正常播完的收尾节奏通常不同
+	// 打断淡出用独立时长：镜头被异常掐断（GA Cancel）与正常播完的收尾节奏通常不同,更短
 	if (const FCombatCameraRequest* ActiveReq = FindActiveRequest())
 	{
 		PendingBlendOutTime = ActiveReq->InterruptedBlendOutTime;
@@ -242,6 +243,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 	// 臂旋转偏移没归零前必须一直握着臂的写入权，否则偏移会被 bUsePawnControlRotation 顶掉
 	const bool bArmOffsetHeld = !CurrentArmRotationOffset.IsNearlyZero(0.05f);
 
+	//接管已经结束，重置Id
 	if (!bWantHijack)
 	{
 		if (HijackRequestId != INDEX_NONE)
@@ -249,6 +251,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 			EndRotationHijack();
 		}
 	}
+	//接管
 	else if (HijackRequestId != ActiveReqId)
 	{
 		// 接管来源换了（更高优先级的镜头接管，或首个接管镜头进入）→ 重起过渡
@@ -256,23 +259,20 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 	}
 
 	// 接管在整个请求窗口内都持有臂朝向：FacingBasis 要逐帧跟随角色转身，LockLook 要一直钉住
-	// 进入时的视角。不能「对齐一次就交还」——交还后臂就不再跟角色走，角色被 MW 扭向目标时
-	// 相机只能停在原地，相对角色就偏到侧面去了（交还还会把 ControlRotation 同步成当时的臂朝向，
-	// 那之后臂与角色彻底脱钩）。
+	// 进入时的视角，即窗口内持续锁定Boom旋转
 	FRotator BoomBase = FRotator::ZeroRotator;
 	if (bWantHijack)
 	{
 		// 角色朝向基准 → 目标随角色转身逐帧变化；否则目标固定（进入瞬间的视角）
 		FRotator Target = bHijackUseFacingBasis
-			? GetCharacterFacingRotation(bHijackFrontFacing)
+			? GetCharacterFacingRotation(bHijackFrontFacing) //是否开启前向180旋转
 			: HijackFrozenRotation;
 
 		// 「角色朝向基准 + 允许 look」时把玩家进入接管后转过的角度叠在目标上：
 		// 否则这几秒过渡里转视角毫无反应，过渡结束还会被一次性抹掉。
-		// 锁 look 与冻结视角两种组合不叠加——它们本来就不该受鼠标影响。
 		if (bHijackUseFacingBasis && !bHijackLockLook)
 		{
-			if (APlayerController* PC = GetOwningPlayerController())
+			if (const APlayerController* PC = GetOwningPlayerController())
 			{
 				Target = (Target + (PC->GetControlRotation() - HijackEnterControlRotation).GetNormalized()).GetNormalized();
 			}
@@ -280,15 +280,14 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 
 		if (HijackPhase == EHijackPhase::Holding)
 		{
-			// 已就位：目标随角色逐帧变化，用平滑跟随而不是直接赋值——
-			// 否则角色急转（MW 旋转、根位移）时镜头会硬跟着瞬移。
+			// 已就位：目标随角色逐帧变化，用平滑跟随
 			const FRotator CurrentBoom = (CameraBoom->GetComponentRotation() - CurrentArmRotationOffset).GetNormalized();
-			const float FollowSpeed = (HijackBlendTime > KINDA_SMALL_NUMBER) ? (1.f / HijackBlendTime) : 1000.f;
+			const float FollowSpeed = (HijackBlendTime > KINDA_SMALL_NUMBER) ? (1.f / HijackBlendTime) : 10.f;
 			BoomBase = FMath::RInterpTo(CurrentBoom, Target, DeltaTime, FollowSpeed);
 		}
 		else
 		{
-			// 进入时的过渡用 Slerp + 显式进度而非指数插值：TransitionTime 内一定转完，不会因角度大而拖长
+			// 进入时的过渡用 Slerp + 显式进度而非指数插值：TransitionTime 内一定转完
 			HijackElapsed += DeltaTime;
 			const float Alpha = (HijackBlendTime > KINDA_SMALL_NUMBER)
 				? FMath::Clamp(HijackElapsed / HijackBlendTime, 0.f, 1.f)
@@ -341,11 +340,11 @@ void UCombatCameraComponent::BeginRotationHijack(const FCombatCameraRequest& Req
 	bHijackFrontFacing = Request.bFrontFacingBasis;
 	bHijackLockLook = Request.bLockLookInput;
 
-	// 过渡起点、以及「玩家 look 基准」的选取：
-	//   臂正由本组件写（bBoomOwned）→ 组件旋转就是玩家看到的朝向，直接用它，且此时 ControlRotation
-	//     可能是锁 look 期间没被更新的旧方向，绝不能拿它当起点（会和画面差很远，一切换就跳）。
-	//   臂由 bUsePawnControlRotation 驱动 → 组件旋转可能滞后一帧（取决于 SpringArm 与本组件的 tick
-	//     顺序），改用 ControlRotation 更准；不接管时臂偏移必然接近 0，叠上去即可。
+	//  过渡起点、以及「玩家 look 基准」的选取：
+	//  臂正由本组件写（bBoomOwned）→ 组件旋转就是玩家看到的朝向，直接用它，且此时 ControlRotation
+	//  可能是锁 look 期间没被更新的旧方向，绝不能拿它当起点（会和画面差很远，一切换就跳）。
+	//  臂由 bUsePawnControlRotation 驱动 → 组件旋转可能滞后一帧（取决于 SpringArm 与本组件的 tick
+	//  顺序），改用 ControlRotation 更准；不接管时臂偏移必然接近 0，叠上去即可。
 	APlayerController* PC = GetOwningPlayerController();
 	HijackEnterControlRotation = PC ? PC->GetControlRotation() : FRotator::ZeroRotator;
 
@@ -429,7 +428,7 @@ const FCombatCameraRequest* UCombatCameraComponent::FindActiveRequest(int32* Out
 
 void UCombatCameraComponent::CacheCameraComponents()
 {
-	if (AExtraPlayerCharacter* Owner = Cast<AExtraPlayerCharacter>(GetOwner()))
+	if (const AExtraPlayerCharacter* Owner = Cast<AExtraPlayerCharacter>(GetOwner()))
 	{
 		CameraBoom = Owner->GetCameraBoom();
 		FollowCamera = Owner->GetFollowCamera();

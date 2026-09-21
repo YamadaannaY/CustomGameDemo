@@ -9,12 +9,11 @@ class UCameraComponent;
 class APlayerController;
 
 /**
- * 战斗相机Request：动画 Notify State（ANS_CombatCamera）在 Montage 期间提交的相机请求。
+ * 战斗相机Request：动画 Notify State（ANS_CombatCamera）在 Montage 期间提交的相机请求
  * 
  * 这是一个栈结构，具有Push和Pop功能，激活最近Push且优先级最高的那一个Request（eg：优先级相同的镜头重叠时，执行后一个镜头）
  *
- * 每项参数都配一个「是否修改」开关：只有勾选的项才由本镜头接管，保证不修改预期外的值，因此一个镜头只写自己关心的那一两项即可。
- * 请求全部出栈后，所有项统一淡出回无战斗相机时的基准值。
+ * 请求全部出栈后，所有项统一淡出回无战斗相机时的基准值
  *
  */
 USTRUCT(BlueprintType)
@@ -32,16 +31,16 @@ struct FCombatCameraRequest
 
 	// 打断淡出时间（秒）：镜头被异常掐断（GA Cancel、调用ClearAllRequests 兜底）的淡出时长。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
-	float InterruptedBlendOutTime = 0.5f;
+	float InterruptedBlendOutTime = 0.2f;
 
-	// ── 相机臂长（cm）。接管期间覆盖 Zoom 的 TargetArmLength
+	// 相机臂长（cm）。接管期间覆盖 Zoom 的 TargetArmLength
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	bool bModifyArmLength = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta = (EditCondition = "bModifyArmLength", ClampMin = "0.0"))
 	float ArmLength = 300.f;
 
-	// ── SpringArm 自身的旋转偏移（Pitch/Yaw/Roll），叠加在臂的最终朝向之上 ──
+	// SpringArm 自身的旋转偏移（Pitch/Yaw/Roll），叠加在臂的最终朝向之上
 	// 与相机层级无关：转臂会带着相机一起绕角色公转，而不只是改相机朝向。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	bool bModifyArmRotation = false;
@@ -49,41 +48,35 @@ struct FCombatCameraRequest
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta = (EditCondition = "bModifyArmRotation"))
 	FRotator ArmRotation = FRotator::ZeroRotator;
 
-	// ── 相机位置偏移（cm）：Y 水平 / Z 高度，相对 SpringArm 末端 ──
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
+	// 相机位置偏移（cm）：Y 水平 / Z 高度，相对 SpringArm 末端（+值向右/上，-值反之）
+	UPROPERTY(EditAnywhere, Category = "CombatCamera")
 	bool bModifyCameraOffsetY = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta = (EditCondition = "bModifyCameraOffsetY"))
+	UPROPERTY(EditAnywhere, Category = "CombatCamera", meta = (EditCondition = "bModifyCameraOffsetY"))
 	float CameraOffsetY = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
+	UPROPERTY(EditAnywhere, Category = "CombatCamera")
 	bool bModifyCameraOffsetZ = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta = (EditCondition = "bModifyCameraOffsetZ"))
+	UPROPERTY(EditAnywhere, Category = "CombatCamera", meta = (EditCondition = "bModifyCameraOffsetZ"))
 	float CameraOffsetZ = 0.f;
 
-	// ── 视场角 ──
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
+	// 视场角
+	UPROPERTY(EditAnywhere, Category = "CombatCamera")
 	bool bModifyFOV = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta = (EditCondition = "bModifyFOV"))
+	UPROPERTY(EditAnywhere, Category = "CombatCamera", meta = (EditCondition = "bModifyFOV"))
 	float FOV = 90.f;
-
-	// ── 行为 ──
-
+	
 	// 优先级：同时存在多个请求时，取 Priority 最高者；相同则取最近 Push 的。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	int32 Priority = 0;
 
-	// 偏移参考系是否基于角色面朝方向（正后方），而非跟随镜头朝向。
-	// 整个请求窗口内相机都钉在「角色朝向（+ 180° 若勾了 bFrontFacingBasis）+ 玩家 look 增量」上：
-	// 角色转身（例如被 MW 扭向锁定目标）时相机跟着一起转，同时玩家仍可自由 look。
-	// 想让鼠标也一起锁住（窗口内完全不能转视角），再勾上 bLockLookInput。
+	// 偏移参考系是否基于角色面朝方向（正后方）进行偏移，而非基于镜头朝向。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	bool bUseCharacterFacingBasis = false;
 
 	// 前置视角：在正后方的基础上把 SpringArm 对齐到「角色朝向 + 180°」，即角色对向
-	// 开启时 ArmRotation 无需再做 180° 处理。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta = (EditCondition = "bUseCharacterFacingBasis"))
 	bool bFrontFacingBasis = false;
 
@@ -91,9 +84,7 @@ struct FCombatCameraRequest
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera", meta=(EditCondition="bUseCharacterFacingBasis", ClampMin="0.0"))
 	float CharacterFacingTransitionTime = 0.3f;
 
-	// 勾选后本镜头期间锁定 look 输入，相机不能被鼠标移动。对任意镜头都生效：
-	//   配合 bUseCharacterFacingBasis → 钉在角色正后方并逐帧跟随角色转身（即原「固定正后方」表现）；
-	//   单独使用 → 冻结在进入瞬间的视角。
+	// 勾选后本镜头期间锁定 look 输入，相机不能被LookInput
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatCamera")
 	bool bLockLookInput = false;
 };
@@ -121,20 +112,19 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	// 推入一个相机请求，返回请求 ID（供 PopRequest 使用）。
+	// 推入一个CameraRequest到请求栈，返回一个唯一的请求 ID（供 PopRequest 使用）
 	int32 PushRequest(const FCombatCameraRequest& Request);
 
-	// 移除指定请求（Notify End 时调用），携带该请求的 BlendOutTime 用于淡出。
+	// 移除指定Request（Notify End 时调用），该请求的 BlendOutTime 用于淡出
 	void PopRequest(int32 RequestId);
 
-	// 清空所有请求（GA 被打断时兜底，防止请求泄漏导致相机卡在战斗态）。
+	// 清空所有请求（GA 被打断时 End GA 调用兜底)
 	void ClearAllRequests();
 
-	// 是否正有激活请求（供外部判断当前是否处于战斗相机态）。
+	// 是否正有激活请求在栈中(当前相机组件是否在工作)
 	FORCEINLINE bool HasActiveRequest() const { return ActiveRequests.Num() > 0; }
 
-	// 本组件是否正在接管 SpringArm 的 TargetArmLength。接管期间角色的 Zoom 应让位，
-	// 否则两边逐帧写同一个值会互相覆盖，臂长抖动。
+	// 本组件是否正在接管 SpringArm 的 TargetArmLength。接管期间角色的 Zoom 应让位，否则两边逐帧写同一个值会互相覆盖，臂长抖动
 	FORCEINLINE bool IsManagingArmLength() const { return bManagingArmLength; }
 
 	// ── 调试访问器（供 Gameplay Debugger 分类读取当前状态）──
@@ -147,11 +137,11 @@ public:
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
 protected:
-	// 返回当前应生效的请求（Priority 最高；相同则取最新 Push 的）。无请求返回 nullptr。
-	// OutRequestId 非空时输出该请求的 ID（供接管状态判断来源是否变化）。
+	// 返回当前应生效的请求（Priority 最高；相同则取最新 Push 的）。无请求返回 nullptr
+	// OutRequestId 非空时输出该请求的 ID（供接管状态判断Request是否变化），空时直接返回激活的Request
 	const FCombatCameraRequest* FindActiveRequest(int32* OutRequestId = nullptr) const;
 
-	// 从 Owner 解析 SpringArm/Camera 指针（BeginPlay 调用一次）。
+	// 从 CompOwner 解析 SpringArm/Camera 指针。
 	void CacheCameraComponents();
 
 private:
@@ -161,23 +151,23 @@ private:
 	UPROPERTY()
 	TObjectPtr<UCameraComponent> FollowCamera;
 
-	// 激活请求（requestId -> request）。
+	// 激活请求（requestId -> request），一个模拟栈，ID最高位置即栈位置。
 	TMap<int32, FCombatCameraRequest> ActiveRequests;
 	int32 NextRequestId = 1;
 
-	// 当前混合后的状态（逐帧 FInterpTo/RInterpTo 趋近目标）。
+	// 当前帧混合后的相机参数（逐帧 FInterpTo/RInterpTo 趋近目标）。
 	FVector CurrentLocationOffset = FVector::ZeroVector;
 	FRotator CurrentArmRotationOffset = FRotator::ZeroRotator;
 	float CurrentArmLength = 300.f;
 	float CurrentFOV = 90.f;
 
-	// 无战斗相机时的基准值（BeginPlay 从实际 SpringArm/Camera 上缓存）。
+	// 无战斗相机时的缓存基准值。
 	// 所有请求出栈后，各偏移项统一淡出回归到这里的值。
 	float BaseArmLength = 300.f;
 	float BaseFOV = 90.f;
 
 	// 最近一次 Pop 的请求的 BlendOutTime，用于淡出到基准值。
-	float PendingBlendOutTime = 0.2f;
+	float PendingBlendOutTime = 0.35f;
 
 	// 上一帧生效的请求及其 BlendOutTime：用于识别镜头重叠切换，让被顶下去的镜头
 	// 按自己的 BlendOutTime 退场（否则它只在栈彻底清空时才被读到，切换时形同虚设）
@@ -200,7 +190,7 @@ private:
 
 	APlayerController* GetOwningPlayerController() const;
 
-	// 当前接管的来源请求 ID（INDEX_NONE = 未接管）。用于识别「换了一个请求接管」。
+	// 当前接管的来源请求 ID（INDEX_NONE = 未接管）。用于识别「换了一个Request接管」。
 	int32 HijackRequestId = INDEX_NONE;
 	EHijackPhase HijackPhase = EHijackPhase::None;
 
@@ -217,13 +207,13 @@ private:
 	// 冻结目标：不基于角色朝向时（仅锁 look）取进入瞬间的视角
 	FRotator HijackFrozenRotation = FRotator::ZeroRotator;
 
-	// 进入接管那一帧的玩家视角，用于把「接管期间玩家转过的角度」叠回对齐目标上
+	// 进入接管那一帧的角色视角，用于把「接管期间玩家转过的角度」叠回对齐目标上
 	FRotator HijackEnterControlRotation = FRotator::ZeroRotator;
 
 	// 臂朝向当前是否由本组件写入（即 bUsePawnControlRotation 被本组件关闭）。
-	// 由 true 变 false 的那一帧要把合成朝向折进 ControlRotation，玩家视角才不跳。
+	// 由 true 变 false 的那一帧要把合成朝向折进 ControlRotation，最终视角才不跳。
 	bool bBoomOwned = false;
 
-	// 本帧是否接管了 SpringArm 的 TargetArmLength（供角色 Zoom 让位判断）
+	// 本帧是否接管了 SpringArm 的 TargetArmLength
 	bool bManagingArmLength = false;
 };
