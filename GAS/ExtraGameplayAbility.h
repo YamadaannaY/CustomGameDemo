@@ -184,6 +184,7 @@ protected:
 	// 但空中下落类攻击会先被水平拖到目标正上方、再垂直落到胶囊顶面并顺坡滑走。
 	UPROPERTY(EditDefaultsOnly, Category = "LockOn", meta = (EditCondition = "bRotateToLockTarget", ClampMin = "0.0"))
 	float LockOnWarpStandoff = 20.f;
+	
 
 	// ── 穿透距离（Forward Overshoot）─────────────────────────────
 	// 开启后额外写入一个独立命名的 warp target：落点为「目标位置 + 冲刺方向 × OvershootDistance」，
@@ -276,7 +277,7 @@ protected:
 	// 范围检测半径兜底值（cm）：AN_AreaCheck 未指定半径（<=0）时使用；两者都 <=0 则仅告警不结算。
 	UPROPERTY(EditDefaultsOnly, Category = "Area Damage", meta = (ClampMin = "0.0", EditCondition = "bEnableAreaDamage"))
 	float AreaDamageRadius = 300.f;
-
+	
 	// 圆心是否采用「锁定目标位置」而非角色位置：
 	// 仅当 AN_AreaCheck 的 CenterMode 为 Inherit（默认）时生效；无锁定目标则回退角色位置。
 	// 单个 AN 想脱离此圆心配置自行指定，把该 AN 的 CenterMode 改成 Owner / LockTarget 。

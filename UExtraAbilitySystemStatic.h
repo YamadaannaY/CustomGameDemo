@@ -101,8 +101,6 @@ public:
 	static FGameplayTag GetSkill02CooldownTag();  // "cooldown.Skill02"
 	
 	static FGameplayTag GetSkill02RiseReadyTag();  // "ability.skill02.riseready"
-	// 充能层数上限：须与 Cooldown GE 的 StackLimitCount 保持一致（两处都要写 2）
-	static constexpr int32 Skill02MaxCharges = 2;
 	
 	static FGameplayTag GetBurst01Tag();
 	static FGameplayTag GetBurstChangeStateTag();

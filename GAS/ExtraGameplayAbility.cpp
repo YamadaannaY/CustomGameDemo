@@ -342,15 +342,17 @@ void UExtraGameplayAbility::DoDamage(const FGameplayEventData& Data)
 	{
 		return;
 	}
+	const TArray<AActor*> HitActors = UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(Data.TargetData);
+	if (HitActors.Num() == 0)
+	{
+		return;
+	}
 
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddInstigator(Avatar, Avatar);
 	Context.AddSourceObject(Avatar);
 	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffect, GetAbilityLevel(), Context);
-
-	// 伤害数值由 GE 自身配置（字面量 / AttributeBased / Execution），不在此注入 SetByCaller
-	const TArray<AActor*> HitActors = UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(Data.TargetData);
-
+	
 	for (AActor* HitActor : HitActors)
 	{
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);

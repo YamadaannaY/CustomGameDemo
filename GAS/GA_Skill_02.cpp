@@ -1,5 +1,6 @@
 #include "GA_Skill_02.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
@@ -8,6 +9,7 @@
 #include "GameplayEffect.h"
 #include "GameplayEffectTypes.h"
 #include "GameFramework/Character.h"
+#include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TimerManager.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
@@ -19,10 +21,7 @@ UGA_Skill_02::UGA_Skill_02()
 	AssetTags.AddTag(UUExtraAbilitySystemStatic::GetSkill02Tag());
 	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill02Tag());
-
-	// 表现动画段挂 State.Uninterruptible，后摇段由 AN_EndUninterruptible 放开
-	bEnableUninterruptible = true;
-
+	
 	// 启用通用武器碰撞伤害（基类机制）
 	bEnableWeaponDamage = true;
 
@@ -30,7 +29,6 @@ UGA_Skill_02::UGA_Skill_02()
 	bRotateToLockTarget = true;
 
 	// 落地斩属于空中下落类攻击：落点必须拉出目标胶囊，否则会先被水平拖到目标正上方、
-	// 再垂直落到胶囊顶面并顺坡滑走。取值与 GA_AirAttack 一致。
 	LockOnWarpStandoff = 100.f;
 
 	FAbilityTriggerData SkillTrigger;
@@ -43,8 +41,7 @@ bool UGA_Skill_02::CheckCooldown(const FGameplayAbilitySpecHandle Handle, const 
 	FGameplayTagContainer* OptionalRelevantTags) const
 {
 	// 原生实现（UGameplayAbility::CheckCooldown）只看 cooldown GE 的 GrantedTags 是否在 ASC 上，不认层数,
-	// 那样会把「还剩 1 层充能」也一并封死。这里改成按层数放行：
-	// cooldown GE 的 stack 数 = 已消耗、正在回充的层数，用满才对激活说 no。
+	// 那样会把「还剩 1 层充能」也一并封死。这里改成按层数放行
 	const FGameplayTagContainer* CooldownTags = GetCooldownTags();
 	if (!CooldownTags || CooldownTags->IsEmpty())
 	{
@@ -68,12 +65,12 @@ bool UGA_Skill_02::CheckCooldown(const FGameplayAbilitySpecHandle Handle, const 
 		}
 	}
 
-	if (UsedCharges < UUExtraAbilitySystemStatic::Skill02MaxCharges)
+	if (UsedCharges < 2)
 	{
 		return true;
 	}
 
-	// 层数用满：沿用原生的失败约定，把命中的 cooldown tag 回填给调用方做诊断
+	// 层数用满：沿用原生的失败约定，添加Tag并判定为false
 	if (OptionalRelevantTags)
 	{
 		OptionalRelevantTags->AppendMatchingTags(ASC->GetOwnedGameplayTags(), *CooldownTags);
@@ -81,21 +78,40 @@ bool UGA_Skill_02::CheckCooldown(const FGameplayAbilitySpecHandle Handle, const 
 	return false;
 }
 
+void UGA_Skill_02::DoDamage(const FGameplayEventData& Data)
+{
+	Super::DoDamage(Data);
+
+	if (!K2_HasAuthority())
+	{
+		return;
+	}
+	
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC)
+	{
+		return;
+	}
+	
+	const float CurrentEnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
+	ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetEnergyValueAttribute(), CurrentEnergyValue + EnergyValuePerHit);
+}
+
 void UGA_Skill_02::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
+                                   const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
-
-	// 充能的检查与消耗交给 GAS：CheckCooldown（本类 override）已挡住层数用满的情况，
-	// 提交成功则给 cooldown GE 叠一层。
+	
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo, nullptr))
 	{
 		K2_EndAbility();
 		return;
 	}
 
+	//init 
+	
 	CurrentPhase = ESkill02Phase::None;
-	bRiseReadyMarked = false;
+	bRiseReadyNotify = false;
 	bPendingSkillInput = false;
 
 	if (!HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
@@ -103,7 +119,7 @@ void UGA_Skill_02::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 		return;
 	}
 
-	// 表现按角色当前位置分派：空中 → 落地斩；地面 → 升空斩
+	//根据空地状态选择起手段
 	const ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	const bool bAirborne = AvatarChar && AvatarChar->GetCharacterMovement() && AvatarChar->GetCharacterMovement()->IsFalling();
 
@@ -130,7 +146,7 @@ void UGA_Skill_02::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 		AvatarChar->LandedDelegate.RemoveDynamic(this, &UGA_Skill_02::OnLandDetected);
 	}
 
-	// 解锁移动输入（段1 / 段2 起手与循环段会锁上）
+	// 解锁移动输入
 	if (AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo()))
 	{
 		PlayerChar->SetMovementInputLocked(false);
@@ -162,8 +178,6 @@ void UGA_Skill_02::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
-// ── 段1：升空斩 ──────────────────────────────────────────────
-
 void UGA_Skill_02::PlayRiseMontage()
 {
 	if (!RiseMontage)
@@ -189,59 +203,55 @@ void UGA_Skill_02::PlayRiseMontage()
 
 	// 段1 期间才监听第二次技能输入：OnlyTriggerOnce 让这一段只接受一次切换，
 	// 段2 开始后任务已结束，天然满足「落地斩期间不响应」。
-	// 必须延迟到下一帧再挂：AbilityTriggers 的激活就发生在 HandleGameplayEvent 内部，
-	// 而该函数随后会用「已包含刚注册回调」的委托表广播同一个事件——当场挂会被这次按键立刻触发，
-	// 表现为刚起手就切落地斩（在地面时更是直接播落地段），同时还白扣一层充能。
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ThisClass::SetupWaitSkillInput);
 	}
-
-	// 段1 的衔接标记帧（Montage 里的 AN_Skill02RiseReady）：收到才允许切落地斩。
-	// 与输入监听不同，本事件由动画帧发出，不可能在激活同帧到达，因此无需错开一帧。
+	
+	//监听可以接落地斩的AN事件，只监听一次
 	UAbilityTask_WaitGameplayEvent* WaitRiseReadyTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetSkill02RiseReadyTag(), nullptr, /*OnlyTriggerOnce=*/true, /*OnlyMatchExact=*/true);
-	WaitRiseReadyTask->EventReceived.AddDynamic(this, &ThisClass::OnRiseReadyMarked);
+		this, UUExtraAbilitySystemStatic::GetSkill02RiseReadyTag(), nullptr, true, true);
+	WaitRiseReadyTask->EventReceived.AddDynamic(this, &ThisClass::OnRiseNotifyMarked);
 	WaitRiseReadyTask->ReadyForActivation();
 }
 
-void UGA_Skill_02::OnRiseReadyMarked(FGameplayEventData Payload)
+void UGA_Skill_02::OnRiseNotifyMarked(FGameplayEventData Payload)
 {
-	// 升空已到位，此后（且仍在空中）的第二下技能输入才切落地斩；
-	// 若玩家在标记帧之前就按过 E，这里补一次判定，避免那次输入白按。
-	bRiseReadyMarked = true;
+	//已标记
+	bRiseReadyNotify = true;
+	
+	//落地斩
 	TryEnterLandAttack();
 }
 
 void UGA_Skill_02::SetupWaitSkillInput()
 {
-	// 一帧之内 GA 可能已经结束（被打断 / 段1 已播完），此时不再挂监听
+	//只有升空段才能接再次输入回调
 	if (!IsActive() || CurrentPhase != ESkill02Phase::Rise)
 	{
 		return;
 	}
-
-	// OnlyTriggerOnce = false：早于标记帧按下的那次输入不能被消费掉（任务一旦结束就再收不到），
-	// 「只切一次」由 CurrentPhase 保证——切进段2 后 Phase 已不是 Rise，回调直接 return。
+	
 	UAbilityTask_WaitGameplayEvent* WaitSkillInputTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetSkillInputTag(), nullptr, /*OnlyTriggerOnce=*/false, /*OnlyMatchExact=*/true);
+		this, UUExtraAbilitySystemStatic::GetSkillInputTag(), nullptr, false, true);
 	WaitSkillInputTask->EventReceived.AddDynamic(this, &ThisClass::OnSkillInputDuringRise);
 	WaitSkillInputTask->ReadyForActivation();
 }
 
 void UGA_Skill_02::OnRiseMontageFinished()
 {
+	//说明是因为切段2导致的Finish，不响应
 	if (CurrentPhase != ESkill02Phase::Rise)
 	{
 		return;
 	}
-
+	
 	K2_EndAbility();
 }
 
 void UGA_Skill_02::OnRiseMontageInterrupted()
 {
-	// 切段2 时会主动停段1，那时 CurrentPhase 已离开 Rise，此处直接 return，不误结束 GA
+	//说明是因为切段2导致的Interrupt，不响应
 	if (CurrentPhase != ESkill02Phase::Rise)
 	{
 		return;
@@ -257,39 +267,39 @@ void UGA_Skill_02::OnSkillInputDuringRise(FGameplayEventData Payload)
 		return;
 	}
 
-	// 只记录「段1 期间按过 E」：此刻能不能切由 TryEnterLandAttack 判定。
-	// 早于标记帧按下的那次会留到标记帧到达时补触发，所以快速双击的第二下不会白按。
+	//缓存
 	bPendingSkillInput = true;
+	
 	TryEnterLandAttack();
 }
 
 void UGA_Skill_02::TryEnterLandAttack()
 {
-	if (CurrentPhase != ESkill02Phase::Rise || !bRiseReadyMarked || !bPendingSkillInput)
+	//是否有输入
+	if (CurrentPhase != ESkill02Phase::Rise || !bRiseReadyNotify || !bPendingSkillInput)
 	{
 		return;
 	}
 
-	// 必须仍在空中：已经落回地面时不再衔接落地斩
-	// （那时等段1 播完，由「按位置分派」决定下一次按 E 播哪段）
+	// 必须仍在空中
 	const ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	if (!AvatarChar || !AvatarChar->GetCharacterMovement() || !AvatarChar->GetCharacterMovement()->IsFalling())
 	{
 		return;
 	}
 
-	// 消耗第二层充能：K2_CommitAbilityCooldown 内部会先跑本类 override 的 CheckCooldown，
-	// 两层都在回充时返回 false —— 不扣层、也不切段。
-	if (!K2_CommitAbilityCooldown(/*BroadcastCommitEvent=*/false, /*ForceCooldown=*/false))
+	// 消耗第二层充能：K2_CommitAbilityCooldown
+	if (!K2_CommitAbilityCooldown(false,false))
 	{
 		return;
 	}
 
+	//init
 	bPendingSkillInput = false;
+	
 	EnterLandAttack();
 }
 
-// ── 段2：落地斩（起手 → 循环 → 落地，衔接逻辑同 GA_AirAttack）──────
 
 void UGA_Skill_02::EnterLandAttack()
 {
@@ -297,6 +307,7 @@ void UGA_Skill_02::EnterLandAttack()
 	// 那时 CurrentPhase 已不是 Rise，回调会直接 return。
 	CurrentPhase = ESkill02Phase::LandStart;
 
+	//停Montage
 	if (UAnimInstance* AnimInst = GetOwnerAnimInstance())
 	{
 		if (RiseMontage && AnimInst->Montage_IsPlaying(RiseMontage))
@@ -305,6 +316,7 @@ void UGA_Skill_02::EnterLandAttack()
 		}
 	}
 
+	//Land
 	PlayLandAttackStartMontage();
 }
 
@@ -322,7 +334,7 @@ void UGA_Skill_02::PlayLandAttackStartMontage()
 		PlayerChar->SetMovementInputLocked(true);
 	}
 
-	// 从起手段就监听落地：低空触发时段2 可能在起手还没播完时就已经落地
+	// 从起手段就监听落地：低空触发段2时可能在起手还没播完时就已经落地
 	if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
 	{
 		AvatarChar->LandedDelegate.AddDynamic(this, &UGA_Skill_02::OnLandDetected);
@@ -332,8 +344,7 @@ void UGA_Skill_02::PlayLandAttackStartMontage()
 	{
 		GetWorld()->GetTimerManager().SetTimer(LandCheckTimerHandle, this, &UGA_Skill_02::PollLandCheck, 0.08f, true);
 	}
-
-	// 用 PlayMontageAndWait 的 BlendOut（开始淡出）就接循环段，让两段淡化重叠，避免真空帧掉回状态机
+	
 	UAbilityTask_PlayMontageAndWait* StartTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this, NAME_None, LandAttackStartMontage, 1.0f, NAME_None, false, 1.0f);
 	StartTask->OnBlendOut.AddDynamic(this, &ThisClass::OnLandAttackStartBlendOut);
@@ -354,7 +365,7 @@ void UGA_Skill_02::OnLandAttackStartBlendOut()
 
 void UGA_Skill_02::OnLandAttackStartInterrupted()
 {
-	// 只有起手段被真正外部打断才结束 GA；进循环/落地后主动停起手属于正常流程
+	//同上
 	if (CurrentPhase != ESkill02Phase::LandStart)
 	{
 		return;
@@ -373,10 +384,9 @@ void UGA_Skill_02::PlayLandAttackLoopMontage()
 	}
 
 	CurrentPhase = ESkill02Phase::LandLoop;
-	// 用 Montage 资产里配的 BlendIn，代码不写死混出时间
+	
+	//Montage LoopSection
 	AnimInst->Montage_Play(LandAttackLoopMontage, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
-
-	// section 自循环：不依赖资产是否勾了 bLoop，确保下砸循环播完跳回自身
 	if (const FName LoopSection = AnimInst->Montage_GetCurrentSection(LandAttackLoopMontage); LoopSection != NAME_None)
 	{
 		AnimInst->Montage_SetNextSection(LoopSection, LoopSection, LandAttackLoopMontage);
@@ -411,13 +421,13 @@ void UGA_Skill_02::PollLandCheck()
 
 void UGA_Skill_02::TryTriggerLand()
 {
-	// 起手与循环两段都可能落地（低空触发时起手就可能已在落地）
+	//检测
 	if (CurrentPhase != ESkill02Phase::LandStart && CurrentPhase != ESkill02Phase::LandLoop)
 	{
 		return;
 	}
 
-	// 双重校验：确实已落地（不再是 falling）
+	// 再次校验
 	if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
 	{
 		if (AvatarChar->GetCharacterMovement() && AvatarChar->GetCharacterMovement()->IsFalling())
@@ -485,3 +495,4 @@ void UGA_Skill_02::OnLandAttackLandMontageEnded(UAnimMontage* Montage, bool bInt
 {
 	K2_EndAbility();
 }
+      

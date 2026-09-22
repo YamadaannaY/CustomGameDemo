@@ -94,7 +94,7 @@ void UExtraAbilitySystemComponent::RefreshSkill02ChargeDebug()
 		return;
 	}
 
-	const int32 MaxCharges = UUExtraAbilitySystemStatic::Skill02MaxCharges;
+	const int32 MaxCharges = 2;
 	const FGameplayTagContainer CooldownTags(UUExtraAbilitySystemStatic::GetSkill02CooldownTag());
 	const FGameplayEffectQuery CooldownQuery = FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(CooldownTags);
 

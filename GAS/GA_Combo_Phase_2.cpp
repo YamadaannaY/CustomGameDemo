@@ -14,14 +14,7 @@ void UGA_Combo_Phase_2::DoDamage(const FGameplayEventData& Data)
 	{
 		return;
 	}
-
-	// 攻击窗口空挥（未命中任何目标）不累积能量
-	const TArray<AActor*> HitActors = UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(Data.TargetData);
-	if (HitActors.Num() == 0)
-	{
-		return;
-	}
-
+	
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	if (!ASC)
 	{
@@ -30,7 +23,6 @@ void UGA_Combo_Phase_2::DoDamage(const FGameplayEventData& Data)
 
 	const float CurrentEnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
 	ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetEnergyValueAttribute(), CurrentEnergyValue + EnergyValuePerHit);
-
 }
 
 UGA_Combo_Phase_2::UGA_Combo_Phase_2()
