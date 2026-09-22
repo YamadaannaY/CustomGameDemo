@@ -53,6 +53,9 @@ public:
 	// 本次按下是否已长按达到重击判定阈值
 	FORCEINLINE bool IsLongPressed() const { return bLongPressed; }
 
+	// 技能键（E）是否仍被按住：长按到居合检测帧才允许交接进居合
+	FORCEINLINE bool IsHoldingSkill() const { return bHoldingSkill; }
+
 	// Skill01 释放后置位：下一次普攻连段直接从最后一段起（该段额外充能）
 	void MarkSkill01ComboBoost() { bSkill01ComboBoost = true; }
 
@@ -209,6 +212,9 @@ private:
 	void OnNormalAttackStarted(const FInputActionValue& InputActionValue);
 	void OnNormalAttackCompleted(const FInputActionValue& InputActionValue);
 	void OnSkillStarted(const FInputActionValue& InputActionValue);
+
+	// 技能键松手：清按住标志（长按到检测帧才进居合，中途松开即放弃）
+	void OnSkillCompleted(const FInputActionValue& InputActionValue);
 	void OnUltimateStarted(const FInputActionValue& InputActionValue);
 	void OnDodgeStarted(const FInputActionValue& InputActionValue);
 
@@ -256,6 +262,9 @@ private:
 
 	// 本次按下是否已长按达到重击阈值（区分「长按重击」与「高频点按轻击」）
 	bool bLongPressed = false;
+
+	// 技能键（E）按住状态（长按到居合检测帧才进居合）
+	bool bHoldingSkill = false;
 
 	// Skill01 释放后的下一次普攻强化待消费标记（跳末段 + 末段额外充能）
 	bool bSkill01ComboBoost = false;

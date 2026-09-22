@@ -66,6 +66,21 @@ private:
 	// 段1 期间是否按过 E
 	bool bPendingSkillInput = false;
 
+	// ── 长按技能进居合 ────────────────────────────────────
+	// 长按 E 到 Montage 的居合检测帧（AN_Skill02JuheCheck）且能量足够时，
+	// 挂 JuheReady 并发一次闪避输入，交接给 GA_Evade_Juhe 进居合架势；
+	// 空中/地面由 GA_Evade_Juhe 自己按 IsFalling() 决定，这里不分派。
+	// 门槛须与 GA_Evade_Juhe::JuheEnergyThreshold 保持一致。
+	UPROPERTY(EditDefaultsOnly, Category = "Juhe")
+	float JuheEnergyThreshold = 100.f;
+
+	// 挂「居合检测帧」监听（段1 与落地斩的 Land 段各挂一次，各只触发一次）
+	void SetupWaitJuheCheck();
+
+	// 检测帧回调：判定「E 仍按住 + 能量足够」后交接给居合 GA
+	UFUNCTION()
+	void OnJuheCheckFrame(FGameplayEventData Payload);
+
 	// 段1播放
 	void PlayRiseMontage();
 

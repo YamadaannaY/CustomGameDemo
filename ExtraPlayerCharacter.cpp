@@ -142,6 +142,7 @@ void AExtraPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		InputComp->BindAction(NormalAttackAction, ETriggerEvent::Started, this, &ThisClass::OnNormalAttackStarted);
 		InputComp->BindAction(NormalAttackAction, ETriggerEvent::Completed, this, &ThisClass::OnNormalAttackCompleted);
 		InputComp->BindAction(SkillAction, ETriggerEvent::Started, this, &ThisClass::OnSkillStarted);
+		InputComp->BindAction(SkillAction, ETriggerEvent::Completed, this, &ThisClass::OnSkillCompleted);
 		InputComp->BindAction(UltimateAction, ETriggerEvent::Started, this, &ThisClass::OnUltimateStarted);
 		InputComp->BindAction(DodgeAction, ETriggerEvent::Started, this, &ThisClass::OnDodgeStarted);
 	}
@@ -633,11 +634,19 @@ bool AExtraPlayerCharacter::ConsumeSkill01ComboBoost()
 
 void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionValue)
 {
+	// 按住状态：长按到技能 Montage 的居合检测帧才进居合（是否真进由 GA_Skill_02 判定）
+	bHoldingSkill = true;
+
 	if (AbilitySystemComponent)
 	{
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 			this, UUExtraAbilitySystemStatic::GetSkillInputTag(), FGameplayEventData());
 	}
+}
+
+void AExtraPlayerCharacter::OnSkillCompleted(const FInputActionValue& InputActionValue)
+{
+	bHoldingSkill = false;
 }
 
 void AExtraPlayerCharacter::OnUltimateStarted(const FInputActionValue& InputActionValue)

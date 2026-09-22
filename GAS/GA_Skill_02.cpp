@@ -1,5 +1,4 @@
 #include "GA_Skill_02.h"
-
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -213,6 +212,60 @@ void UGA_Skill_02::PlayRiseMontage()
 		this, UUExtraAbilitySystemStatic::GetSkill02RiseReadyTag(), nullptr, true, true);
 	WaitRiseReadyTask->EventReceived.AddDynamic(this, &ThisClass::OnRiseNotifyMarked);
 	WaitRiseReadyTask->ReadyForActivation();
+
+	// 长按进居合的检测帧监听（与「第二次输入」是独立通道，互不影响）
+	SetupWaitJuheCheck();
+}
+
+void UGA_Skill_02::SetupWaitJuheCheck()
+{
+	// 检测帧事件由动画帧发出
+	UAbilityTask_WaitGameplayEvent* WaitJuheCheckTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, UUExtraAbilitySystemStatic::GetSkill02JuheCheckTag(), nullptr, true, true);
+	WaitJuheCheckTask->EventReceived.AddDynamic(this, &ThisClass::OnJuheCheckFrame);
+	WaitJuheCheckTask->ReadyForActivation();
+}
+
+void UGA_Skill_02::OnJuheCheckFrame(FGameplayEventData Payload)
+{
+	// 段1 与落地段挂的是同一个 tag 的两个监听，可能同时活着；
+	// 交接完成后本 GA 已结束，这里做幂等保护，保证只交接一次
+	if (!IsActive())
+	{
+		return;
+	}
+
+	// 松手了就是普通技能：不进居合
+	const AExtraPlayerCharacter* PlayerChar = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
+	if (!PlayerChar || !PlayerChar->IsHoldingSkill())
+	{
+		return;
+	}
+
+	// 能量不足等价于短按：同样不进居合
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC)
+	{
+		return;
+	}
+	const float Energy = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
+	if (Energy < JuheEnergyThreshold)
+	{
+		return;
+	}
+
+	// 走 GA_Evade_Juhe 原本的进居合路径：它要求 State.JuheReady + 能量够，
+	// 这里补挂 JuheReady 放行（居合激活后会自己把它清零消费掉）
+	ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 1);
+
+	// 先发闪避输入把居合激活起来、再结束自己——避免在「结束自己」的调用栈里激活别人。
+	if (AActor* Avatar = GetAvatarActorFromActorInfo())
+	{
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+			Avatar, UUExtraAbilitySystemStatic::GetDodgeInputTag(), FGameplayEventData());
+	}
+
+	K2_EndAbility();
 }
 
 void UGA_Skill_02::OnRiseNotifyMarked(FGameplayEventData Payload)
@@ -480,6 +533,9 @@ void UGA_Skill_02::PlayLandAttackLandMontage()
 	FOnMontageEnded LandEndDelegate;
 	LandEndDelegate.BindUObject(this, &UGA_Skill_02::OnLandAttackLandMontageEnded);
 	AnimInst->Montage_SetEndDelegate(LandEndDelegate, LandAttackLandMontage);
+
+	// 落地段上的居合检测帧：此时人已在地面 → 由居合 GA 自己判成地面居合
+	SetupWaitJuheCheck();
 }
 
 void UGA_Skill_02::StopLandAttackLoopMontage()

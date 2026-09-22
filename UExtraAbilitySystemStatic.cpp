@@ -14,6 +14,8 @@ UE_DEFINE_GAMEPLAY_TAG(Ability_Skill_02, "ability.Skill.02");
 UE_DEFINE_GAMEPLAY_TAG(Cooldown_Skill02, "cooldown.Skill02");
 // 升空斩的「可衔接落地斩」标记帧（AN_Skill02RiseReady 发出）
 UE_DEFINE_GAMEPLAY_TAG(Skill02_RiseReady, "ability.skill02.riseready");
+// 长按技能的「居合检测帧」（AN_Skill02JuheCheck 发出）
+UE_DEFINE_GAMEPLAY_TAG(Skill02_JuheCheck, "ability.skill02.juhecheck");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Burst_01, "ability.Burst.01");
 UE_DEFINE_GAMEPLAY_TAG(Ability_Burst_Changestate, "ability.Burst.changestate");
 UE_DEFINE_GAMEPLAY_TAG(State_Airborne, "character.state.airborne");
@@ -120,6 +122,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetSkill02CooldownTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetSkill02RiseReadyTag()
 {
 	return Skill02_RiseReady;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetSkill02JuheCheckTag()
+{
+	return Skill02_JuheCheck;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetBurst01Tag()

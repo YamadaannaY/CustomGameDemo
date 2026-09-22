@@ -101,6 +101,9 @@ public:
 	static FGameplayTag GetSkill02CooldownTag();  // "cooldown.Skill02"
 	
 	static FGameplayTag GetSkill02RiseReadyTag();  // "ability.skill02.riseready"
+	// 长按技能的「居合检测帧」Tag：段1 / 落地斩 Land 段的 Montage 里 AN_Skill02JuheCheck 各发一次，
+	// GA 在该帧判定「E 仍按住 + 能量足够」后，直接交接给 GA_Evade_Juhe 进居合架势
+	static FGameplayTag GetSkill02JuheCheckTag();  // "ability.skill02.juhecheck"
 	
 	static FGameplayTag GetBurst01Tag();
 	static FGameplayTag GetBurstChangeStateTag();
