@@ -185,6 +185,10 @@ private:
 	// 强制结束接管：清来源标记。写入权的交还由 UpdateBoomRotation 按臂偏移是否归零自然完成。
 	void EndRotationHijack();
 
+	// 排查用：把当前接管 / 交还的关键朝向打成一行日志（由 CVar CombatCamera.Debug.Log 控制）。
+	// 相机跳变这类问题时打开它，对齐时间线就能看出是「谁在什么时候把朝向拨走的」。
+	void LogDebugState(const TCHAR* Tag) const;
+
 	// 角色朝向（+ 180° 前置视角）的水平基准旋转
 	FRotator GetCharacterFacingRotation(bool bFrontFacing) const;
 
@@ -213,6 +217,23 @@ private:
 	// 臂朝向当前是否由本组件写入（即 bUsePawnControlRotation 被本组件关闭）。
 	// 由 true 变 false 的那一帧要把合成朝向折进 ControlRotation，最终视角才不跳。
 	bool bBoomOwned = false;
+
+	// 臂旋转偏移是否还没淡出完。没归零前必须一直握着臂的写入权，否则偏移会被 bUsePawnControlRotation 顶掉。
+	FORCEINLINE bool IsArmOffsetHeld() const { return !CurrentArmRotationOffset.IsNearlyZero(0.05f); }
+
+	// 把「合成朝向」还原成不含臂旋转偏移的基准朝向。
+	// ControlRotation 里存的是基准——持有期间臂上还会再叠一次 CurrentArmRotationOffset，
+	// 所以把合成朝向直接写进 ControlRotation 会让偏移叠加两次（镜头会跳一个偏移量）。
+	FORCEINLINE FRotator GetLastBoomBaseRotation() const
+	{
+		return (LastBoomWorldRotation - CurrentArmRotationOffset).GetNormalized();
+	}
+
+	// 上一次由本组件写出去的臂世界旋转。交还写入权时必须用它，不能读 SpringArm 的组件旋转：
+	// SpringArm 的旋转是相对父组件的（bAbsoluteRotation 默认关），接管期间一旦角色在两次写入
+	// 之间转动，组件旋转就会跟着父级漂移。空中居合那种「窗口末尾角色才被 MW 扭 180°」的情况，
+	// 交接时读组件旋转会读到漂移后的朝向（正后方），相机就跳回去了。
+	FRotator LastBoomWorldRotation = FRotator::ZeroRotator;
 
 	// 本帧是否接管了 SpringArm 的 TargetArmLength
 	bool bManagingArmLength = false;

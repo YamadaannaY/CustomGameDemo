@@ -27,6 +27,10 @@ static TAutoConsoleVariable<float> CVarCombatCameraDebugCharacterFacingTransitio
 	TEXT("CombatCamera.Debug.CharacterFacingTransitionTime"),
 	0.3f,
 	TEXT("调试模式切换到角色正后方的过渡时间（秒）"));
+static TAutoConsoleVariable<int32> CVarCombatCameraDebugLog(
+	TEXT("CombatCamera.Debug.Log"),
+	0,
+	TEXT("1 = 打印战斗相机接管 / 交还的关键朝向（排查镜头跳变用）"));
 
 // 一键重置所有调试 CVar 到默认值：TAutoConsoleVariable 是静态变量，编辑器进程存活期间
 // PIE 里改的值会残留到下次 PIE，用这个命令手动清回默认（彻底重置需关闭编辑器重启进程）。
@@ -45,6 +49,7 @@ static FAutoConsoleCommand CmdCombatCameraDebugReset(
 		CVarCombatCameraDebugFOV.AsVariable()->Set(90.f, ECVF_SetByConsole);
 		CVarCombatCameraDebugUseCharacterFacing.AsVariable()->Set(0, ECVF_SetByConsole);
 		CVarCombatCameraDebugCharacterFacingTransitionTime.AsVariable()->Set(0.3f, ECVF_SetByConsole);
+		CVarCombatCameraDebugLog.AsVariable()->Set(0, ECVF_SetByConsole);
 	}));
 
 UCombatCameraComponent::UCombatCameraComponent()
@@ -200,6 +205,7 @@ int32 UCombatCameraComponent::PushRequest(const FCombatCameraRequest& Request)
 {
 	const int32 Id = NextRequestId++;
 	ActiveRequests.Add(Id, Request);
+	LogDebugState(TEXT("Push"));
 	return Id;
 }
 
@@ -210,6 +216,13 @@ void UCombatCameraComponent::PopRequest(int32 RequestId)
 		PendingBlendOutTime = Req->BlendOutTime;
 	}
 	ActiveRequests.Remove(RequestId);
+
+	// 打出被移除的 id 与剩余数量
+	// 以及窗口重叠 / 提前被 ClearAllRequests 收走的情况
+	if (CVarCombatCameraDebugLog.GetValueOnGameThread() != 0)
+	{
+		LogDebugState(*FString::Printf(TEXT("Pop(id=%d,left=%d)"), RequestId, ActiveRequests.Num()));
+	}
 
 	// 被移除的正是接管来源 → 清掉接管标记，剩下的请求由下一帧 Tick 重新评估
 	if (HijackRequestId == RequestId)
@@ -227,6 +240,7 @@ void UCombatCameraComponent::ClearAllRequests()
 	}
 
 	ActiveRequests.Empty();
+	LogDebugState(TEXT("ClearAll"));
 	EndRotationHijack();
 }
 
@@ -241,7 +255,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 		&& (ActiveReq->bUseCharacterFacingBasis || ActiveReq->bLockLookInput);
 
 	// 臂旋转偏移没归零前必须一直握着臂的写入权，否则偏移会被 bUsePawnControlRotation 顶掉
-	const bool bArmOffsetHeld = !CurrentArmRotationOffset.IsNearlyZero(0.05f);
+	const bool bArmOffsetHeld = IsArmOffsetHeld();
 
 	//接管已经结束，重置Id
 	if (!bWantHijack)
@@ -268,8 +282,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 			? GetCharacterFacingRotation(bHijackFrontFacing) //是否开启前向180旋转
 			: HijackFrozenRotation;
 
-		// 「角色朝向基准 + 允许 look」时把玩家进入接管后转过的角度叠在目标上：
-		// 否则这几秒过渡里转视角毫无反应，过渡结束还会被一次性抹掉。
+		// 「角色朝向基准 + 允许 look」时把玩家进入接管后转过的角度叠在目标上：否则这几秒过渡里转视角毫无反应，过渡结束还会被一次性抹掉。
 		if (bHijackUseFacingBasis && !bHijackLockLook)
 		{
 			if (const APlayerController* PC = GetOwningPlayerController())
@@ -281,7 +294,8 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 		if (HijackPhase == EHijackPhase::Holding)
 		{
 			// 已就位：目标随角色逐帧变化，用平滑跟随
-			const FRotator CurrentBoom = (CameraBoom->GetComponentRotation() - CurrentArmRotationOffset).GetNormalized();
+			// 起点取「上次写出去的值」而不是组件旋转，否则角色转身角度也会参与跟随位置计算
+			const FRotator CurrentBoom = GetLastBoomBaseRotation();
 			const float FollowSpeed = (HijackBlendTime > KINDA_SMALL_NUMBER) ? (1.f / HijackBlendTime) : 10.f;
 			BoomBase = FMath::RInterpTo(CurrentBoom, Target, DeltaTime, FollowSpeed);
 		}
@@ -311,20 +325,33 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 
 	if (bWantHijack || bArmOffsetHeld)
 	{
+		LastBoomWorldRotation = (BoomBase + CurrentArmRotationOffset).GetNormalized();
 		CameraBoom->bUsePawnControlRotation = false;
-		CameraBoom->SetWorldRotation(BoomBase + CurrentArmRotationOffset);
+		CameraBoom->SetWorldRotation(LastBoomWorldRotation);
 		bBoomOwned = true;
 	}
 	else
 	{
 		if (bBoomOwned)
 		{
-			// 交还写入权：把当前合成朝向折进 ControlRotation，玩家视角才不会跳回进入接管前的旧朝向
+			LogDebugState(TEXT("Release-Before"));
+
+			// 交还写入权：把上一次真正写出去的朝向还原成「基准」后折进 ControlRotation。
+			// 不能读组件旋转——它是相对父级的，角色在两次写入之间转动会让它漂移（没有勾选Lock的情况下）；
+			// 也不能直接写合成朝向——那会让臂旋转偏移叠加两次（见 GetLastBoomBaseRotation）。
 			if (APlayerController* PC = GetOwningPlayerController())
 			{
-				PC->SetControlRotation(CameraBoom->GetComponentRotation());
+				PC->SetControlRotation(GetLastBoomBaseRotation());
 			}
+
+			// 本帧也要把臂压回去：从这一帧起本组件不再写它，而臂的旋转是相对父级的，
+			// 角色本帧的转动会直接漏进画面（表现为交还瞬间闪一下）。SpringArm 下一帧会用
+			// ControlRotation（同一个值）覆盖，所以这次写入只是补上了这一帧。
+			CameraBoom->SetWorldRotation(LastBoomWorldRotation);
+
 			bBoomOwned = false;
+
+			LogDebugState(TEXT("Release-After"));
 		}
 		CameraBoom->bUsePawnControlRotation = true;
 	}
@@ -341,14 +368,20 @@ void UCombatCameraComponent::BeginRotationHijack(const FCombatCameraRequest& Req
 	bHijackLockLook = Request.bLockLookInput;
 
 	//  过渡起点、以及「玩家 look 基准」的选取：
-	//  臂正由本组件写（bBoomOwned）→ 组件旋转就是玩家看到的朝向，直接用它，且此时 ControlRotation
-	//  可能是锁 look 期间没被更新的旧方向，绝不能拿它当起点（会和画面差很远，一切换就跳）。
+	//  臂正由本组件写（bBoomOwned）→ 用本组件最后写出去的那个朝向。此时 ControlRotation 可能是锁
+	//   look 期间没被更新的旧方向，不能拿它当起点；也不能读组件旋转（相对父级、会随角色转动漂移）。
 	//  臂由 bUsePawnControlRotation 驱动 → 组件旋转可能滞后一帧（取决于 SpringArm 与本组件的 tick
 	//  顺序），改用 ControlRotation 更准；不接管时臂偏移必然接近 0，叠上去即可。
 	APlayerController* PC = GetOwningPlayerController();
 	HijackEnterControlRotation = PC ? PC->GetControlRotation() : FRotator::ZeroRotator;
 
-	if (bBoomOwned || !PC)
+	if (bBoomOwned)
+	{
+		// 用本组件最后写出的「基准」朝向：LastBoomWorldRotation 含臂旋转偏移，而 ControlRotation
+		// 只存基准（臂上会再叠一次偏移），直接写合成朝向会让偏移叠加两次。
+		HijackStartRotation = GetLastBoomBaseRotation();
+	}
+	else if (!PC)
 	{
 		HijackStartRotation = CameraBoom ? CameraBoom->GetComponentRotation() : FRotator::ZeroRotator;
 	}
@@ -367,15 +400,67 @@ void UCombatCameraComponent::BeginRotationHijack(const FCombatCameraRequest& Req
 		HijackBlendTime = Request.BlendInTime;
 		HijackFrozenRotation = HijackStartRotation;
 	}
+
+	LogDebugState(TEXT("Hijack-Begin"));
 }
 
 void UCombatCameraComponent::EndRotationHijack()
 {
+	LogDebugState(TEXT("Hijack-End"));
+
+	// 接管一结束就把臂朝向折进 ControlRotation——不能等到「交还写入权」那一步。
+	// 臂旋转偏移还在淡出时我们仍然持有臂，而下一帧 BoomBase 会立刻回落到 ControlRotation；
+	// 它一直是接管前的旧方向（通常就是角色正后方），镜头会当场跳过去并停在那儿。
+	// 写进去的是「基准」（去掉偏移），因为继续持有时臂上还会再叠一次偏移。
+	if (bBoomOwned)
+	{
+		if (APlayerController* PC = GetOwningPlayerController())
+		{
+			PC->SetControlRotation(GetLastBoomBaseRotation());
+		}
+	}
+
 	HijackRequestId = INDEX_NONE;
 	HijackPhase = EHijackPhase::None;
 	HijackElapsed = 0.f;
 
 	// 写入权不在这里交还：臂旋转偏移可能还没淡出完，要继续由 UpdateBoomRotation 握着才不会被顶掉
+	// （此时 ControlRotation 已经是对齐后的朝向，所以继续持有也不会跳）
+}
+
+void UCombatCameraComponent::LogDebugState(const TCHAR* Tag) const
+{
+	if (CVarCombatCameraDebugLog.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+
+	const FCombatCameraRequest* ActiveReq = FindActiveRequest();
+	const bool bWantHijack = ActiveReq && (ActiveReq->bUseCharacterFacingBasis || ActiveReq->bLockLookInput);
+	const APlayerController* PC = GetOwningPlayerController();
+	const AActor* Owner = GetOwner();
+	
+	// req = 当前生效请求的配置（F/Front/LockLook/ArmRot）；snap = 本次接管进入时锁存的快照。
+	// ArmOffY/held = 臂旋转偏移的 Yaw 与「是否仍在持有臂」，接管结束后镜头跳回旧方向就出在这上面。
+	UE_LOG(LogTemp, Warning,
+		TEXT("[CombatCam] %-15s owned=%d want=%d phase=%d id=%d | req F%d/%d/L%d/A%d snap F%d/%d/L%d | Last=%.1f Comp=%.1f Ctrl=%.1f Owner=%.1f Arm=%.0f ArmOffY=%.1f held=%d"),
+		Tag,
+		bBoomOwned ? 1 : 0,
+		bWantHijack ? 1 : 0,
+		static_cast<int32>(HijackPhase),
+		HijackRequestId,
+		(ActiveReq && ActiveReq->bUseCharacterFacingBasis) ? 1 : 0,
+		(ActiveReq && ActiveReq->bFrontFacingBasis) ? 1 : 0,
+		(ActiveReq && ActiveReq->bLockLookInput) ? 1 : 0,
+		(ActiveReq && ActiveReq->bModifyArmRotation) ? 1 : 0,
+		bHijackUseFacingBasis ? 1 : 0, bHijackFrontFacing ? 1 : 0, bHijackLockLook ? 1 : 0,
+		LastBoomWorldRotation.Yaw,
+		CameraBoom ? CameraBoom->GetComponentRotation().Yaw : 0.f,
+		PC ? PC->GetControlRotation().Yaw : 0.f,
+		Owner ? Owner->GetActorRotation().Yaw : 0.f,
+		CurrentArmLength,
+		CurrentArmRotationOffset.Yaw,
+		IsArmOffsetHeld() ? 1 : 0);
 }
 
 FRotator UCombatCameraComponent::GetCharacterFacingRotation(bool bFrontFacing) const
