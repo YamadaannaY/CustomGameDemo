@@ -88,7 +88,7 @@ public:
 
 	/** 隐藏当前武器组所有 Mesh（过场、攀爬、游泳等） */
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
-	void HideWeapon();
+	void HideAllWeapon();
 
 	// ── 逐武器显隐（组内单个 Mesh） ─────────────────────────
 

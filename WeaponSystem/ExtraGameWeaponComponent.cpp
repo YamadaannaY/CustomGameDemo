@@ -353,7 +353,7 @@ void UExtraGameWeaponComponent::ShowAllWeapons()
 	}
 }
 
-void UExtraGameWeaponComponent::HideWeapon()
+void UExtraGameWeaponComponent::HideAllWeapon()
 {
 	bWeaponVisible = false;
 
@@ -653,10 +653,6 @@ void UExtraGameWeaponComponent::HideGroupWeaponMeshes(FGameplayTag GroupTag)
 		WeaponFadeStates.Remove(Entry.WeaponTag);
 	}
 }
-
-// ──────────────────────────────────────────────────────────────
-// 显隐 Fade（私有，材质 FadeAmount 驱动）
-// ──────────────────────────────────────────────────────────────
 
 void UExtraGameWeaponComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {

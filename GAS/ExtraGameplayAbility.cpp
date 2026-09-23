@@ -62,7 +62,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	AExtraPlayerCharacter* Char = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
 	if (Char && Char->GetWeaponComponent() && ClearWeaponShowOnAbilityEnd)
 	{
-		Char->GetWeaponComponent()->HideWeapon();
+		Char->GetWeaponComponent()->HideAllWeapon();
 	}
 
 	// 兜底：即使蒙太奇异常终止未触发 ANS 的 NotifyEnd，GA 结束也强制关闭轨迹扫描窗口（幂等）
