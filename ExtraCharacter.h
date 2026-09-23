@@ -19,13 +19,11 @@ class EXTRACTGAMECHARACTER_API AExtraCharacter : public ACharacter, public IAbil
 public:
 	AExtraCharacter(const FObjectInitializer& ObjectInitializer);
 
-	// ── IAbilitySystemInterface ────────────────────────────────
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
 	// ── GAS 初始化（由 Controller OnPossess 调用）─────────────
-	// 先调用 InitAbilityActorInfo，再调用 ASC 的 ServerSideInit
 	virtual void ServerSideInit();
 
 	// ── 组件访问器 ─────────────────────────────────────────────
@@ -49,12 +47,20 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	// 这里处理WidgetComp尺寸配置，构造函数中无法实时读取BP中配置的新值
+	virtual void OnConstruction(const FTransform& Transform) override;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	float OverHeadGaugeXSize = 300.f;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	float OverHeadGaugeYSize = 30.f;
-	
+
+	//世界模式下 DrawSize 是 cm（300x30 就是 3 米宽），所以整体靠缩放收到合适大小
+	//（DrawSize 同时是 UMG 画布，不能直接改小，见 ExtraCharacter.cpp 的 OnConstruction）
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	float OverHeadGaugeWorldScale = 0.5f;
+
 	// ── GAS ────────────────────────────────────────────────────
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UExtraAbilitySystemComponent> AbilitySystemComponent;
@@ -66,6 +72,7 @@ protected:
 	/***********UI************/
 
 	FTimerHandle HeadStatGaugeVisibilityUpdateTimerHandle;
+	FTimerHandle HeadStatGaugeRotTimerHandle;
 	
 	//Gauge可视组件
 	UPROPERTY(VisibleAnywhere, Category="UI")
@@ -79,6 +86,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	float HeadStatGaugeVisibilityUpdateGap = 3.f;
 
+	//血条朝向相机的更新间隔
+	UPROPERTY(EditDefaultsOnly, Category="UI")
+	float HeadStatGaugeRotationUpdateGap = 0.02f;
+
 	//要判断距离的平方（以节省开方计算性能为目的）
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	float HeadStatGaugeVisibilityRangeSquared = 10000000.f;
@@ -89,6 +100,8 @@ protected:
 
 	//客户端调用，Timer绑定的回调，对客户端的本地Actor调用，根据与本地客户端角色实例的距离判断是否要显示自己的OverheadUI
 	void UpdateHeadGaugeVisibility() const ;
+	
+	void UpdateHeadGaugeRotation() const ;
 
 	//Death状态下在客户端调用，判断是否显示OverHeadWidget
 	void SetStatusGaugeEnabled(bool bEnabled);

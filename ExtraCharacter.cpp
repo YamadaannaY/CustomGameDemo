@@ -5,7 +5,9 @@
 #include "Components/CapsuleComponent.h"
 #include "WeaponSystem/ExtraGameWeaponComponent.h"
 #include "GAS/ExtraAbilitySystemComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "Net/UnrealNetwork.h"
 #include "UI/OverHeadStatsGauge.h"
 
@@ -34,12 +36,27 @@ AExtraCharacter::AExtraCharacter(const FObjectInitializer& ObjectInitializer)
 	// ── 头顶血条 ──
 	OverHeadWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("OverHeadWidget"));
 	OverHeadWidgetComponent->SetupAttachment(GetMesh());
-	OverHeadWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen);
+	OverHeadWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
 	OverHeadWidgetComponent->SetDrawAtDesiredSize(false);
-	OverHeadWidgetComponent->SetDrawSize(FVector2D(OverHeadGaugeXSize, OverHeadGaugeYSize));
+	// 世界模式默认单面材质，背对相机时会整个消失
+	OverHeadWidgetComponent->SetTwoSided(true);
+	// 旋转与父级 Mesh 解绑：否则世界朝向 = Mesh 朝向 × 设定值，角色转身血条跟着转
+	OverHeadWidgetComponent->SetUsingAbsoluteRotation(true);
 	OverHeadWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 190.f));
 	OverHeadWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	OverHeadWidgetComponent->SetHiddenInGame(true);
+}
+
+void AExtraCharacter::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	if (!OverHeadWidgetComponent) return;
+
+	// 世界模式下 DrawSize 是世界尺寸(cm)：300x30 就是 3 米宽；它同时是 UMG 画布与渲染分辨率，
+	// 直接改小会压垮 Widget 内部布局（那里按 300x30 像素排），所以世界尺寸靠缩放收。
+	OverHeadWidgetComponent->SetDrawSize(FVector2D(OverHeadGaugeXSize, OverHeadGaugeYSize));
+	OverHeadWidgetComponent->SetRelativeScale3D(FVector(OverHeadGaugeWorldScale));
 }
 
 UAbilitySystemComponent* AExtraCharacter::GetAbilitySystemComponent() const
@@ -115,10 +132,13 @@ void AExtraCharacter::ConfigureOverHeadStatusWidget()
 		OverHeadWidgetComponent->SetHiddenInGame(false);
 
 		UpdateHeadGaugeVisibility();
+		UpdateHeadGaugeRotation();
 
 		//每次配置重置UpdateTime
 		GetWorldTimerManager().ClearTimer(HeadStatGaugeVisibilityUpdateTimerHandle);
+		GetWorldTimerManager().ClearTimer(HeadStatGaugeRotTimerHandle);
 		GetWorldTimerManager().SetTimer(HeadStatGaugeVisibilityUpdateTimerHandle,this,&AExtraCharacter::UpdateHeadGaugeVisibility,HeadStatGaugeVisibilityUpdateGap,true);
+		GetWorldTimerManager().SetTimer(HeadStatGaugeRotTimerHandle,this,&AExtraCharacter::UpdateHeadGaugeRotation,HeadStatGaugeRotationUpdateGap,true);
 	}
 }
 
@@ -134,6 +154,24 @@ void AExtraCharacter::UpdateHeadGaugeVisibility() const
 		//决定是否显示UI
 		OverHeadWidgetComponent->SetHiddenInGame(DistSquared>HeadStatGaugeVisibilityRangeSquared);
 	}
+}
+
+void AExtraCharacter::UpdateHeadGaugeRotation() const
+{
+	if (!OverHeadWidgetComponent) return;
+
+	//血条挂在别人身上，本地相机只能现取：缓存到本Actor成员上的话，非本地角色永远拿不到值
+	const APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (!CameraManager) return;
+
+	const FVector GaugeLocation = OverHeadWidgetComponent->GetComponentLocation();
+	FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(GaugeLocation, CameraManager->GetCameraLocation());
+
+	//只清 Roll（FindLookAtRotation 出来的 Roll 本就≈0）；Pitch 保留，否则血条只是水平朝向相机，俯视时会被严重压扁
+	LookAtRot.Roll = 0.f;
+
+	//组件是绝对旋转（构造里 SetUsingAbsoluteRotation），这里设的就是世界朝向而非Relative
+	OverHeadWidgetComponent->SetWorldRotation(LookAtRot);
 }
 
 void AExtraCharacter::SetStatusGaugeEnabled(bool bEnabled)
