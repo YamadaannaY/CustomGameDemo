@@ -481,7 +481,7 @@ void UGA_Evade_Juhe::OnJuheDodgeInput(FGameplayEventData EventData)
 	// 居合中再次闪避：走基类正常后撤 Evade 动画，播完结束
 	RemoveJuheState();
 
-	Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo())->GetWeaponComponent()->HideWeapon();
+	Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo())->GetWeaponComponent()->HideAllWeapon();
 
 	PlayJuheMontage(DodgeMontage, false, true);
 

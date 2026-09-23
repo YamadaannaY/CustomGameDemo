@@ -23,7 +23,7 @@ void UANS_IgnoreCharacterCollision::NotifyBegin(USkeletalMeshComponent* MeshComp
 	OwnerCharacter = OwnerChar;
 	ApplyIgnore();
 
-	// 蒙太奇被强行打断时 NotifyEnd 不保证到达，挂 BlendOut 兜底恢复碰撞
+	// 蒙太奇被强行打断时挂 BlendOut 恢复碰撞
 	if (UAnimInstance* AnimInst = MeshComp->GetAnimInstance())
 	{
 		BoundAnimInstance = AnimInst;
@@ -56,7 +56,7 @@ void UANS_IgnoreCharacterCollision::ApplyIgnore()
 	// 先清掉上一次的残留，避免重复进入区间时叠加
 	ClearIgnore();
 
-	// 穿透对象：场上所有 ExtraCharacter（不限于锁定目标）。
+	// 穿透对象：场上所有 ExtraCharacter
 	// MoveIgnoreActorAdd 内部是 AddUnique，重复添加无副作用。
 	for (TActorIterator<AExtraCharacter> It(World); It; ++It)
 	{
@@ -66,7 +66,7 @@ void UANS_IgnoreCharacterCollision::ApplyIgnore()
 			continue;
 		}
 
-		// 双向忽略：只忽略 Owner 的话，对方仍把 Owner 当移动阻挡（绕圈时对方被顶开/自身被顶回）
+		// 双向忽略
 		OwnerChar->MoveIgnoreActorAdd(Other);
 		Other->MoveIgnoreActorAdd(OwnerChar);
 		IgnoredActors.Add(Other);
@@ -85,7 +85,7 @@ void UANS_IgnoreCharacterCollision::DisablePhysicsInteraction(ACharacter* Charac
 		return;
 	}
 
-	// 幂等：重复进入区间时保持首次记录的原值，避免把已关闭的状态当成原值
+	// 重复进入区间时保持首次记录的原值，避免把已关闭的状态当成原值
 	for (const TPair<TWeakObjectPtr<UCharacterMovementComponent>, bool>& Backup : PhysicsInteractionBackups)
 	{
 		if (Backup.Key.Get() == Movement)

@@ -60,7 +60,7 @@ void UGA_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 			// Debug：满段重击达成 → 大招解锁，屏幕打印提示
 			if (GEngine)
 			{
-				GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green,
+				GEngine->AddOnScreenDebugMessage(-1, 300.f, FColor::Green,
 					TEXT("Burst 可激活：已达成满段重击"));
 			}
 		}

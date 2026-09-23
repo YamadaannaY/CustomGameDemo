@@ -49,7 +49,7 @@ void UAN_WeaponVisibility::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenc
 		}
 		else
 		{
-			WeaponComp->HideWeapon();
+			WeaponComp->HideAllWeapon();
 		}
 		break;
 	}

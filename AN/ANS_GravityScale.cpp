@@ -7,7 +7,7 @@
 
 float UANS_GravityScale::EvaluateGravity(const USkeletalMeshComponent* MeshComp) const
 {
-	// 动画上配置了重力曲线就逐帧取曲线值：此时窗口内的重力是一条变化曲线
+	// 动画上配置了重力曲线就逐帧取曲线值
 	if (!GravityCurveName.IsNone())
 	{
 		if (UAnimInstance* AnimInst = MeshComp ? MeshComp->GetAnimInstance() : nullptr)
@@ -16,7 +16,7 @@ float UANS_GravityScale::EvaluateGravity(const USkeletalMeshComponent* MeshComp)
 		}
 	}
 
-	//回退到一个硬编码值
+	//回退到硬编码值
 	return GravityScale;
 }
 

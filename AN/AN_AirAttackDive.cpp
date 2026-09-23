@@ -18,7 +18,7 @@ void UAN_AirAttackDive::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBa
 		return;
 	}
 
-	// 下砸方向：角色前方（水平）+ 向下，构成俯冲角
+	// 下砸方向：角色前方+ 向下，构成俯冲角
 	// DiveAngle 越大越偏竖直向下，越小越偏水平前方
 	const FVector Forward = Character->GetActorForwardVector();
 	const FVector Down = FVector::UpVector * -1.0f;

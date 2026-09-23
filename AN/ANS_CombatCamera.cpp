@@ -95,7 +95,7 @@ void UANS_CombatCamera::NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequen
 		return;
 	}
 
-	// 已提交，或不在等待复核
+	// 已提交，或等待复核
 	if (CachedRequestIds.Contains(MeshComp) || !PendingMeshComps.Contains(MeshComp))
 	{
 		return;
@@ -106,7 +106,7 @@ void UANS_CombatCamera::NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequen
 		return;
 	}
 
-	// 条件在区间内满足了：补提交
+	// 条件在区间内满足了：此时移除缓存并补提交
 	PendingMeshComps.Remove(MeshComp);
 	PushCameraRequest(MeshComp);
 }

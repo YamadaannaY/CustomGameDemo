@@ -7,7 +7,7 @@
 bool UAN_SendGameplayEvent::CanEditEventTag() const
 {
 	// 只有基类自身把 Tag 交给编辑器配置；特化子类都有自己的 GetEventTag
-	return GetClass() == UAN_SendGameplayEvent::StaticClass();
+	return GetClass() == StaticClass();
 }
 
 void UAN_SendGameplayEvent::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation,
