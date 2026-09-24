@@ -163,15 +163,14 @@ void UExtraAbilitySystemComponent::RemoveInnateAbilities()
 
 void UExtraAbilitySystemComponent::ClearCancelWindowHolder(const FGameplayAbilitySpecHandle& InHandle)
 {
-	if (CancelWindowHolder == InHandle)
+	if (CancellingGASpecHandle == InHandle)
 	{
-		CancelWindowHolder = FGameplayAbilitySpecHandle();
+		CancellingGASpecHandle = FGameplayAbilitySpecHandle();
 	}
 }
 
 void UExtraAbilitySystemComponent::InitializeBaseAttribute()
 {
-	// 直接注册基类属性集（不再使用 AttributeSetClass 子类方案）
 	UExtraGameAttributeSet* AttrSet = NewObject<UExtraGameAttributeSet>(GetOwner());
 	if (AttrSet)
 	{
@@ -188,7 +187,6 @@ void UExtraAbilitySystemComponent::InitializeAttributeFromDataTable(UExtraGameAt
 	}
 
 	const FExtraCharacterAttributeRow* BestRow = nullptr;
-	int32 BestDistance = MAX_int32;
 
 	const UClass* OwnerClass = GetOwner()->GetClass();
 
@@ -200,18 +198,15 @@ void UExtraAbilitySystemComponent::InitializeAttributeFromDataTable(UExtraGameAt
 			continue;
 		}
 		
-		int32 Distance = 0;
 		const UClass* Cur = OwnerClass;
-		while (Cur && Cur != Row->CharacterClass)
+		if(Cur && Cur != Row->CharacterClass)
 		{
-			Cur = Cur->GetSuperClass();
-			++Distance;
+			continue;
 		}
-
-		if (Cur == Row->CharacterClass && Distance < BestDistance)
+		
+		if(Cur == Row->CharacterClass)
 		{
-			BestDistance = Distance;
-			BestRow = Row;
+			BestRow = Row;	
 		}
 	}
 
@@ -261,8 +256,7 @@ void UExtraAbilitySystemComponent::GiveInitialAbilities()
 		{
 			continue;
 		}
-		FGameplayAbilitySpecHandle Handle = GiveAbility(
-			FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
+		FGameplayAbilitySpecHandle Handle = GiveAbility(FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
 		InnateAbilityHandles.Add(Handle);
 	}
 }

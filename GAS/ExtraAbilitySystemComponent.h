@@ -21,14 +21,14 @@ public:
 	/**	GAS在服务端做的初始化操作
 	 *	- 初始化属性集 
 	 *	- 应用初始 GE 
-	 *	- 授予天生 GA
+	 *	- 授予角色级GA（天生拥有）
 	 **/ 
 	void ServerSideInit();
 
 	// UnPossess 时清理天生 GA 和 GE
 	void RemoveInnateAbilities();
 
-	// ── Skill_02 充能信息的屏幕调试（暂无 UI）─────────────────────
+	// ── Skill_02 充能信息的屏幕调试─────────────────────
 	// 层数与回充倒计时直接打印在屏幕上：不走角色 Tick，由 cooldown tag 的变化驱动刷新，
 	// 未回满时另用计时器走倒计时（回满即停，最后一条信息靠打印时长留存）。
 	virtual void BeginPlay() override;
@@ -38,11 +38,11 @@ public:
 	bool bShowSkill02ChargeDebug = true;
 
 	// ── CancelWindow 持有者登记 ──────────────────────────────────
-	// 后摇「可打断窗口」开启期间，持有者把自己登记在这里；任何 GA 在 CommitAbility 时
-	// 查询此句柄，命中且非自身即取消它（窗口内该 GA 视为已取消）。
-	// 同一时刻只可能有一个窗口（一个 Montage 在播），故只存单个句柄。
-	FGameplayAbilitySpecHandle GetCancelWindowHolder() const { return CancelWindowHolder; }
-	void SetCancelWindowHolder(const FGameplayAbilitySpecHandle& InHandle) { CancelWindowHolder = InHandle; }
+	// 【后摇可打断窗口】开启期间，持有者把自己登记在这里；任何 GA 在 CommitAbility 时
+	// 查询此句柄，命中且非自身即在激活GA前取消这个CancelGA
+	// 同一时刻只可能有一个Cancel窗口（一个 Montage 在播），故只存单个句柄。
+	FGameplayAbilitySpecHandle GetCancelWindowHolder() const { return CancellingGASpecHandle; }
+	void SetCancelWindowHolder(const FGameplayAbilitySpecHandle& InHandle) { CancellingGASpecHandle = InHandle; }
 
 	// 仅当登记的是 InHandle 时才清除，避免旧 GA 的延迟清理误删新持有者
 	void ClearCancelWindowHolder(const FGameplayAbilitySpecHandle& InHandle);
@@ -91,5 +91,5 @@ private:
 	TArray<FActiveGameplayEffectHandle> InnateEffectHandles;
 
 	// CancelWindow 持有者句柄；Invalid 表示当前无窗口
-	FGameplayAbilitySpecHandle CancelWindowHolder;
+	FGameplayAbilitySpecHandle CancellingGASpecHandle;
 };

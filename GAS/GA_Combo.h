@@ -44,8 +44,7 @@ protected:
 	// 覆写：按当前 Section 选择伤害 GE（未命中 map 时 fallback 到基类 DefaultDamageEffect）
 	virtual TSubclassOf<UGameplayEffect> GetDamageEffect() const override;
 
-	// 虚钩子：基类在权威端播放连段蒙太奇后调用一次，默认空实现。
-	// 派生类（UGA_ComboHeavy）在此追加注册 Montage 事件监听（末段累计 / 重击切入帧）。
+	// 基类在权威端播放连段蒙太奇后调用一次，默认空实现。
 	virtual void SetupComboMontageListeners();
 
 private:

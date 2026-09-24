@@ -68,7 +68,6 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 		//派生类可在此追加注册 Montage 额外事件监听（形态一重击：末段累计 / 重击切入帧判定）
 		SetupComboMontageListeners();
-
 	}
 
 	//处理第一次输入
