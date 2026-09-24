@@ -2,7 +2,6 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/PlayerController.h"
-#include "GameFramework/Pawn.h"
 #include "HAL/IConsoleManager.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 
@@ -56,7 +55,6 @@ UCombatCameraComponent::UCombatCameraComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = true;
-
 }
 
 void UCombatCameraComponent::BeginPlay()
@@ -65,7 +63,7 @@ void UCombatCameraComponent::BeginPlay()
 	
 	CacheCameraComponents();
 
-	// 从实际 SpringArm/Camera 读取初始值
+	// 读取初始值
 	if (CameraBoom)
 	{
 		BaseArmLength = CameraBoom->TargetArmLength;
@@ -123,9 +121,10 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		ActiveReqId = -1;
 	}
 
-	// 目标状态：有请求 → 逐项按「是否修改」门控取值；无请求 → 全部淡出回基准值。
-	// 未勾选「是否修改」的项不是「回归基准」，而是「本镜头不干预」：目标取当前值，等效于冻结不动。
-	// 相机位置偏移只有 Y / Z 两个分量，X 恒为 0。
+	//——————Montage中请求的CombatCamera处理————————
+	// Tick判断目标状态：有请求 → 逐项按「是否修改的门控」取对应值；无请求 → 全部淡出回基准值。
+	
+	//默认值hi
 	FVector TargetLoc = FVector::ZeroVector;
 	FRotator TargetArmRot = FRotator::ZeroRotator;
 	float TargetArm = BaseArmLength;
@@ -134,7 +133,6 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	if (ActiveReq)
 	{
-		// X 分量无门控，留在基准值上（恒 0）
 		TargetLoc.Y = ActiveReq->bModifyCameraOffsetY ? ActiveReq->CameraOffsetY : CurrentLocationOffset.Y;
 		TargetLoc.Z = ActiveReq->bModifyCameraOffsetZ ? ActiveReq->CameraOffsetZ : CurrentLocationOffset.Z;
 		TargetArmRot = ActiveReq->bModifyArmRotation ? ActiveReq->ArmRotation : CurrentArmRotationOffset;
@@ -148,7 +146,7 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			BlendTime = FMath::Max(BlendTime, PrevActiveBlendOutTime);
 		}
 	}
-
+	
 	// 暂停（PIE pause）+ 调试覆盖时，世界时间冻结、DeltaTime 为 0，插值会原地不动。
 	// 这种情况下直接 snap 到目标，命令一改相机一帧到位，便于逐帧修改相机参数。
 	const bool bPaused = GetWorld() && GetWorld()->IsPaused();
@@ -159,6 +157,7 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		CurrentArmLength = TargetArm;
 		CurrentFOV = TargetFOV;
 	}
+	//根据BlendTime确定1插值速度并更新当前镜头参数
 	else
 	{
 		// FInterpTo 用「1/时间」作为速度，BlendTime 越小趋近越快。NewValue = Current + (Target - Current) * (1 - e^(-InterpSpeed * DeltaTime))
@@ -172,7 +171,7 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		CurrentArmLength = FMath::FInterpTo(CurrentArmLength, TargetArm, DeltaTime, InterpSpeed);
 		CurrentFOV = FMath::FInterpTo(CurrentFOV, TargetFOV, DeltaTime, InterpSpeed);
 	}
-
+	
 	FollowCamera->SetRelativeLocation(CurrentLocationOffset);
 	FollowCamera->SetFieldOfView(CurrentFOV);
 
@@ -184,19 +183,21 @@ void UCombatCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	bManagingArmLength = (ActiveReq != nullptr)
 		|| (FMath::Abs(CurrentArmLength - BaseArmLength) > 1.f);
 	
+	//接管
 	if (bManagingArmLength)
 	{
 		CameraBoom->TargetArmLength = CurrentArmLength;
 	}
+	//不接管
 	else
 	{
-		// 不接管时臂长完全归 Zoom：基准跟着它走（而不是停在 BeginPlay 缓存的那个值），
-		// 这样战斗结束后回到的是玩家自己调好的距离，CurrentArmLength 也直接对齐、避免追不上。
+		// 不接管时臂长时刻更新当前基准值，而不是只依赖最开始初始化一次的值
+		// 这样镜头结束后回到的是实时玩家进入Req时的长度
 		BaseArmLength = CameraBoom->TargetArmLength;
 		CurrentArmLength = BaseArmLength;
 	}
 
-	// 记下本帧生效的请求，供下一帧判断「是不是刚发生镜头切换」并取它的 BlendOutTime
+	// 记下本帧生效的请求，供下一帧判断「是不是刚发生镜头切换」并取它的 BlendOutTime来判定是用哪个BlendTime
 	PrevActiveRequestId = ActiveReq ? ActiveReqId : INDEX_NONE;
 	PrevActiveBlendOutTime = ActiveReq ? ActiveReq->BlendOutTime : 0.f;
 }
@@ -254,7 +255,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 	const bool bWantHijack = (ActiveReq != nullptr)
 		&& (ActiveReq->bUseCharacterFacingBasis || ActiveReq->bLockLookInput);
 
-	// 臂旋转偏移没归零前必须一直握着臂的写入权，否则偏移会被 bUsePawnControlRotation 顶掉
+	// 臂旋转偏移没达到目标值之前需要一直保持被接管状态，否则偏移会被 bUsePawnControlRotation 顶掉
 	const bool bArmOffsetHeld = IsArmOffsetHeld();
 
 	//接管已经结束，重置Id
@@ -265,10 +266,10 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 			EndRotationHijack();
 		}
 	}
-	//接管
+	//一个带接管性质的镜头入栈
 	else if (HijackRequestId != ActiveReqId)
 	{
-		// 接管来源换了（更高优先级的镜头接管，或首个接管镜头进入）→ 重起过渡
+		//（更高优先级的镜头接管，或首个接管镜头进入）→ 重起过渡
 		BeginRotationHijack(*ActiveReq, ActiveReqId);
 	}
 
@@ -290,10 +291,10 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 				Target = (Target + (PC->GetControlRotation() - HijackEnterControlRotation).GetNormalized()).GetNormalized();
 			}
 		}
-
+		
+		// 已就位：目标随角色逐帧变化，用平滑跟随
 		if (HijackPhase == EHijackPhase::Holding)
 		{
-			// 已就位：目标随角色逐帧变化，用平滑跟随
 			// 起点取「上次写出去的值」而不是组件旋转，否则角色转身角度也会参与跟随位置计算
 			const FRotator CurrentBoom = GetLastBoomBaseRotation();
 			const float FollowSpeed = (HijackBlendTime > KINDA_SMALL_NUMBER) ? (1.f / HijackBlendTime) : 10.f;
@@ -315,14 +316,16 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 			}
 		}
 	}
+	//不接管时，可以叠加玩家当前的look输入，具体叠加方法为直接将相机Base值取为当前朝向
 	else
 	{
-		// 基础朝向先取玩家视角：这样臂旋转偏移能叠在它上面，而玩家 look 依然生效
+		// 基础朝向先取玩家视角：这样臂旋转偏移时基于它再偏移
 		BoomBase = GetOwningPlayerController()
 			? GetOwningPlayerController()->GetControlRotation()
 			: CameraBoom->GetComponentRotation();
 	}
 
+	//接管状态下不允许玩家输入，直接叠加
 	if (bWantHijack || bArmOffsetHeld)
 	{
 		LastBoomWorldRotation = (BoomBase + CurrentArmRotationOffset).GetNormalized();
@@ -330,6 +333,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 		CameraBoom->SetWorldRotation(LastBoomWorldRotation);
 		bBoomOwned = true;
 	}
+	//不再接管
 	else
 	{
 		if (bBoomOwned)
@@ -359,6 +363,7 @@ void UCombatCameraComponent::UpdateBoomRotation(float DeltaTime, const FCombatCa
 
 void UCombatCameraComponent::BeginRotationHijack(const FCombatCameraRequest& Request, int32 RequestId)
 {
+	//开始接管，Id改为接管镜头Id用来识别镜头切换
 	HijackRequestId = RequestId;
 	HijackPhase = EHijackPhase::Blending;
 	HijackElapsed = 0.f;

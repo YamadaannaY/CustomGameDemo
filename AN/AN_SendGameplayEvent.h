@@ -35,7 +35,7 @@ protected:
 
 	//EventTag 是否允许在编辑器里改：只有基类自身（通用用法）需要；
 	//特化子类一律由 GetEventTag 硬编码提供，什么都不用做。
-	//必须是 UFUNCTION：EditCondition 的函数形式按反射查找（返回类型须为 bool）。
+	//UFUNCTION：EditCondition 的函数形式按反射查找（返回类型须为 bool）。
 	UFUNCTION()
 	bool CanEditEventTag() const;
 
