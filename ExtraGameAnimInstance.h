@@ -75,7 +75,13 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
 	EFootPlant PendingStopFoot = EFootPlant::None;
 
-	// 松开移动输入时请求停步，开始锁速度并放开进入停步权限，重置停步相关条件变量
+	// 停步请求超时（秒）：等 FootPlant 标记的等待上限。
+	// 标记漏配、ABP 未进停步状态等异常情况下靠它强制放行，
+	// 否则停步请求会一直挂着（移动组件持续用停步刹车、动画侧速度也一直冻结）
+	UPROPERTY(EditDefaultsOnly, Category="Locomotion|Stop", meta=(ClampMin="0.1"))
+	float StopRequestTimeout = 1.0f;
+
+	// 松开移动输入时请求停步，放开进入停步权限并重置停步相关条件变量
 	void RequestStop();
 
 	// 清除停步请求，重置时使用（新移动输入 / 跳跃 / 进入 Stop 状态后）
@@ -151,7 +157,13 @@ public:
 	float GetAnimCurveClamped(const FName& Name, float Bias, float ClampMin,float ClampMax) const;
 private:
 	FVector CacheVelocity = FVector::ZeroVector;
-	
+
+	// 本次停步请求的起始时刻，配合 StopRequestTimeout 做超时兜底
+	float StopRequestTime = 0.f;
+
+	// 停步请求的唯一写入口：同步更新动画侧标记与移动组件的停步刹车开关
+	void SetStopRequest(bool bRequested);
+
 	float Acceleration =0 ;
 
 	bool bWalkMode = false;

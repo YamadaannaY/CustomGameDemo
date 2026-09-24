@@ -5,6 +5,7 @@
 #include "EnhancedInputComponent.h"
 #include "ExtractGameCharacter.h"
 #include "ExtraGameAnimInstance.h"
+#include "ExtraGameMovementComponent.h"
 #include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/Camera/UCombatCameraComponent.h"
@@ -47,6 +48,13 @@ AActor* AExtraPlayerCharacter::GetLockTarget() const
 void AExtraPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 三档速度是移动曲线横轴（0停/1走/2跑/3冲刺）的锚点，统一从这里同步给移动组件，
+	// 避免角色与组件各存一份、改了一处忘了另一处
+	if (UExtraGameMovementComponent* MoveComp = Cast<UExtraGameMovementComponent>(GetCharacterMovement()))
+	{
+		MoveComp->SetGaitSpeeds(WalkSpeed, RunSpeed, SprintSpeed);
+	}
 }
 
 void AExtraPlayerCharacter::Tick(float DeltaTime)
