@@ -31,9 +31,6 @@ public:
 	//属性值变化后回调调用，计算并更新Percent，更新Text
 	void SetValue(float NewValue,float NewMaxValue);
 
-	//运行时动态修改进度条填充颜色
-	void SetFillColor(FLinearColor NewColor);
-
 	//设置护盾进度条填充颜色
 	void SetShieldFillColor(FLinearColor NewColor);
 private:
@@ -51,12 +48,6 @@ private:
 
 	// 护盾条缓存值（用于当 MaxHealth 变化时与 ShieldValueChanged 配合刷新）
 	float CacheShieldValue = 0.f;
-
-	UPROPERTY(EditAnywhere,Category="Visual")
-	FLinearColor BarColor = FLinearColor::White;
-
-	UPROPERTY(EditAnywhere,Category="Visual")
-	FSlateFontInfo ValueTextFont;
 
 	UPROPERTY(EditAnywhere,Category="Visual")
 	bool bValueTextVisible=true;
