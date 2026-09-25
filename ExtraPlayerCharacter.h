@@ -203,6 +203,10 @@ private:
 	friend class UGA_Evade;
 
 	void CalculateTargetDelta(float ForwardInput,float RightInput);
+
+	// 当前朝向 → 目标朝向（TargetYaw）的最短角差（度），左负右正。
+	// 由 TargetYaw 派生而不是缓存，避免「角色已经转掉的角度」留在旧差值里
+	float GetTargetDelta() const;
 	
 	void HandleCameraZoomInput(const FInputActionValue& InputActionValue);
 	void ChangeWalkMode(const FInputActionValue& InputActionValue);
@@ -242,7 +246,9 @@ private:
 
 	bool bHasMoveInput=false;
 
-	float TargetDelta=0.0f;
+	// 目标朝向的世界 Yaw：由最后一次有效移动输入方向算出，与角色当前朝向无关。
+	// 存绝对方向而不是相对角差，是为了让转身/急停的目标不受按下到松手期间CMC转过的角度的影响
+	float TargetYaw = 0.f;
 	
 	float MoveInputStartTime = 0.f;
 

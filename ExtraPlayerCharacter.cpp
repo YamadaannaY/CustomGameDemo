@@ -207,7 +207,7 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		ForwardDirectionInput = InputVal.Y;
 		RightDirectionInput = InputVal.X;
 
-		// 每帧用「当前朝向 vs 当前输入方向」重算 TargetDelta，供松手瞬间判断急停(QuickStop)还是转身(Turn) montage。
+		// 每帧用「当前输入方向」更新目标朝向，供松手瞬间判断急停(QuickStop)还是转身(Turn) montage。
 		CalculateTargetDelta(ForwardDirectionInput, RightDirectionInput);
 
 		//EAxis中X为前Y为右Z为上，是世界坐标轴
@@ -273,6 +273,7 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	// 轻触判定：输入持续时间 < 0.2s
 	if (LastMoveInputDuration > 0.f && LastMoveInputDuration < 0.2f)
 	{
+		const float TargetDelta = GetTargetDelta();
 		const float AbsTargetDelta = FMath::Abs(TargetDelta);
 
 		if (AbsTargetDelta < TurnSharpAngel)
@@ -385,19 +386,18 @@ void AExtraPlayerCharacter::CalculateTargetDelta(float ForwardInput,float RightI
 	FVector DesiredDirection = (ForwardVector * ForwardInput) + (RightVector * RightInput);
 	if (DesiredDirection.IsNearlyZero())
 	{
-		// 无明确输入方向则保留上一次的 TargetDelta
+		// 无明确输入方向则保留上一次的目标朝向
 		return;
 	}
-	
-	DesiredDirection.Normalize();
 
-	FRotator ActorRot = GetActorRotation();
-	FVector CurrentForward = ActorRot.Vector();
+	// 只记录目标方向的绝对 Yaw。不在这里和角色当前朝向做差：
+	// 差值会随角色转动而变旧，松手时用它重建目标就会把「按键期间已经转掉的角度」重复计入
+	TargetYaw = DesiredDirection.Rotation().Yaw;
+}
 
-	float DesiredYaw = DesiredDirection.Rotation().Yaw;
-	float CurrentYaw = CurrentForward.Rotation().Yaw;
-
-	TargetDelta = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredYaw);
+float AExtraPlayerCharacter::GetTargetDelta() const
+{
+	return FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, TargetYaw);
 }
 
 void AExtraPlayerCharacter::LerpArmLength(float Goal)
@@ -433,15 +433,16 @@ void AExtraPlayerCharacter::TickArmLengthLerp(float Goal)
 
 void AExtraPlayerCharacter::PlayQuickStopMontage()
 {
-	UAnimMontage* MontageToPlay = (TargetDelta <= 0.f) ? QuickLeftStopMontage : QuickRightStopMontage;
+	UAnimMontage* MontageToPlay = (GetTargetDelta() <= 0.f) ? QuickLeftStopMontage : QuickRightStopMontage;
 	if (!MontageToPlay)
 	{
 		return;
 	}
 
-	// 松手瞬间 TargetDelta 仍是「当前朝向 → 触发方向」的剩余转角。用MW旋转让急停动画精确落在触发朝向，避免角色停在半转的中间朝向。
+	// 目标直接用缓存的绝对朝向 TargetYaw，而不是「当前朝向 + 剩余角差」：
+	// 后者会把角色在按键期间已经转掉的角度重复计入，急停会停在偏过的朝向
 	const FRotator CurrentRot = GetActorRotation();
-	const FRotator TargetRot(CurrentRot.Pitch, CurrentRot.Yaw + TargetDelta, CurrentRot.Roll);
+	const FRotator TargetRot(CurrentRot.Pitch, TargetYaw, CurrentRot.Roll);
 
 	if (MotionWarpingComp)
 	{
@@ -469,10 +470,9 @@ void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
 	{
 		return;
 	}
-
-	const float TurnYawOffset = bTurnLeft ? -TargetDelta : TargetDelta;
+	
 	const FRotator CurrentRot = GetActorRotation();
-	const FRotator TargetRot(CurrentRot.Pitch, CurrentRot.Yaw + TurnYawOffset, CurrentRot.Roll);
+	const FRotator TargetRot(CurrentRot.Pitch, TargetYaw, CurrentRot.Roll);
 
 	if (MotionWarpingComp)
 	{
