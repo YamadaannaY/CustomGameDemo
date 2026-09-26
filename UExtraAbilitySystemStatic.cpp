@@ -53,6 +53,7 @@ UE_DEFINE_GAMEPLAY_TAG(AirAttack_SwordQi, "ability.airattack.swordqi");
 UE_DEFINE_GAMEPLAY_TAG(Ability_AttackPro_Phase2, "ability.AttackPro.Phase2");
 UE_DEFINE_GAMEPLAY_TAG(State_ProJuheCount, "State.ProJuheCount");
 UE_DEFINE_GAMEPLAY_TAG(State_ProReady, "State.ProReady");
+UE_DEFINE_GAMEPLAY_TAG(State_AirAttackStage, "State.AirAttackStage");
 
 // CancelWindow：注意 "ability.cancelwindow.*" 不是 "ability.cancel" 的子级（同前缀但不同分支），
 // 事件按 tag 层级向上广播，因此不会误触发移动打断的监听。
@@ -197,6 +198,11 @@ FGameplayTag UUExtraAbilitySystemStatic::GetProReadyTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetAttackProAbilityTag()
 {
 	return Ability_AttackPro_Phase2;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackStageTag()
+{
+	return State_AirAttackStage;
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetComboChangedEventTag()

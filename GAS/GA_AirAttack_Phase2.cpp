@@ -68,13 +68,39 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		return;
 	}
 
-	// 段数只活在本次激活里：每次激活都从动画1开始（不缓存）
+	// 先清掉本轮激活的内存状态（进度不在这里，见下）
 	StageIndex = 0;
 	bComboWindowOpen = false;
 	bTransitioning = false;
 	bInLanding = false;
 	bHandingOff = false;
 	CurrentPlayingMontage = nullptr;
+
+	// 段数存在 ASC 的 tag count 上，而不是激活内存：腾空中被别的 GA（后撤居合等）打断，
+	// 进度也要留住，下次触发接着下一段打；落地时清零。
+	// 0 = 尚未打出，1 = 段1 已打出，2 = 段1+段2 都已打出，3 = 三段打满。
+	int32 PlayedStageCount = 0;
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		PlayedStageCount = ASC->GetTagCount(UUExtraAbilitySystemStatic::GetAirAttackStageTag());
+	}
+
+	// 本次腾空已打满三段：不再响应
+	if (PlayedStageCount >= MaxAirAttackStages)
+	{
+		K2_EndAbility();
+		return;
+	}
+
+	// 前两段都已打出：这次按下的就是第三段，直接交接给下砸，不重播前两段
+	if (PlayedStageCount >= MaxAirAttackStages - 1)
+	{
+		HandoffToDiveAttack();
+		return;
+	}
+
+	// 从本次腾空尚未打出的那一段接着打
+	StageIndex = PlayedStageCount;
 
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
@@ -98,7 +124,8 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		// 剑气：Montage 挥刀帧的 AN 触发一次，每收到一次生成一道剑气
 		SetupSwordSlashListener();
 
-		PlayStage(0);
+		// 从本次腾空尚未打出的那一段接着打
+		PlayStage(PlayedStageCount);
 	}
 
 	// 落地即结束：委托监听为主，轮询兜底（激活瞬间已贴地等边界情况）
@@ -133,6 +160,12 @@ void UGA_AirAttack_Phase2::PlayStage(int32 InIndex)
 		return;
 	}
 	
+	// 记进度：本次腾空已打出到第 InIndex+1 段（存 ASC 上，被打断也保留，落地清零）
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetAirAttackStageTag(), InIndex + 1);
+	}
+
 	//重置窗口
 	bComboWindowOpen = false;
 	bTransitioning = false;
@@ -240,6 +273,12 @@ void UGA_AirAttack_Phase2::HandoffToDiveAttack()
 		return;
 	}
 	bHandingOff = true;
+
+	// 第三段（下砸）交给 GA_AirAttack 打出，进度直接记满：本次腾空的空中普攻到此为止
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetAirAttackStageTag(), MaxAirAttackStages);
+	}
 
 	// 先结束自身：BlockAbilitiesWithTag 对 airattack 的封锁随结束一起释放，
 	// 常驻的 GA_AirAttack 这时才可能被激活

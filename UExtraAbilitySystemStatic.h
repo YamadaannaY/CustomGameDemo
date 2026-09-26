@@ -53,6 +53,10 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_AttackPro_Phase2);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ProJuheCount);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ProReady);
 
+// 空中普攻进度：tag count 记「本次腾空已打出的段数」。存在 ASC 上而非 GA 内存，
+// 是为了让中途插入的 GA（后撤居合等）打断后仍能接着下一段打；落地时清零
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_AirAttackStage);
+
 // 空中攻击斩出剑气：Montage 的挥刀帧放 AN 触发一次，GA 每收到一次生成一道剑气
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(AirAttack_SwordQi);
 
@@ -129,6 +133,9 @@ public:
 	static FGameplayTag GetProJuheCountTag();      // "State.ProJuheCount"   进度计数（tag count）
 	static FGameplayTag GetProReadyTag();          // "State.ProReady"       打满三段，可触发
 	static FGameplayTag GetAttackProAbilityTag();  // "ability.AttackPro.Phase2"
+
+	// 空中普攻进度（tag count）：本次腾空已打出的段数，落地清零
+	static FGameplayTag GetAirAttackStageTag();    // "State.AirAttackStage"
 
 	// 连击 / 闪避内部事件 Tag
 	static FGameplayTag GetComboChangedEventTag();      // "ability.combo.change"

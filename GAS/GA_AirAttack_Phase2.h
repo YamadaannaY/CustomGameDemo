@@ -11,9 +11,16 @@ class AExtraSwordQi;
 class UAbilitySystemComponent;
 
 /**
- * 二阶段空中连打：本 GA 只负责前两段（Montage1 → Montage2）。
+ * 二阶段空中连打：一段腾空内最多打出三段（段1 → 段2 → 第三段下砸，交给 GA_AirAttack）。
  *
- * 在第 2 段的可衔接窗口内再按一次输入时，本 GA 主动结束、把第三段交接给 GA_AirAttack
+ * 段进度记在 ASC 的 State.AirAttackStage（tag count）上，不是激活内存：
+ * 腾空中被别的 GA（后撤居合等）打断，下次再按空中普攻会接着下一段打，而不是从段1 重来。
+ * 落地时清零，所以「最多三段」是按单次腾空算的。
+ *
+ * 激活时按已打出的段数决定行为：0/1 → 从对应段开始打；2 → 直接交接下砸（不重播前两段）；
+ * 3 → 已打满，不再响应。
+ *
+ * 第 2 段的可衔接窗口内再按一次输入时，本 GA 主动结束、把第三段交接给 GA_AirAttack
  * （下砸：起手 → 循环 → 落地）。两者共用 ability.basicattack.airattack，
  * 本 GA 的 BlockAbilitiesWithTag 保证交接完成前 GA_AirAttack 不会被激活。
  *
@@ -75,6 +82,10 @@ private:
 
 	// 交接段号：推进到第 2 段（索引 1）后再收到输入，即交接给 GA_AirAttack 打第三段
 	static constexpr int32 HandoffStageIndex = 1;
+
+	// 空中普攻总段数：段1 + 段2 + 第三段（下砸，交接给 GA_AirAttack）。
+	// 本次腾空打满这么多段后，再按空中普攻不再响应。
+	static constexpr int32 MaxAirAttackStages = 3;
 
 	// 当前是否处于可衔接窗口内（由 AN_AttackComboWindow 的开/关事件切换）
 	bool bComboWindowOpen = false;
