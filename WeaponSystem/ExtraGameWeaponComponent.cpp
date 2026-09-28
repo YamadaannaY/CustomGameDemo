@@ -131,6 +131,14 @@ const FExtraGameWeaponEntry* UExtraGameWeaponComponent::ResolveWeaponEntry(FGame
 
 bool UExtraGameWeaponComponent::SetWeaponAttachSocket(FGameplayTag WeaponTag, FName SocketName)
 {
+	// 武器组隔绝：非当前组的武器不允许重挂 / 显示
+	if (!IsWeaponInCurrentGroup(WeaponTag))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] SetWeaponAttachSocket: '%s' is not in current group '%s', ignored."),
+			*WeaponTag.ToString(), *CurrentGroupTag.ToString());
+		return false;
+	}
+
 	const FExtraGameWeaponEntry* Entry = ResolveWeaponEntry(WeaponTag);
 	if (!Entry)
 	{
@@ -377,6 +385,15 @@ void UExtraGameWeaponComponent::ShowWeaponEntry(FGameplayTag WeaponTag)
 		return;
 	}
 
+	// 武器组隔绝：动画里跨组挂的 Show Notify 在这里静默失效，
+	// 否则旧组那几把「只隐藏、未销毁」的 Mesh 会被重新显示出来
+	if (!IsWeaponInCurrentGroup(WeaponTag))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] ShowWeaponEntry: '%s' is not in current group '%s', ignored."),
+			*WeaponTag.ToString(), *CurrentGroupTag.ToString());
+		return;
+	}
+
 	HiddenWeaponEntries.Remove(WeaponTag);
 
 	RequestWeaponFade(WeaponTag, true);
@@ -400,6 +417,14 @@ void UExtraGameWeaponComponent::HideWeaponEntry(FGameplayTag WeaponTag)
 		return;
 	}
 
+	// 武器组隔绝：只记录当前组武器的隐藏状态，避免跨组 tag 混进 HiddenWeaponEntries
+	if (!IsWeaponInCurrentGroup(WeaponTag))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponComponent] HideWeaponEntry: '%s' is not in current group '%s', ignored."),
+			*WeaponTag.ToString(), *CurrentGroupTag.ToString());
+		return;
+	}
+
 	HiddenWeaponEntries.Add(WeaponTag);
 
 	RequestWeaponFade(WeaponTag, false);
@@ -412,8 +437,11 @@ bool UExtraGameWeaponComponent::IsWeaponEntryVisible(FGameplayTag WeaponTag) con
 		return false;
 	}
 
-	// 可见条件：整体可见 && 未被手动隐藏 && Mesh 组件存在
-	return bWeaponVisible && !HiddenWeaponEntries.Contains(WeaponTag) && SpawnedWeaponMeshes.Contains(WeaponTag);
+	// 可见条件：属于当前组 && 整体可见 && 未被手动隐藏 && Mesh 组件存在
+	return IsWeaponInCurrentGroup(WeaponTag)
+		&& bWeaponVisible
+		&& !HiddenWeaponEntries.Contains(WeaponTag)
+		&& SpawnedWeaponMeshes.Contains(WeaponTag);
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -432,6 +460,17 @@ const FExtraGameWeaponGroup* UExtraGameWeaponComponent::GetWeaponGroupByTag(FGam
 		return WeaponDataAsset->FindGroup(GroupTag);
 	}
 	return nullptr;
+}
+
+bool UExtraGameWeaponComponent::IsWeaponInCurrentGroup(FGameplayTag WeaponTag) const
+{
+	if (!WeaponTag.IsValid())
+	{
+		return false;
+	}
+
+	const FExtraGameWeaponGroup* Group = GetCurrentWeaponGroup();
+	return Group && Group->FindWeaponEntry(WeaponTag) != nullptr;
 }
 
 bool UExtraGameWeaponComponent::GetCurrentWeaponGroupBP(FExtraGameWeaponGroup& OutGroup) const
@@ -956,6 +995,12 @@ void UExtraGameWeaponComponent::BeginWeaponTrails()
 	{
 		UParticleSystemComponent* TrailComp = Pair.Value;
 		if (!TrailComp)
+		{
+			continue;
+		}
+
+		// 武器组隔绝：只为当前组的武器起拖尾
+		if (!IsWeaponInCurrentGroup(Pair.Key))
 		{
 			continue;
 		}

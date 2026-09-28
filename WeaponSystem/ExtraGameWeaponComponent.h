@@ -117,6 +117,10 @@ public:
 	/** 通过 GroupTag 获取武器组数据 */
 	const FExtraGameWeaponGroup* GetWeaponGroupByTag(FGameplayTag GroupTag) const;
 
+	/** WeaponTag 是否属于当前装备的武器组，用于做武器组之间的操作隔绝，所有显示操作，生成操作都先做判断 **/
+	UFUNCTION(BlueprintPure, Category = "Weapon|Query")
+	bool IsWeaponInCurrentGroup(FGameplayTag WeaponTag) const;
+
 	/** 蓝图：获取当前武器组数据，返回是否有效 */
 	UFUNCTION(BlueprintPure, Category = "Weapon|Query")
 	bool GetCurrentWeaponGroupBP(FExtraGameWeaponGroup& OutGroup) const;
