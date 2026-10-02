@@ -87,7 +87,7 @@ private:
 	// 本帧第二层插值速率（deg/s）= 速率曲线(映射速度) × 相机转速放大
 	float CalculateGroundedRotationRate() const;
 	
-	// 本帧相机 yaw 变化率（deg/s），无 Controller（模拟代理等）时为 0
+	// 本帧相机 yaw 变化率（deg/s）
 	float GetCameraYawRate() const { return CachedCameraYawRate; }
 
 	float GaitWalkSpeed = 250.f;

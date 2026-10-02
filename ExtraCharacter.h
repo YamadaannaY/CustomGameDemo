@@ -84,7 +84,7 @@ protected:
 
 	//判断距离是否隐藏组件Timer的更新间隔
 	UPROPERTY(EditDefaultsOnly, Category="UI")
-	float HeadStatGaugeVisibilityUpdateGap = 3.f;
+	float HeadStatGaugeVisibilityUpdateGap = 0.02f;
 
 	//血条朝向相机的更新间隔
 	UPROPERTY(EditDefaultsOnly, Category="UI")
@@ -114,9 +114,6 @@ protected:
 	
 	
 private:
-	UPROPERTY(ReplicatedUsing="OnRep_TeamID")
+	UPROPERTY(Replicated)
 	FGenericTeamId TeamID;
-	
-	UFUNCTION()
-	virtual void OnRep_TeamID();
 };

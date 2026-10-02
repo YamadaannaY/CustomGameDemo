@@ -53,6 +53,9 @@ public:
 	// 本次按下是否已长按达到重击判定阈值
 	FORCEINLINE bool IsLongPressed() const { return bLongPressed; }
 
+	// 重击长按判定阈值（秒）：供输入调试等处读取，避免与重击判定口径漂移
+	FORCEINLINE float GetHeavyAttackHoldTime() const { return HeavyAttackHoldTime; }
+
 	// 技能键（E）是否仍被按住：长按到居合检测帧才允许交接进居合
 	FORCEINLINE bool IsHoldingSkill() const { return bHoldingSkill; }
 
@@ -151,16 +154,15 @@ private:
 	// 长按判定阈值（秒），超过此时间为重击，低于为轻击
 	UPROPERTY(EditDefaultsOnly, Category="Input|Weapon", meta=(ClampMin="0.1"))
 	float HeavyAttackHoldTime = 0.25f;
-
-	// -- MotionWarping 组件，用于转身动画的朝向匹配 --
+	
 	UPROPERTY(VisibleDefaultsOnly, Category="MotionWarping")
 	UMotionWarpingComponent* MotionWarpingComp;
 
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
-	UAnimMontage* QuickLeftStopMontage;
+	UAnimMontage* LeftStopRunMontage;
 
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
-	UAnimMontage* QuickRightStopMontage;
+	UAnimMontage* RightStopRunMontage;
 
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Turn")
 	UAnimMontage* TurnLeft90Montage;
@@ -168,14 +170,10 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Turn")
 	UAnimMontage* TurnRight90Montage;
 	
-	//不选择Stop而是Turn的角度阈值
+	//不选择Stop而是原地Turn的角度阈值
 	UPROPERTY(EditDefaultsOnly,Category="Animation | Turn")
 	float TurnSharpAngel=110.f;
 	
-	// 急停时 Capsule 旋转到目标朝向的插值时间（秒）
-	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
-	float QuickStopRotationLerpTime = 0.15f;
-
 	//弹簧臂最小长度
 	UPROPERTY(EditDefaultsOnly,Category="View|Zoom")
 	float MinArmLength=20.f;
@@ -205,7 +203,6 @@ private:
 	void CalculateTargetDelta(float ForwardInput,float RightInput);
 
 	// 当前朝向 → 目标朝向（TargetYaw）的最短角差（度），左负右正。
-	// 由 TargetYaw 派生而不是缓存，避免「角色已经转掉的角度」留在旧差值里
 	float GetTargetDelta() const;
 	
 	void HandleCameraZoomInput(const FInputActionValue& InputActionValue);
@@ -269,10 +266,10 @@ private:
 	// 本次按下是否已长按达到重击阈值（区分「长按重击」与「高频点按轻击」）
 	bool bLongPressed = false;
 
-	// 技能键（E）按住状态（长按到居合检测帧才进居合）
+	// Skill键按住状态（长按到居合检测帧才进居合）
 	bool bHoldingSkill = false;
 
-	// Skill01 释放后的下一次普攻强化待消费标记（跳末段 + 末段额外充能）
+	// Skill01 释放后的下一次普攻强化待消费标记（跳第三段 + 额外充能）
 	bool bSkill01ComboBoost = false;
 
 	// 重击长按阈值定时器

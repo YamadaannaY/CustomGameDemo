@@ -24,10 +24,10 @@ void UAN_AirAttackDive::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBa
 	const FVector Down = FVector::UpVector * -1.0f;
 
 	// 用俯冲角混合「前方」与「竖直向下」，得到俯冲方向
-	const float AngleRad = FMath::DegreesToRadians(DiveAngle);
+	const float AngleRad = FMath::DegreesToRadians(DiveAngle); //角度转弧度，弧度传入Cos和Sin函数
 	const FVector DiveDir = (Forward * FMath::Cos(AngleRad) + Down * FMath::Sin(AngleRad)).GetSafeNormal();
 
-	// 关键：LaunchCharacter 的 bXYOverride / bZOverride 都传 true，覆盖当前残余速度，
+	// LaunchCharacter 的 bXYOverride / bZOverride 都传 true，覆盖当前残余速度
 	Character->LaunchCharacter(DiveDir * DiveSpeed, true, true);
 }
 

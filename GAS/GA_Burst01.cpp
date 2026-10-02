@@ -55,7 +55,7 @@ void UGA_Burst01::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const
 
 	// 激活即切第二形态：整段开大 Montage 都用第二阶段武器组演出。
 	// 本 GA spec 常驻 Innate、不在武器组的 ActiveAbilityHandles 里，
-	// SwitchWeaponGroup 卸载 Phase1 组时清的是攻击技能组，不会 Clear 掉本 GA 自身。
+	// SwitchWeaponGroup 卸载 Phase1 组时清的是攻击技能组
 	SwitchToBurstForm();
 
 	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this,NAME_None,BurstMontage);
@@ -66,7 +66,7 @@ void UGA_Burst01::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const
 	MontageTask->ReadyForActivation();
 	
 	UAbilityTask_WaitGameplayEvent* WaitChangeStateTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,FGameplayTag::RequestGameplayTag("ability.Burst.changestate"));
-	WaitChangeStateTask->EventReceived.AddDynamic(this,&ThisClass::ChangeToSecondState);
+	WaitChangeStateTask->EventReceived.AddDynamic(this,&ThisClass::ClothMaterialChangeToSecondState);
 	WaitChangeStateTask->ReadyForActivation();
 }
 
@@ -91,7 +91,7 @@ void UGA_Burst01::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGam
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
-void UGA_Burst01::ChangeToSecondState(FGameplayEventData PayLoad)
+void UGA_Burst01::ClothMaterialChangeToSecondState(FGameplayEventData PayLoad)
 {
 	USkeletalMeshComponent* MeshComp = Cast<AExtraCharacter>(GetAvatarActorFromActorInfo())->GetMesh();
 	if (MeshComp)

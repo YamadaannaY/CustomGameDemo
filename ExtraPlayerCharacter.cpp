@@ -49,8 +49,7 @@ void AExtraPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 三档速度是移动曲线横轴（0停/1走/2跑/3冲刺）的锚点，统一从这里同步给移动组件，
-	// 避免角色与组件各存一份、改了一处忘了另一处
+	// 三档速度是移动曲线横轴（0停/1走/2跑/3冲刺）的锚点，统一从这里同步给移动组件
 	if (UExtraGameMovementComponent* MoveComp = Cast<UExtraGameMovementComponent>(GetCharacterMovement()))
 	{
 		MoveComp->SetGaitSpeeds(WalkSpeed, RunSpeed, SprintSpeed);
@@ -86,6 +85,9 @@ void AExtraPlayerCharacter::Tick(float DeltaTime)
 			AbilitySystemComponent->RemoveLooseGameplayTag(AirborneTag);
 			// 落地瞬间重置本次浮空的空中闪避预算（下次浮空重新从初始值开始）
 			ResetAirEvadeCharges();
+
+			// 同时清空空中普攻段数：段数只在同一次腾空内记，落地后重新从段1 打起
+			AbilitySystemComponent->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetAirAttackStageTag(), 0);
 		}
 
 		// 离开二阶段：清空ProTag,回一阶段后再进二阶段，要从头重新打满三次居合）。
@@ -260,8 +262,8 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	{
 		if (UAnimMontage* ActiveMontage = AnimInst->GetCurrentActiveMontage())
 		{
-			if (ActiveMontage != QuickLeftStopMontage &&
-				ActiveMontage != QuickRightStopMontage &&
+			if (ActiveMontage != LeftStopRunMontage &&
+				ActiveMontage != RightStopRunMontage &&
 				ActiveMontage != TurnLeft90Montage &&
 				ActiveMontage != TurnRight90Montage)
 			{
@@ -273,7 +275,8 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	// 轻触判定：输入持续时间 < 0.2s
 	if (LastMoveInputDuration > 0.f && LastMoveInputDuration < 0.2f)
 	{
-		const float TargetDelta = GetTargetDelta();
+		const float TargetDelta = 
+			GetTargetDelta();
 		const float AbsTargetDelta = FMath::Abs(TargetDelta);
 
 		if (AbsTargetDelta < TurnSharpAngel)
@@ -342,8 +345,8 @@ void AExtraPlayerCharacter::Look(const FInputActionValue& InputActionValue)
 		const float DelatTime = GetWorld()->GetDeltaSeconds();
 		const float MaxDegreesPerFrame = MaxDegreesPerSecond*DelatTime;
 
-		float DesiredYawInput = LookAxisVector.X * 0.8f;
-		float DesiredPitchInput = LookAxisVector.Y * 0.5f;
+		float DesiredYawInput = LookAxisVector.X;
+		float DesiredPitchInput = LookAxisVector.Y;
 
 		DesiredYawInput = FMath::Clamp(DesiredYawInput,-MaxDegreesPerFrame,MaxDegreesPerFrame);
 		DesiredPitchInput = FMath::Clamp(DesiredPitchInput,-MaxDegreesPerFrame,MaxDegreesPerFrame);
@@ -433,7 +436,7 @@ void AExtraPlayerCharacter::TickArmLengthLerp(float Goal)
 
 void AExtraPlayerCharacter::PlayQuickStopMontage()
 {
-	UAnimMontage* MontageToPlay = (GetTargetDelta() <= 0.f) ? QuickLeftStopMontage : QuickRightStopMontage;
+	UAnimMontage* MontageToPlay = (GetTargetDelta() <= 0.f) ? LeftStopRunMontage : RightStopRunMontage;
 	if (!MontageToPlay)
 	{
 		return;
@@ -495,8 +498,8 @@ void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
 
 void AExtraPlayerCharacter::OnStopMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 {
-	if (Montage != QuickLeftStopMontage &&
-		Montage != QuickRightStopMontage &&
+	if (Montage != LeftStopRunMontage &&
+		Montage != RightStopRunMontage &&
 		Montage != TurnLeft90Montage &&
 		Montage != TurnRight90Montage)
 	{
@@ -507,12 +510,11 @@ void AExtraPlayerCharacter::OnStopMontageEnded(UAnimMontage* Montage, bool bInte
 	{
 		AI->ClearStopRequest();
 
-		/*
 		// 清零残留速度防止停步/转身 montage 播完后角色仍滑行
 		if (UCharacterMovementComponent* CMC = GetCharacterMovement())
 		{
 			CMC->Velocity = FVector::ZeroVector;
-		}*/
+		}
 	}
 }
 
@@ -524,20 +526,16 @@ void AExtraPlayerCharacter::CancelStopMontageIfPlaying()
 		return;
 	}
 
-	// 停步 Montage（急停/转身）都带 rootmotion，输入恢复时直接打断进入跑步
+	// 停步 Montage（急停/转身）都带 RootMotion，输入恢复时直接打断进入跑步
 	UAnimMontage* ActiveMontage = AnimInst->GetCurrentActiveMontage();
-	if (ActiveMontage == QuickLeftStopMontage ||
-		ActiveMontage == QuickRightStopMontage ||
+	if (ActiveMontage == LeftStopRunMontage ||
+		ActiveMontage == RightStopRunMontage ||
 		ActiveMontage == TurnLeft90Montage ||
 		ActiveMontage == TurnRight90Montage)
 	{
 		AnimInst->Montage_StopWithBlendOut(ActiveMontage->BlendOut);
 	}
 }
-
-// ──────────────────────────────────────────────────────────────
-// 武器输入处理
-// ──────────────────────────────────────────────────────────────
 
 void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& InputActionValue)
 {
@@ -558,7 +556,7 @@ void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& Input
 		false);
 
 	// 按下即发送轻击输入。
-	// 空中按形态分派：一阶段直接打空中攻击，二阶段交给二阶段空中连打 GA，
+	// 空中按形态分派：一阶段直接打空中攻击，二阶段交给二阶段空中连段GA，
 	FGameplayTag AttackTag = UUExtraAbilitySystemStatic::GetLightAttackInputTag();
 	if (GetCharacterMovement() && GetCharacterMovement()->IsFalling()
 		&& !AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetPhase2StateTag()))
@@ -573,15 +571,13 @@ void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& Inp
 {
 	bHoldingAttack = false;
 	bLongPressed = false;
-
-	// 若未达阈值即松开（点按），取消定时器：本次判定为轻击，不触发重击
+	
 	if (GetWorldTimerManager().IsTimerActive(HeavyAttackHoldTimerHandle))
 	{
 		GetWorldTimerManager().ClearTimer(HeavyAttackHoldTimerHandle);
 	}
 
 	// 松手广播：二阶段蓄力重击 GA 监听此事件，收到即停当前段播结束段打出攻击
-	// （无订阅者时无副作用；一阶段重击 GA 不监听）
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 		this, UUExtraAbilitySystemStatic::GetHeavyAttackReleaseInputTag(), FGameplayEventData());
 }
@@ -595,11 +591,10 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 		return;
 	}
 
-	// 二阶段：纯长按达阈值即触发重击（无需连段打满），是否真正激活由 GA 的 State.Phase2 门控裁决
+	// 二阶段：纯长按达阈值即触发重击，是否真正激活由 GA 的 State.Phase2 门控裁决
 	if (AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetPhase2StateTag()))
 	{
-		// 攻击强化就绪时改触发 GA_AttackPro_Phase_2。必须走专属 Tag 分流：
-		// 两个 GA 若都监听 InputTag.HeavyAttack，都空闲时 ASC 会按 spec 顺序挑一个，结果是随机的
+		// 攻击强化就绪时改触发 GA_AttackPro_Phase_2。走专属 Tag 分流：
 		const bool bAttackProReady =
 			AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetProReadyTag());
 
@@ -612,7 +607,7 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 		return;
 	}
 
-	// 一阶段：需打满能量（EnergyValue 达 EnergyMaxValue）才触发重击
+	// 一阶段：需打满能量才触发重击
 	if (AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetPhase1StateTag()))
 	{
 		const float EnergyValue = AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
@@ -642,7 +637,7 @@ bool AExtraPlayerCharacter::ConsumeSkill01ComboBoost()
 
 void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionValue)
 {
-	// 按住状态：长按到技能 Montage 的居合检测帧才进居合（是否真进由 GA_Skill_02 判定）
+	// 按住状态：长按到技能 Montage 的居合检测帧有条件进入居合
 	bHoldingSkill = true;
 
 	if (AbilitySystemComponent)

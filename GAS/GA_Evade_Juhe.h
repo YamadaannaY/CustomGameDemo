@@ -83,6 +83,9 @@ protected:
 	UFUNCTION()
 	void CloseJuheForwardWindow();
 
+	// 开启（重置）前冲接续窗口计时
+	void RestartJuheForwardWindow();
+
 	// ── 空中居合：落地段（参考 GA_AirAttack_Phase2 的落地处理）──
 	// 落地事件回调
 	UFUNCTION()
@@ -178,7 +181,7 @@ private:
 	// 已进入落地段（落地只处理一次，落地动画播完才结束 GA）
 	bool bInLanding = false;
 
-	// 分界事件已触发：普攻不再接前冲
+	// 普攻接前冲的通道已关闭：分界事件到达 / 已退出居合（Dodge）/ 已进落地段，普攻一律交还正常 GA
 	bool bJuhePhaseEnded = false;
 
 	// 居合中唯一一次 Dodge 已用完

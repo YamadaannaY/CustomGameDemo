@@ -28,10 +28,20 @@ private:
 
 	UPROPERTY(meta=(BindWidget))
 	class UCountGauge* ComboGauge;
-	
+
+	//连段能量文本：显示 当前能量值/最大能量值，格式与 ValueGauge 的数值文本一致
+	UPROPERTY(meta=(BindWidget))
+	class UTextBlock* ComboValueText;
+
 	UPROPERTY()
 	UExtraAbilitySystemComponent* OwnerAbilitySystemComponent;
-	
+
+	//读取 EnergyValue / EnergyMaxValue 刷新 ComboValueText
+	void UpdateComboEnergyText();
+
+	//EnergyValue 与 EnergyMaxValue 共用的变化回调
+	void ComboEnergyChanged(const FOnAttributeChangeData& Data);
+
 	//是否允许操控Pawn
 	void SetOwningPawnInputEnabled(bool bPawnInputEnabled);
 	

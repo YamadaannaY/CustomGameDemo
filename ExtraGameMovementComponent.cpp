@@ -153,10 +153,11 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 
 void UExtraGameMovementComponent::CustomPhysicsRotation(float DeltaTime)
 {
-	// 刷新相机转速（供速率放大用）。模拟代理上拿不到 Controller，退化为 0 即不放大
+	// 相机转速更新（供速率放大用）
 	CachedCameraYawRate = 0.f;
 	if (const AController* OwnerController = CharacterOwner->GetController())
 	{
+		//模拟代理上没有Controller是
 		const float CurrentCameraYaw = OwnerController->GetControlRotation().Yaw;
 		CachedCameraYawRate = FMath::Abs(
 			FMath::FindDeltaAngleDegrees(LastCameraYaw, CurrentCameraYaw)
@@ -199,7 +200,7 @@ void UExtraGameMovementComponent::CustomPhysicsRotation(float DeltaTime)
 void UExtraGameMovementComponent::SmoothCharacterRotation(const FRotator& Target, float TargetInterpSpeed,
                                                            float ActorInterpSpeed, float DeltaTime)
 {
-	// 第一层：中间目标匀速逼近外部目标，起手/变向都不会有硬拐点
+	// 第一层：中间目标匀速逼近外部目标，起手/变向都不会有硬拐点(使用双层插值的原因，默认的OrientTo直接将加速度方向作为最终方向，没有逼近过程)
 	TargetRotation = FMath::RInterpConstantTo(TargetRotation, Target, DeltaTime, TargetInterpSpeed);
 
 	// 第二层：角色指数逼近中间目标

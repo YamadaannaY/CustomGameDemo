@@ -68,7 +68,7 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		return;
 	}
 
-	// 先清掉本轮激活的内存状态（进度不在这里，见下）
+	// 先清掉本轮激活的内存状态 
 	StageIndex = 0;
 	bComboWindowOpen = false;
 	bTransitioning = false;
@@ -160,10 +160,11 @@ void UGA_AirAttack_Phase2::PlayStage(int32 InIndex)
 		return;
 	}
 	
-	// 记进度：本次腾空已打出到第 InIndex+1 段（存 ASC 上，被打断也保留，落地清零）
+	// 记进度：本次腾空已打出到第 InIndex+1 段，下次激活直接从下一段开始播放
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetAirAttackStageTag(), InIndex + 1);
+		ASC->SetLooseGameplayTagCount
+		(UUExtraAbilitySystemStatic::GetAirAttackStageTag(), InIndex + 1);
 	}
 
 	//重置窗口
@@ -306,7 +307,6 @@ void UGA_AirAttack_Phase2::TriggerDiveHandoff()
 
 void UGA_AirAttack_Phase2::SetupSwordSlashListener()
 {
-	// OnlyMatchExact=true：只接住 AN 发的这一个精确 tag，不误接 ability.airattack.* 下的其他事件
 	UAbilityTask_WaitGameplayEvent* WaitSwordQiTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 		this, UUExtraAbilitySystemStatic::GetAirAttackSwordQiTag(), nullptr, false, true);
 	WaitSwordQiTask->EventReceived.AddDynamic(this, &ThisClass::HandleSwordQiRequest);

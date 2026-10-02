@@ -77,9 +77,9 @@ public:
 
 	// 停步请求超时（秒）：等 FootPlant 标记的等待上限。
 	// 标记漏配、ABP 未进停步状态等异常情况下靠它强制放行，
-	// 否则停步请求会一直挂着（移动组件持续用停步刹车、动画侧速度也一直冻结）
+	// 否则停步请求会一直挂着无法退出Jogging
 	UPROPERTY(EditDefaultsOnly, Category="Locomotion|Stop", meta=(ClampMin="0.1"))
-	float StopRequestTimeout = 1.0f;
+	float StopRequestTimeout = 0.5f;
 
 	// 松开移动输入时请求停步，放开进入停步权限并重置停步相关条件变量
 	void RequestStop();

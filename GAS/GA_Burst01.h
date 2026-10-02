@@ -21,7 +21,7 @@ public:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 	
 	UFUNCTION()
-	void ChangeToSecondState(FGameplayEventData PayLoad);
+	void ClothMaterialChangeToSecondState(FGameplayEventData PayLoad);
 private:
 	UPROPERTY(EditDefaultsOnly,Category="Montage")
 	UAnimMontage* BurstMontage;

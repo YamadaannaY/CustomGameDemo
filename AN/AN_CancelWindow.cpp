@@ -7,7 +7,7 @@
 namespace
 {
 	// 开/关窗事件只做通知；由 UExtraGameplayAbility 的窗口持有逻辑监听
-	void SendCancelWindowEvent(USkeletalMeshComponent* MeshComp, const FGameplayTag& EventTag)
+	void SendCancelWindowEvent(const USkeletalMeshComponent* MeshComp, const FGameplayTag& EventTag)
 	{
 		if (!MeshComp)
 		{

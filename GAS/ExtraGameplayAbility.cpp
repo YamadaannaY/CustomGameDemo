@@ -53,7 +53,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 			UAnimInstance* AnimInst = GetOwnerAnimInstance();
 			if (AnimInst && AnimInst->Montage_IsPlaying(ActiveMontage))
 			{ 
-				//采用默认BlendOut
+				//采用默认BlendOut,这也是使用惯性化的重要原因，惯性化直接停当前Montage并缓存姿势
 				AnimInst->Montage_StopWithBlendOut(ActiveMontage->BlendOut, ActiveMontage);
 			}
 		}
@@ -65,14 +65,13 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		Char->GetWeaponComponent()->HideAllWeapon();
 	}
 
-	// 兜底：即使蒙太奇异常终止未触发 ANS 的 NotifyEnd，GA 结束也强制关闭轨迹扫描窗口（幂等）
+	// 兜底：异常终止未触发 ANS 的 NotifyEnd，进行一次强制关闭轨迹扫描窗口
 	if (Char && Char->GetWeaponComponent())
 	{
 		Char->GetWeaponComponent()->EndWeaponTrace();
 	}
 
-	// 兜底：同上，蒙太奇被掐断时 ANS_CombatCamera 的 NotifyEnd 不会到达，相机请求会永久滞留在栈里，
-	// 表现为相机卡在战斗机位、退不回偏移前的状态。请求已空时这里是一次空操作。
+	// 兜底：同上，清理相机请求放置滞留在栈里，
 	if (Char)
 	{
 		if (UCombatCameraComponent* CamComp = Char->FindComponentByClass<UCombatCameraComponent>())
@@ -99,7 +98,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		ReleaseUninterruptible();
 	}
 
-	// 兜底清理 CancelWindow：蒙太奇被异常掐断时 NotifyEnd 不会到达，这里恢复封锁并解除登记
+	// 兜底清理 CancelWindow：恢复封锁并解除登记
 	if (bEnableCancelWindow)
 	{
 		ExitCancelWindow();
@@ -108,12 +107,14 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	// 解绑 MW 每帧回调并移除已注册的 warp target，避免 GA 结束后残留
 	if (Char && Char->GetMotionWarpingComponent())
 	{
-		Char->GetMotionWarpingComponent()->OnPreUpdate.RemoveDynamic(this, &ThisClass::OnMotionWarpingPreUpdate);
+		Char->GetMotionWarpingComponent()->OnPreUpdate.RemoveAll(this);
 		Char->GetMotionWarpingComponent()->RemoveWarpTarget(LockOnWarpTargetName);
 		Char->GetMotionWarpingComponent()->RemoveWarpTarget(ForwardOvershootTargetName);
 	}
+	
 	WarpSwitchBaseline.Reset();
 	ForwardOvershootCache.Reset();
+	
 	SetForwardOvershootStateTag(false);
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -197,7 +198,7 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 						DefaultGravityScale = DefaultMovement->GravityScale;
 					}
 					
-					//第一个激活GA缓存一次即可
+					//全局只缓存一次
 					bGravityDefaultCached = true;
 				}
 
@@ -206,9 +207,7 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 		}
 	}
 
-	// 攻击朝向（MR）：激活即写入 warp target，并挂上 MW 的每帧回调持续同步
-	// （跟随目标移动 / 跟随输入方向 / 无输入时不再干涉）。
-	// 仅攻击 GA 开启（bRotateToLockTarget），ActivateAbility 阶段播放的 Montage 由动画内 MR 区间完成转向。
+	// MW每帧回调持续同步
 	if (bRotateToLockTarget || bEnableForwardOvershoot)
 	{
 		if (AExtraPlayerCharacter* PlayerChar = GetOwningAvatarCharacter())
@@ -761,21 +760,19 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 			return;
 		}
 
-		// 有限MW追踪：距离不超过上限时 warp 落点在目标身前；超出时把落点钳制到自身朝目标的
-		// MotionWarpMaxMoveDist 处，避免动画强制位移超出设定距离。
+		// 有限MW追踪：距离不超过上限时 warp 落点在目标身前；超出时把落点钳制到自身朝目标的MaxMoveDist
 		// 沿「目标 → 自身」方向退 LockOnWarpStandoff，避免落点压在目标胶囊内。
-		// 不能用 FVector - float：那是分量各减同一值，会把落点整体平移到目标的世界 -XYZ 方向并顺带下沉。
 		const FVector FlatDirNormal = FlatDir.GetSafeNormal();
 		WarpLocation = LockTarget->GetActorLocation() - FlatDirNormal * LockOnWarpStandoff;
 
-		const float DistanceToTarget = FVector::Dist2D(LockTarget->GetActorLocation(), PlayerChar->GetActorLocation());
-		if (DistanceToTarget > MotionWarpMaxMoveDist)
+		const float DistanceToTarget = FVector::DistSquared2D(LockTarget->GetActorLocation(), PlayerChar->GetActorLocation());
+		if (DistanceToTarget > MotionWarpMaxMoveDist*MotionWarpMaxMoveDist)
 		{
-			// 目标过远（本段位移到不了目标，无重叠问题）：落点钳到自身朝目标方向的上限处
+			// 目标过远：落点钳到自身朝目标方向的上限处
 			WarpLocation = PlayerChar->GetActorLocation() + FlatDirNormal * MotionWarpMaxMoveDist;
 		}
 
-		// Z 取自身高度：只做水平追击，避免被拉到目标的垂直位置（与 Forward Overshoot 落点同一约定）
+		// Z 取自身高度：只做水平追击，避免被拉到目标的垂直位置
 		WarpLocation.Z = PlayerChar->GetActorLocation().Z;
 
 		FaceDir = FlatDir;
@@ -796,7 +793,7 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 	}
 	else
 	{
-		// 无目标且无输入：不干涉根运动（等价于没有该 MW）。
+		// 无目标且无输入
 		FaceDir = PlayerChar->GetActorForwardVector();
 	}
 	
@@ -810,8 +807,6 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 
 	// 位移/旋转开关只存在于 modifier 上，且每次 NMS 区间开始都会重建 modifier、把开关拷回动画模板值，
 	// 因此每帧都要同步。但只做「减法」：以 modifier 首次出现时（在 NMS 面板的勾选）为基准，
-	// 仅在本 GA 状态要求关闭时才关，绝不主动开启——这样 NMS 里取消勾选 Warp Translation 的区间
-	// （前后摇等只需朝向的动画）不会被强制追击。
 	for (auto It = WarpSwitchBaseline.CreateIterator(); It; ++It)
 	{
 		if (!It.Key().IsValid())
@@ -870,7 +865,7 @@ UExtraGameplayAbility::FForwardOvershootPoint UExtraGameplayAbility::ComputeForw
 	FVector WarpLocation = LockTarget->GetActorLocation() + Point.DashDir * OvershootDistance;
 	WarpLocation.Z = PlayerChar->GetActorLocation().Z;
 
-	// 位移上限保护：目标过远时钳到自身朝该方向的 MaxOvershootWarpDist 处
+	// 位移上限：目标过远时钳到自身朝该方向的 MaxOvershootWarpDist 处
 	if (FVector::Dist2D(WarpLocation, PlayerChar->GetActorLocation()) > MaxOvershootWarpDist)
 	{
 		WarpLocation = PlayerChar->GetActorLocation() + Point.DashDir * MaxOvershootWarpDist;

@@ -175,7 +175,7 @@ public:
 	// ── CancelWindow（后摇段：GA 视为已取消，任何输入都能打断此 Montage）──
 	// AN_CancelWindow 在区间 Begin/End 各发一次事件，持有者据此撤销/恢复自身封锁并登记句柄；
 	// 任何 GA 在 CommitAbility 时查询持有者，命中即取消它。移动录入打断仍走 GetAbilityCancelTag。
-	static FGameplayTag GetCancelWindowStateTag();      // "State.CancelWindow"        窗口开启中（松散 tag，供查询/调试）
+	static FGameplayTag GetCancelWindowStateTag();      // "State.CancelWindow"        窗口开启中
 	static FGameplayTag GetCancelWindowBeginTag();      // "ability.cancelwindow.begin" 进窗（AN NotifyBegin）
 	static FGameplayTag GetCancelWindowEndTag();        // "ability.cancelwindow.end"   出窗（AN NotifyEnd）
 

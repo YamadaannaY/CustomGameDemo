@@ -39,14 +39,13 @@ void UExtraGameAnimInstance::OnStopStateEntered()
 void UExtraGameAnimInstance::SetStopRequest(bool bRequested)
 {
 	bRequestStop = bRequested;
-
-	// 停步窗口期间移动组件改用停步专用刹车，减速交回 CMC 而不是冻结速度
+	
+	//停步请求后，CMC根据当前请求状态选择减速度，停步下是一个自定义值
 	if (OwnerMovementComp)
 	{
 		OwnerMovementComp->SetStopRequested(bRequested);
 	}
 }
-
 
 void UExtraGameAnimInstance::OnSprintStateLeft()
 {
@@ -88,8 +87,7 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		ClearStopRequest();
 	}
 
-	// 停步请求超时兜底：等 FootPlant 等太久就强制放行，避免标记漏配 / ABP 未进停步状态时
-	// 停步请求一直挂着（移动组件持续用停步刹车、这里的 GroundSpeed 也一直冻结）
+	// 停步请求超时：处于某些情况等 FootPlant 等太久也强制放行
 	if (bRequestStop && GetWorld()
 		&& GetWorld()->GetTimeSeconds() - StopRequestTime > StopRequestTimeout)
 	{
@@ -113,11 +111,6 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			GroundSpeed = CacheVelocity.Size2D();
 			bEvadeToSprint = false;
 		}
-		// 停步窗口：不更新 CacheVelocity / GroundSpeed，让动画侧速度保持跑步值，
-		// BlendSpace 与 bIsMoving 维持跑步姿态直到 ABP 进入停步状态。
-		// 这里不能再把 Velocity 写回 CacheVelocity（旧做法）：那会绕过 CMC 的刹车、碰撞与地面摩擦，
-		// 撞墙/斜坡时两帧反复互相覆盖，表现为抖动与速度残留。
-		// 实际的减速由移动组件的 StopBrakingDeceleration 负责（见 SetStopRequest）
 	}
 
 	//待机动作更新

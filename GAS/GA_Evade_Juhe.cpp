@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "GA_Evade_Juhe.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/GameplayAbilityTypes.h"
@@ -16,9 +14,6 @@
 
 UGA_Evade_Juhe::UGA_Evade_Juhe()
 {
-	// 居合 Montage 用到两类 MW 区间：
-	//  - AttackFacing：架势 / 后撤段跟随锁定目标朝向；
-	//  - ForwardOvershoot：前冲段穿过目标落到身后（穿透距离区间，Montage 里对应 NMS 填该名字）。
 	bRotateToLockTarget = true;
 	bEnableForwardOvershoot = true;
 }
@@ -50,12 +45,12 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	// 条件不满足或未配置居合 Montage：完全交回基类 Evade,即普通闪避
 	if (!ShouldEnterJuhe() || !GetActiveJuheMontages().JuheMontage)
 	{
-		bAirJuhe = false;
+		bAirJuhe = false; 
 		Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 		return;
 	}
 	
-	//同样消耗耐力
+	//可以进入居合，则同样消耗耐力
 	if (!K2_CommitAbility())
 	{
 		K2_EndAbility();
@@ -68,6 +63,8 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		K2_EndAbility();
 		return;
 	}
+	
+	//Init
 	
 	bEnterJuheBranch = true;
 	bInLanding = false;
@@ -90,7 +87,7 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		return;
 	}
 
-	// 空中居合：落地即转入落地段（委托为主，轮询兜底）
+	// 空中居合：落地即转入落地段
 	if (bAirJuhe)
 	{
 		if (ACharacter* Avatar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
@@ -190,13 +187,17 @@ void UGA_Evade_Juhe::OnJuheMontageFinished()
 		return;
 	}
 
-	// 前冲段播完：还能接续就继续等下一次普攻（即寒意值还大于等于100）；窗口已关或能量不足则收尾
+	// 前冲段播完：还能接续就继续等下一次普攻（即寒意值还大于等于100）；能量不足则收尾
 	if (bPlayingForwardSegment)
 	{
 		bJuheForwarding = false;
 
-		if (CanChainJuheForward())
+		// 还能接下一段（能量够）→ 从「本段播完」重新起算接续窗口。
+		// 播放期间窗口一直开着，这里重开是为了让播完后的窗口完整可用；否则动画较长时，
+		// 窗口会在 CancelWindow 期间就过期，导致按普攻既不接前冲（chaining 为假）也不出普攻 GA（State.Juhe 还挡着）。
+		if (HasEnoughEnergyForJuheForward())
 		{
+			RestartJuheForwardWindow();
 			return;
 		}
 
@@ -299,11 +300,8 @@ void UGA_Evade_Juhe::StartJuheForward()
 	bJuheForwarding = true;
 
 	// 每段前冲都重置接续窗口
-	bJuheForwardWindowOpen = true;
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(JuheForwardWindowTimer, this, &ThisClass::CloseJuheForwardWindow, JuheForwardWindow, false);
-	}
+	// 每段前冲都重置接续窗口
+	RestartJuheForwardWindow();
 
 	PlayJuheMontage(ForwardMontage, true);
 
@@ -342,7 +340,6 @@ UAnimMontage* UGA_Evade_Juhe::PickJuheForwardMontage() const
 	// 偶数段（含首段）用前冲 1，奇数段用前冲 2
 	UAnimMontage* Montage = (JuheForwardIndex % 2 == 0) ? Set.ForwardMontage1 : Set.ForwardMontage2;
 
-	// 未配置前冲 2 时回落前冲 1
 	return Montage ? Montage : Set.ForwardMontage1;
 }
 
@@ -378,9 +375,10 @@ void UGA_Evade_Juhe::EnterLandPhase()
 
 	ClearJuheLandDetection();
 
-	// 落地即放弃剩余的前冲接续窗口
+	// 落地即放弃剩余的前冲接续窗口，并关闭普攻接前冲的通道
 	bJuheForwardWindowOpen = false;
 	bJuheForwarding = false;
+	bJuhePhaseEnded = true;
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(JuheForwardWindowTimer);
@@ -431,12 +429,14 @@ bool UGA_Evade_Juhe::HasEnoughEnergyForJuheForward() const
 
 void UGA_Evade_Juhe::CloseJuheForwardWindow()
 {
-	bJuheForwardWindowOpen = false;
-
+	// 前冲动画还在播时不关窗口：播放期间始终允许接下一段，
+	// 窗口计时会在动画播完时重新起算（见 OnJuheMontageFinished 的前冲分支）
 	if (bJuheForwarding)
 	{
 		return;
 	}
+
+	bJuheForwardWindowOpen = false;
 
 	// 窗口过期、且没有在播前冲：本段居合到此为止。
 	// 但空中居合还要等落地播完落地动画再结束，否则落地时已经没有 GA 了。
@@ -446,6 +446,16 @@ void UGA_Evade_Juhe::CloseJuheForwardWindow()
 	}
 
 	K2_EndAbility();
+}
+
+void UGA_Evade_Juhe::RestartJuheForwardWindow()
+{
+	bJuheForwardWindowOpen = true;
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(JuheForwardWindowTimer, this, &ThisClass::CloseJuheForwardWindow, JuheForwardWindow, false);
+	}
 }
 
 void UGA_Evade_Juhe::OnJuhePhaseEnd(FGameplayEventData EventData)
@@ -477,6 +487,17 @@ void UGA_Evade_Juhe::OnJuheDodgeInput(FGameplayEventData EventData)
 	}
 
 	bJuheDodgeUsed = true;
+
+	// 退出居合：先关闭普攻接前冲的通道与剩余接续窗口。
+	// 后撤段是异步播完才结束本 GA 的，期间按普攻若不拦住仍会走 OnJuheAttackInput 接出前冲
+	// （空中架势段的分界事件比地面晚，所以只有空中能稳定复现）
+	bJuhePhaseEnded = true;
+	bJuheForwardWindowOpen = false;
+	bJuheForwarding = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(JuheForwardWindowTimer);
+	}
 
 	// 居合中再次闪避：走基类正常后撤 Evade 动画，播完结束
 	RemoveJuheState();

@@ -128,7 +128,6 @@ void AExtraCharacter::ConfigureOverHeadStatusWidget()
 	{
 		//监听Health/Mana
 		OverHeadStatsGauge->ConfigureWithASC(GetAbilitySystemComponent());
-		OverHeadStatsGauge->SetBarColorsByTeam(GetGenericTeamId());
 		OverHeadWidgetComponent->SetHiddenInGame(false);
 
 		UpdateHeadGaugeVisibility();
@@ -145,13 +144,13 @@ void AExtraCharacter::ConfigureOverHeadStatusWidget()
 void AExtraCharacter::UpdateHeadGaugeVisibility() const
 {
 	APawn* LocalPlayerPawn=UGameplayStatics::GetPlayerPawn(this,0);
-	
+
 	if(LocalPlayerPawn)
 	{
 		//当前Character与本地Pawn的距离差值平方
 		float DistSquared=FVector::DistSquared(GetActorLocation(),LocalPlayerPawn->GetActorLocation());
 
-		//决定是否显示UI
+		//太远则隐藏；由 Timer 按 HeadStatGaugeVisibilityUpdateGap 周期调用
 		OverHeadWidgetComponent->SetHiddenInGame(DistSquared>HeadStatGaugeVisibilityRangeSquared);
 	}
 }
@@ -185,18 +184,6 @@ void AExtraCharacter::SetStatusGaugeEnabled(bool bEnabled)
 	{
 		OverHeadWidgetComponent->SetHiddenInGame(true);
 		OverHeadWidgetComponent->SetVisibility(false);
-	}
-}
-
-void AExtraCharacter::OnRep_TeamID()
-{
-	// 客户端收到 TeamID 复制后刷新头顶血条颜色（BeginPlay 时 TeamID 可能尚未复制到位）
-	if (OverHeadWidgetComponent && !IsLocallyControlledByPlayer())
-	{
-		if (UOverHeadStatsGauge* Gauge = Cast<UOverHeadStatsGauge>(OverHeadWidgetComponent->GetUserWidgetObject()))
-		{
-			Gauge->SetBarColorsByTeam(GetGenericTeamId());
-		}
 	}
 }
 

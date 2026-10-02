@@ -94,7 +94,7 @@ void UANS_IgnoreCharacterCollision::DisablePhysicsInteraction(ACharacter* Charac
 		}
 	}
 
-	// bEnablePhysicsInteraction 是 uint8 位域，显式转 bool 以匹配备份表类型
+	// bEnablePhysicsInteraction 是 uint8 位域，显式转 bool 以备份
 	PhysicsInteractionBackups.Emplace(Movement, Movement->bEnablePhysicsInteraction != 0);
 	Movement->bEnablePhysicsInteraction = false;
 }
