@@ -7,39 +7,41 @@ static const FName NAME_W_Gait(TEXT("W_Gait"));
 
 void UExtraGameAnimInstance::OnFootPlantNotify(EFootPlant Foot)
 {
+	// 只有本端自己发起的停步请求才在这里起播。
 	if (!bRequestStop)
+	{
 		return;
+	}
+
+	if (OwnerCharacter)
+	{
+		const bool bLeft = (Foot == EFootPlant::Left);
+		OwnerCharacter->PlayStopMontage(bLeft);
+
+		// 通知服务器在同一瞬间起播。服务器若也等它自己的落脚点，
+		// 两端起播时刻的相位差会放大成 RootMotion 位移分歧 → 被位置校验持续纠正 → 本地客户端抖动。
+		OwnerCharacter->Server_NotifyStopMontagePlayed(bLeft);
+	}
 	
-	PendingStopFoot = Foot;
-	bCanEnterStop = true;
+	//停步逻辑结束，重置相关变量
+	ClearStopRequest();
 }
 
 void UExtraGameAnimInstance::RequestStop()
 {
 	SetStopRequest(true);
-	bCanEnterStop = false;
-	PendingStopFoot = EFootPlant::None;
 	StopRequestTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 }
 
 void UExtraGameAnimInstance::ClearStopRequest()
 {
 	SetStopRequest(false);
-	bCanEnterStop = false;
-	PendingStopFoot = EFootPlant::None;
-}
-
-void UExtraGameAnimInstance::OnStopStateEntered()
-{
-	SetStopRequest(false);
-	bCanEnterStop = false;
-	PendingStopFoot = EFootPlant::None;
 }
 
 void UExtraGameAnimInstance::SetStopRequest(bool bRequested)
 {
 	bRequestStop = bRequested;
-	
+
 	//停步请求后，CMC根据当前请求状态选择减速度，停步下是一个自定义值
 	if (OwnerMovementComp)
 	{
@@ -79,6 +81,9 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		bWalkMode =OwnerCharacter->GetWalkMode();
 		
 		Acceleration = OwnerMovementComp->GetCurrentAcceleration().Length();
+
+		// 模拟代理上上一行恒为 0，改以角色上复制来的输入状态为准
+		bHasMoveInputCached = OwnerCharacter->HasMoveInput();
 	}
 
 	//进入空中立刻清理停步

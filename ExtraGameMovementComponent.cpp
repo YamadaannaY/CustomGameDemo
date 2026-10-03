@@ -123,6 +123,24 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 		return;
 	}
 	
+	// 服务器上本地控制的角色（autonomous proxy）朝向由客户端主导：
+	// 客户端拥有即时的输入与相机数据，服务器只有经过网络延迟的副本，所以直接用客户端RPC发来的值
+	if (CharacterOwner->GetLocalRole() == ROLE_Authority
+		&& CharacterOwner->GetRemoteRole() == ROLE_AutonomousProxy
+		&& bHasClientAuthoritativeYaw)
+	{
+		const FRotator Desired(0.f, ClientAuthoritativeYaw, 0.f);
+
+		// Unreliable 上报间隔不均时直接硬设会抖，用远快于上报周期的速率平滑收口
+		const FRotator Smoothed = FMath::RInterpConstantTo(
+			UpdatedComponent->GetComponentRotation(), Desired, DeltaTime, ServerYawFollowRate);
+
+		TargetRotation = FRotator(0.f, Smoothed.Yaw, 0.f);
+		LastRotationTarget = Desired;
+		MoveUpdatedComponent(FVector::ZeroVector, TargetRotation, false);
+		return;
+	}
+	
 	// 判定「有没有 montage 在播」—— Montage存在 MW 接管朝向的情况，而Jogging基本状态没有 montage
 	const UAnimInstance* AnimInst = CharacterOwner->GetMesh() ? CharacterOwner->GetMesh()->GetAnimInstance() : nullptr;
 	const bool bAnimDrivingRotation = AnimInst && AnimInst->IsAnyMontagePlaying();
@@ -140,11 +158,9 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 	// 后者靠 UpdateComponentVelocity() 同步，时机不保证，可能整帧读到 0
 	if (Velocity.Size2D() > MovingSpeedRefreshThreshold)
 	{
-		const FVector InputVector = CharacterOwner->GetLastMovementInputVector();
-		if (!InputVector.IsNearlyZero(0.001f))
+		if (!Acceleration.IsNearlyZero(0.001f))
 		{
-			//从Velocity.ToOrientationRotator().Yaw改为InputVector的Yaw值
-			LastRotationTarget = FRotator(0.f, InputVector.ToOrientationRotator().Yaw, 0.f);
+			LastRotationTarget = FRotator(0.f, Acceleration.ToOrientationRotator().Yaw, 0.f);
 		}
 	}
 

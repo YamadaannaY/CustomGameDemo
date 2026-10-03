@@ -13,6 +13,7 @@
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Net/UnrealNetwork.h"
 
 
 AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectInitializer)
@@ -45,6 +46,116 @@ AActor* AExtraPlayerCharacter::GetLockTarget() const
 	return LockOnComponent ? LockOnComponent->GetLockTarget() : nullptr;
 }
 
+void AExtraPlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	// 只发给其他客户端（跳过 owner）：服务端依赖的就是本地客户端算出来的值，无需下发。
+	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, bHasMoveInput, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, bWalkMode, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, RepPendingAction, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, RepTargetYaw, COND_SkipOwner);
+}
+
+void AExtraPlayerCharacter::Server_SetMoveInputState_Implementation(bool bNewHasMoveInput, EMoveReleaseAction ReleaseAction, float InTargetYaw)
+{
+	/**	本地输入算出来的值，抄写到服务端	**/
+	bHasMoveInput = bNewHasMoveInput;
+	TargetYaw = InTargetYaw;
+	RepTargetYaw = InTargetYaw;
+
+	UExtraGameAnimInstance* AI = GetMesh() ? Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()) : nullptr;
+
+	if (bNewHasMoveInput)
+	{
+		// 移动：与客户端 Move 的跳变处理对应，撤销残留的停步请求
+		if (AI)
+		{
+			AI->ClearStopRequest();
+		}
+
+		// 同样打断停步 Montage
+		CancelStopMontageIfPlaying();
+
+		// 重新移动：本轮松手动作全部作废，远端（模拟代理）据此复位它的"已消费"标记
+		RepPendingAction = EMoveReleaseAction::None;
+		return;
+	}
+
+	switch (ReleaseAction)
+	{
+		// 真正开始停步只需要做的就是重置停步相关变量+切换 CMC 的停步减速度，什么时候播取决于Tick中模拟端
+	case EMoveReleaseAction::RequestStop:
+		if (AI)
+		{
+			AI->ClearStopRequest();
+		}
+
+		if (UExtraGameMovementComponent* MoveComp = Cast<UExtraGameMovementComponent>(GetCharacterMovement()))
+		{
+			MoveComp->SetStopRequested(true);
+		}
+
+		RepPendingAction = EMoveReleaseAction::None;
+		break;
+
+	// 轻触的急停/转身不需要等落脚点：立即播放
+	case EMoveReleaseAction::QuickStopLeft:
+		PlayQuickStopMontage(true);
+		RepPendingAction = ReleaseAction;
+		break;
+
+	case EMoveReleaseAction::QuickStopRight:
+		PlayQuickStopMontage(false);
+		RepPendingAction = ReleaseAction;
+		break;
+
+	case EMoveReleaseAction::TurnLeft:
+		PlayTurnMontage(true);
+		RepPendingAction = ReleaseAction;
+		break;
+
+	case EMoveReleaseAction::TurnRight:
+		PlayTurnMontage(false);
+		RepPendingAction = ReleaseAction;
+		break;
+
+	default:
+		if (AI)
+		{
+			AI->ClearStopRequest();
+		}
+		RepPendingAction = EMoveReleaseAction::None;
+		break;
+	}
+}
+
+void AExtraPlayerCharacter::Server_SyncClientYaw_Implementation(float Yaw)
+{
+	// RPC 与本帧 ServerMove 的处理顺序不保证：若只在 PhysicsRotation 里应用，
+	// 本帧的 PerformMovement 早已用旧朝向算过一遍，服务器朝向会恒定滞后一个 tick。
+	SetActorRotation(FRotator(0.f, Yaw, 0.f));
+
+	if (UExtraGameMovementComponent* MoveComp = Cast<UExtraGameMovementComponent>(GetCharacterMovement()))
+	{
+		MoveComp->SetClientAuthoritativeYaw(Yaw);
+	}
+}
+
+void AExtraPlayerCharacter::Server_NotifyStopMontagePlayed_Implementation(bool bLeft)
+{
+	PlayStopMontage(bLeft);
+
+	// 模拟代理据此立即播放，Tick中每帧等待这个Rep值
+	RepPendingAction = bLeft ? EMoveReleaseAction::StopLeft : EMoveReleaseAction::StopRight;
+
+	// 停步 Montage 接管位移，CMC 不必再走停步减速度
+	if (UExtraGameMovementComponent* MoveComp = Cast<UExtraGameMovementComponent>(GetCharacterMovement()))
+	{
+		MoveComp->SetStopRequested(false);
+	}
+}
+
 void AExtraPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -59,6 +170,49 @@ void AExtraPlayerCharacter::BeginPlay()
 void AExtraPlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// 本端朝向已由 CMC 算好同步给服务器：
+	// 服务器复现不出双层插值转向，让它抄写客户端的值
+	if (!HasAuthority() && IsLocallyControlled())
+	{
+		Server_SyncClientYaw(GetActorRotation().Yaw);
+	}
+
+	// 模拟代理：跟随服务器播急停/转身 Montage，并在服务器停播 RM Montage 时收掉本地那份。
+	if (GetLocalRole() == ROLE_SimulatedProxy)
+	{
+		// 目标朝向以服务器为准：本地没有输入，TargetYaw 一直是默认值，
+		// 直接用它会让这些 Montage 上的 MotionWarping 把角色转到错误方向
+		TargetYaw = RepTargetYaw;
+
+		// 急停/转身：服务器一置位就播
+		if (RepPendingAction == EMoveReleaseAction::None)
+		{
+			bRepActionConsumed = false;
+		}
+		else if (!bRepActionConsumed)
+		{
+			bRepActionConsumed = true;
+
+			switch (RepPendingAction)
+			{
+			case EMoveReleaseAction::QuickStopLeft:  PlayQuickStopMontage(true);  break;
+			case EMoveReleaseAction::QuickStopRight: PlayQuickStopMontage(false); break;
+			case EMoveReleaseAction::TurnLeft:       PlayTurnMontage(true);       break;
+			case EMoveReleaseAction::TurnRight:      PlayTurnMontage(false);      break;
+			case EMoveReleaseAction::StopLeft:       PlayStopMontage(true);       break;
+			case EMoveReleaseAction::StopRight:      PlayStopMontage(false);      break;
+			default: break;
+			}
+		}
+		
+		const bool bRepRootMotionActive = GetRepRootMotion().bIsActive;
+		if (bWasRepRootMotionActive && !bRepRootMotionActive)
+		{
+			CancelStopMontageIfPlaying();
+		}
+		bWasRepRootMotionActive = bRepRootMotionActive;
+	}
 
 	if (!SprintTransitionVelocity.IsNearlyZero())
 	{
@@ -175,6 +329,11 @@ void AExtraPlayerCharacter::PawnClientRestart()
 	}
 }
 
+void AExtraPlayerCharacter::Server_ChangeWalkMode_Implementation(bool WalkMode)
+{
+	bWalkMode = WalkMode ;  
+}
+
 void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 {
 	FVector2D InputVal=InputActionValue.Get<FVector2d>();
@@ -190,6 +349,9 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		CancelStopMontageIfPlaying();
 
 		MoveInputStartTime = GetWorld()->GetTimeSeconds();
+
+		//服务端同步
+		Server_SetMoveInputState(true, EMoveReleaseAction::None, 0.f);
 	}
 
 	bHasMoveInput = !InputVal.IsNearlyZero();
@@ -267,6 +429,8 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 				ActiveMontage != TurnLeft90Montage &&
 				ActiveMontage != TurnRight90Montage)
 			{
+				// 输入状态仍要同步给服务器，但不触发停步（本次松手被战斗动作接管）
+				Server_SetMoveInputState(false, EMoveReleaseAction::None, TargetYaw);
 				return;
 			}
 		}
@@ -275,31 +439,41 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	// 轻触判定：输入持续时间 < 0.2s
 	if (LastMoveInputDuration > 0.f && LastMoveInputDuration < 0.2f)
 	{
-		const float TargetDelta = 
-			GetTargetDelta();
+		const float TargetDelta = GetTargetDelta();
 		const float AbsTargetDelta = FMath::Abs(TargetDelta);
 
+		// 左右方向由本端判定后一并上传：服务器朝向虽已同步但仍有微差，重算可能选反
+		EMoveReleaseAction Action = EMoveReleaseAction::None;
 		if (AbsTargetDelta < TurnSharpAngel)
 		{
 			// 急停
-			PlayQuickStopMontage();
+			const bool bLeft = (TargetDelta <= 0.f);
+			PlayQuickStopMontage(bLeft);
+			Action = bLeft ? EMoveReleaseAction::QuickStopLeft : EMoveReleaseAction::QuickStopRight;
 		}
 		else
 		{
 			// 转身
 			const bool bTurnLeft = (TargetDelta < 0.f);
 			PlayTurnMontage(bTurnLeft);
+			Action = bTurnLeft ? EMoveReleaseAction::TurnLeft : EMoveReleaseAction::TurnRight;
 		}
+
+		// 急停/转身 Montage 在两端各自播放：服务器提供权威 RootMotion，模拟代理靠 RepRootMotion 复制
+		Server_SetMoveInputState(false, Action, TargetYaw);
 	}
 	//移动超过0.2s
 	else
 	{
-		// 停步：锁速等待 FootPlant 进入停步状态机。
+		// 停步：锁速等待落脚点，由 AnimInstance 在落脚点起播，并通知服务器同一瞬间起播
 		if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
 		{
 			AI->ClearStopRequest();
 			AI->RequestStop();
 		}
+		
+		
+		Server_SetMoveInputState(false, EMoveReleaseAction::RequestStop, TargetYaw);
 	}
 }
 
@@ -375,6 +549,7 @@ void AExtraPlayerCharacter::HandleCameraZoomInput(const FInputActionValue& Input
 void AExtraPlayerCharacter::ChangeWalkMode(const FInputActionValue& InputActionValue)
 {
 	bWalkMode = !bWalkMode ;
+	Server_ChangeWalkMode(bWalkMode);
 }
 
 void AExtraPlayerCharacter::CalculateTargetDelta(float ForwardInput,float RightInput)
@@ -434,9 +609,9 @@ void AExtraPlayerCharacter::TickArmLengthLerp(float Goal)
 }
 
 
-void AExtraPlayerCharacter::PlayQuickStopMontage()
+void AExtraPlayerCharacter::PlayQuickStopMontage(bool bLeft)
 {
-	UAnimMontage* MontageToPlay = (GetTargetDelta() <= 0.f) ? LeftStopRunMontage : RightStopRunMontage;
+	UAnimMontage* MontageToPlay = bLeft ? LeftStopRunMontage : RightStopRunMontage;
 	if (!MontageToPlay)
 	{
 		return;
@@ -496,12 +671,31 @@ void AExtraPlayerCharacter::PlayTurnMontage(bool bTurnLeft)
 	}
 }
 
+void AExtraPlayerCharacter::PlayStopMontage(bool bLeft)
+{
+	UAnimMontage* MontageToPlay = bLeft ? LeftStopMontage : RightStopMontage;
+	if (!MontageToPlay)
+	{
+		return;
+	}
+	
+	PlayAnimMontage(MontageToPlay);
+
+	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
+	{
+		AnimInst->OnMontageEnded.RemoveAll(this);
+		AnimInst->OnMontageEnded.AddDynamic(this, &AExtraPlayerCharacter::OnStopMontageEnded);
+	}
+}
+
 void AExtraPlayerCharacter::OnStopMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 {
 	if (Montage != LeftStopRunMontage &&
 		Montage != RightStopRunMontage &&
 		Montage != TurnLeft90Montage &&
-		Montage != TurnRight90Montage)
+		Montage != TurnRight90Montage &&
+		Montage != LeftStopMontage &&
+		Montage != RightStopMontage)
 	{
 		return;
 	}
@@ -510,10 +704,15 @@ void AExtraPlayerCharacter::OnStopMontageEnded(UAnimMontage* Montage, bool bInte
 	{
 		AI->ClearStopRequest();
 
-		// 清零残留速度防止停步/转身 montage 播完后角色仍滑行
-		if (UCharacterMovementComponent* CMC = GetCharacterMovement())
+		// 只在正常播完时清零残留速度。
+		// 被打断时（玩家重新操作）两端 Montage 的结束时刻本就差着网络延迟，
+		// 若一端清零、另一端没清，速度突变会被 CMC 当成预测误差反复纠正，表现为停步收尾处的抖动。
+		if (!bInterrupted)
 		{
-			CMC->Velocity = FVector::ZeroVector;
+			if (UCharacterMovementComponent* CMC = GetCharacterMovement())
+			{
+				CMC->Velocity = FVector::ZeroVector;
+			}
 		}
 	}
 }
@@ -531,7 +730,9 @@ void AExtraPlayerCharacter::CancelStopMontageIfPlaying()
 	if (ActiveMontage == LeftStopRunMontage ||
 		ActiveMontage == RightStopRunMontage ||
 		ActiveMontage == TurnLeft90Montage ||
-		ActiveMontage == TurnRight90Montage)
+		ActiveMontage == TurnRight90Montage ||
+		ActiveMontage == LeftStopMontage ||
+		ActiveMontage == RightStopMontage)
 	{
 		AnimInst->Montage_StopWithBlendOut(ActiveMontage->BlendOut);
 	}

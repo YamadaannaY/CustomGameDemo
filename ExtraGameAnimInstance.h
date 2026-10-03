@@ -41,9 +41,9 @@ public:
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 	virtual void NativeThreadSafeUpdateAnimation(float DeltaSeconds) override;
 	
-	//是否具有加速度（移动输入）
+	//是否具有移动输入->加速度。
 	UFUNCTION(BlueprintCallable,meta=(BlueprintThreadSafe))
-	FORCEINLINE bool HasAcceleration() const {return Acceleration > 0.f;}
+	FORCEINLINE bool HasAcceleration() const {return Acceleration > 0.f || bHasMoveInputCached;}
 
 	//是否处于跳跃状态（Falling + JumpCount > 0）
 	UFUNCTION(BlueprintCallable,meta=(BlueprintThreadSafe))
@@ -67,14 +67,6 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
 	bool bRequestStop = false;
 	
-	// FootPlantNotify停步后首次触发 且 bRequestStop==true 时设为 true，作为过渡条件进入停步状态机
-	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
-	bool bCanEnterStop = false;
-
-	// 记录应该在哪个脚落地时停步
-	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Stop")
-	EFootPlant PendingStopFoot = EFootPlant::None;
-
 	// 停步请求超时（秒）：等 FootPlant 标记的等待上限。
 	// 标记漏配、ABP 未进停步状态等异常情况下靠它强制放行，
 	// 否则停步请求会一直挂着无法退出Jogging
@@ -87,20 +79,6 @@ public:
 	// 清除停步请求，重置时使用（新移动输入 / 跳跃 / 进入 Stop 状态后）
 	void ClearStopRequest();
 
-	// AnimBP 进入Stop状态时调用，消费停步请求
-	UFUNCTION(BlueprintCallable,meta=(BlueprintThreadSafe))
-	void OnStopStateEntered();
-
-	// -- AnimBP Transition Rule 辅助 --
-	
-	//进入左停步的过渡条件（落脚点更新并确定为左脚）
-	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
-	FORCEINLINE bool CanEnterLeftStop() const { return bCanEnterStop && PendingStopFoot == EFootPlant::Left; }
-
-	//进入右停步的过渡条件（落脚点更新并确定为右脚）
-	UFUNCTION(BlueprintCallable, meta=(BlueprintThreadSafe))
-	FORCEINLINE bool CanEnterRightStop() const { return bCanEnterStop && PendingStopFoot == EFootPlant::Right; }
-	
 	// -- BlendSpace 驱动参数 --
 	
 	//角色当前移动速度
@@ -109,6 +87,10 @@ public:
 	
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion")
 	bool bIsMoving = false;
+
+	// 复制来的移动输入状态,用它做动画判定的统一来源
+	UPROPERTY(BlueprintReadOnly, Category="Locomotion")
+	bool bHasMoveInputCached = false;
 	
 	// GA_Evade 确认可衔接冲刺、截断蒙太奇时置 true，ABP 据此进入 Sprint State；离开 Sprint 时经 OnSprintStateLeft 复位
 	UPROPERTY(BlueprintReadOnly, Category="Locomotion|Sprint")
@@ -155,6 +137,7 @@ public:
 	float CalculateStandingPlayRate() const ;
 
 	float GetAnimCurveClamped(const FName& Name, float Bias, float ClampMin,float ClampMax) const;
+
 private:
 	FVector CacheVelocity = FVector::ZeroVector;
 
