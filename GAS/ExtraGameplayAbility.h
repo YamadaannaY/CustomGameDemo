@@ -29,6 +29,9 @@ public:
 
 	UAnimInstance* GetOwnerAnimInstance() const;
 
+	// 服务端收到「客户端因移动取消本 GA」的 RPC 后调用：让服务端 EndAbility 走与客户端相同的收尾（停 Montage）
+	void SetEndingFromMovement() { bEndingFromMovement = true; }
+
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 	
 	virtual void PreActivate(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, FOnGameplayAbilityEnded::FDelegate* OnGameplayAbilityEndedDelegate, const FGameplayEventData* TriggerEventData = nullptr) override;

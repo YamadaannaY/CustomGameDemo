@@ -7,6 +7,7 @@
 #include "ExtraGameAnimInstance.h"
 #include "ExtraGameMovementComponent.h"
 #include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
+#include "ExtractGameCharacter/GAS/ExtraGameplayAbility.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/Camera/UCombatCameraComponent.h"
 #include "ExtractGameCharacter/LockOn/ULockOnComponent.h"
@@ -153,6 +154,24 @@ void AExtraPlayerCharacter::Server_NotifyStopMontagePlayed_Implementation(bool b
 	if (UExtraGameMovementComponent* MoveComp = Cast<UExtraGameMovementComponent>(GetCharacterMovement()))
 	{
 		MoveComp->SetStopRequested(false);
+	}
+}
+
+void AExtraPlayerCharacter::Server_NotifyAbilityEndedByMovement_Implementation(FGameplayAbilitySpecHandle AbilityHandle)
+{
+	// 让服务端本端那个 GA 实例走与客户端相同的「移动取消」收尾（EndAbility 据此停蒙太奇）
+	UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponent());
+	if (!ASC)
+	{
+		return;
+	}
+
+	if (const FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(AbilityHandle))
+	{
+		if (UExtraGameplayAbility* Ability = Cast<UExtraGameplayAbility>(Spec->GetPrimaryInstance()))
+		{
+			Ability->SetEndingFromMovement();
+		}
 	}
 }
 

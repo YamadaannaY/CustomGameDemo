@@ -39,6 +39,13 @@ void AExtraPlayerController::AcknowledgePossession(class APawn* P)
 	AExtraPlayerCharacter* PC = Cast<AExtraPlayerCharacter>(P);
  	if (PC)
  	{
+ 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(PC))
+ 		{
+ 			if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(ASI->GetAbilitySystemComponent()))
+ 			{
+ 				ASC->InitAbilityActorInfo(PC,PC);
+ 			}
+ 		}
 		//在客户端渲染
 		SpawnGameplayWidget();
  	}

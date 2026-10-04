@@ -13,15 +13,38 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Net/UnrealNetwork.h"
 
 
 UExtraGameWeaponComponent::UExtraGameWeaponComponent()
 {
+	// 武器组 Tag 需要复制到各端（各端据此生成自己的武器 Mesh）
+	SetIsReplicatedByDefault(true);
+
 	// Fade 淡入淡出由 Tick 驱动（无 Fade 请求时自动关闭 Tick）
 	PrimaryComponentTick.bCanEverTick = true;
 
 	// 默认命中事件走通用伤害事件（GA 基类在服务端监听该 Tag，攻击 GA 统一继承）
 	TraceEventTag = UUExtraAbilitySystemStatic::GetAbilityDamageEventTag();
+}
+
+void UExtraGameWeaponComponent::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	
+	DOREPLIFETIME(UExtraGameWeaponComponent, CurrentGroupTag);
+	DOREPLIFETIME(UExtraGameWeaponComponent, bWeaponVisible);
+	DOREPLIFETIME(UExtraGameWeaponComponent, WeaponVisibilitySerial);
+}
+
+void UExtraGameWeaponComponent::OnRep_CurrentGroupTag()
+{
+	UpdateGroupMeshPresentation(CurrentGroupTag);
+}
+
+void UExtraGameWeaponComponent::OnRep_WeaponVisibilitySerial()
+{
+	ApplyMasterWeaponVisibility();
 }
 
 void UExtraGameWeaponComponent::BeginPlay()
@@ -55,7 +78,7 @@ void UExtraGameWeaponComponent::OnASCInitialized()
 
 	UE_LOG(LogTemp, Log, TEXT("[WeaponComponent] OnASCInitialized: Equipping default weapon group '%s'."), *WeaponDataAsset->DefaultWeaponGroupTag.ToString());
 	
-	//装备默认装备组武器（没有配置默认WeaponTag会安全空返回）
+	//装备默认装备组武器
 	EquipWeaponGroup(WeaponDataAsset->DefaultWeaponGroupTag);
 }
 
@@ -91,6 +114,12 @@ void UExtraGameWeaponComponent::CacheOwnerASC()
 			OwnerASC = Owner->FindComponentByClass<UAbilitySystemComponent>();
 		}
 	}
+}
+
+bool UExtraGameWeaponComponent::IsAuthorityOwner() const
+{
+	const AActor* OwnerActor = GetOwner();
+	return OwnerActor && OwnerActor->HasAuthority();
 }
 
 const FExtraGameWeaponEntry* UExtraGameWeaponComponent::ResolveWeaponEntry(FGameplayTag WeaponTag) const
@@ -176,10 +205,6 @@ bool UExtraGameWeaponComponent::SetWeaponAttachSocket(FGameplayTag WeaponTag, FN
 	return true;
 }
 
-// ──────────────────────────────────────────────────────────────
-// EquipWeaponGroup
-// ──────────────────────────────────────────────────────────────
-
 bool UExtraGameWeaponComponent::EquipWeaponGroup(FGameplayTag GroupTag)
 {
 	// 校验
@@ -210,7 +235,38 @@ bool UExtraGameWeaponComponent::EquipWeaponGroup(FGameplayTag GroupTag)
 	// 1. 先卸载旧武器组
 	UnequipWeaponGroup();
 
-	// 2. 生成 / 显示该组所有 Mesh
+	// 2. 更新状态：赋值即复制，客户端由此触发 OnRep 走同一套表现逻辑
+	CurrentGroupTag = GroupTag;
+
+	// 3. 生成 / 显示该组所有 Mesh
+	UpdateGroupMeshPresentation(GroupTag);
+
+	// 4. 应用 GE
+	ApplyWeaponGroupEffects(*Group);
+
+	// 5. 授予 GA
+	GrantWeaponGroupAbilities(*Group);
+
+	// 6. 更新 ASC Tags
+	UpdateCharacterTags(OldGroup, Group);
+
+	// 7. 广播事件
+	OnWeaponGroupChanged.Broadcast(OldTag, GroupTag);
+
+	return true;
+}
+
+void UExtraGameWeaponComponent::UpdateGroupMeshPresentation(FGameplayTag GroupTag)
+{
+	// 先隐藏全部已生成的 Mesh
+	HideAllWeaponMeshes();
+
+	const FExtraGameWeaponGroup* Group = GetWeaponGroupByTag(GroupTag);
+	if (!Group)
+	{
+		return;
+	}
+
 	for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
 	{
 		if (!Entry.WeaponTag.IsValid())
@@ -228,34 +284,19 @@ bool UExtraGameWeaponComponent::EquipWeaponGroup(FGameplayTag GroupTag)
 			}
 		}
 
-		if (MeshComp)
+		if (!MeshComp)
 		{
-			// 可见性 = 整体可见 && 未被手动隐藏
-			const bool bEntryVisible = bWeaponVisible && !HiddenWeaponEntries.Contains(Entry.WeaponTag);
-			MeshComp->SetVisibility(bEntryVisible);
-			MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-			// 装备 / 切换为瞬时到位，无淡入动画
-			InitWeaponFade(Entry.WeaponTag, bEntryVisible);
+			continue;
 		}
+
+		// 可见性 = 整体可见 && 未被手动隐藏
+		const bool bEntryVisible = bWeaponVisible && !HiddenWeaponEntries.Contains(Entry.WeaponTag);
+		MeshComp->SetVisibility(bEntryVisible);
+		MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+		// 装备 / 切换为瞬时到位，无淡入动画
+		InitWeaponFade(Entry.WeaponTag, bEntryVisible);
 	}
-
-	// 3. 应用 GE
-	ApplyWeaponGroupEffects(*Group);
-
-	// 4. 授予 GA
-	GrantWeaponGroupAbilities(*Group);
-
-	// 5. 更新 ASC Tags
-	UpdateCharacterTags(OldGroup, Group);
-
-	// 6. 更新状态
-	CurrentGroupTag = GroupTag;
-
-	// 7. 广播事件
-	OnWeaponGroupChanged.Broadcast(OldTag, GroupTag);
-
-	return true;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -278,7 +319,7 @@ void UExtraGameWeaponComponent::UnequipWeaponGroup()
 	// 3. 移除原有 AdditionalTags
 	if (const FExtraGameWeaponGroup* OldGroup = WeaponDataAsset ? WeaponDataAsset->FindGroup(CurrentGroupTag) : nullptr)
 	{
-		if (OwnerASC && OldGroup->AdditionalTags.Num() > 0)
+		if (IsAuthorityOwner() && OwnerASC && OldGroup->AdditionalTags.Num() > 0)
 		{
 			OwnerASC->RemoveLooseGameplayTags(OldGroup->AdditionalTags);
 		}
@@ -293,10 +334,6 @@ void UExtraGameWeaponComponent::UnequipWeaponGroup()
 	// 6. 重置 Tag
 	CurrentGroupTag = FGameplayTag();
 }
-
-// ──────────────────────────────────────────────────────────────
-// SwitchWeaponGroup / CycleToNextWeaponGroup
-// ──────────────────────────────────────────────────────────────
 
 bool UExtraGameWeaponComponent::SwitchWeaponGroup(FGameplayTag NewGroupTag)
 {
@@ -321,50 +358,44 @@ bool UExtraGameWeaponComponent::SwitchWeaponGroup(FGameplayTag NewGroupTag)
 void UExtraGameWeaponComponent::ShowWeapon()
 {
 	bWeaponVisible = true;
-
-	if (const FExtraGameWeaponGroup* Group = GetCurrentWeaponGroup())
-	{
-		for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
-		{
-			// 跳过手动隐藏的条目
-			if (!HiddenWeaponEntries.Contains(Entry.WeaponTag))
-			{
-				RequestWeaponFade(Entry.WeaponTag, true);
-			}
-		}
-	}
+	ApplyMasterWeaponVisibility();
+	++WeaponVisibilitySerial;
 }
 
 void UExtraGameWeaponComponent::ShowAllWeapons()
 {
 	bWeaponVisible = true;
 	HiddenWeaponEntries.Empty();
-
-	if (const FExtraGameWeaponGroup* Group = GetCurrentWeaponGroup())
-	{
-		for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
-		{
-			RequestWeaponFade(Entry.WeaponTag, true);
-		}
-	}
+	ApplyMasterWeaponVisibility();
+	++WeaponVisibilitySerial;
 }
 
 void UExtraGameWeaponComponent::HideAllWeapon()
 {
 	bWeaponVisible = false;
-
-	if (const FExtraGameWeaponGroup* Group = GetCurrentWeaponGroup())
-	{
-		for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
-		{
-			RequestWeaponFade(Entry.WeaponTag, false);
-		}
-	}
+	ApplyMasterWeaponVisibility();
+	++WeaponVisibilitySerial;
 }
 
-// ──────────────────────────────────────────────────────────────
-// 逐武器显隐
-// ──────────────────────────────────────────────────────────────
+void UExtraGameWeaponComponent::ApplyMasterWeaponVisibility()
+{
+	const FExtraGameWeaponGroup* Group = GetCurrentWeaponGroup();
+	if (!Group)
+	{
+		return;
+	}
+
+	for (const FExtraGameWeaponEntry& Entry : Group->WeaponEntries)
+	{
+		// 整体显示时跳过被逐条目隐藏的；整体隐藏时全部淡出
+		if (bWeaponVisible && HiddenWeaponEntries.Contains(Entry.WeaponTag))
+		{
+			continue;
+		}
+
+		RequestWeaponFade(Entry.WeaponTag, bWeaponVisible);
+	}
+}
 
 void UExtraGameWeaponComponent::ShowWeaponEntry(FGameplayTag WeaponTag)
 {
@@ -431,10 +462,6 @@ bool UExtraGameWeaponComponent::IsWeaponEntryVisible(FGameplayTag WeaponTag) con
 		&& !HiddenWeaponEntries.Contains(WeaponTag)
 		&& SpawnedWeaponMeshes.Contains(WeaponTag);
 }
-
-// ──────────────────────────────────────────────────────────────
-// 查询
-// ──────────────────────────────────────────────────────────────
 
 const FExtraGameWeaponGroup* UExtraGameWeaponComponent::GetCurrentWeaponGroup() const
 {
@@ -725,13 +752,9 @@ void UExtraGameWeaponComponent::SetWeaponFadeValue(FGameplayTag WeaponTag, float
 	}
 }
 
-// ──────────────────────────────────────────────────────────────
-// GAS 状态管理（私有）
-// ──────────────────────────────────────────────────────────────
-
 void UExtraGameWeaponComponent::RemoveGrantedAbilities()
 {
-	if (!OwnerASC)
+	if (!IsAuthorityOwner() || !OwnerASC)
 	{
 		return;
 	}
@@ -748,7 +771,7 @@ void UExtraGameWeaponComponent::RemoveGrantedAbilities()
 
 void UExtraGameWeaponComponent::RemoveGrantedEffects()
 {
-	if (!OwnerASC)
+	if (!IsAuthorityOwner() || !OwnerASC)
 	{
 		return;
 	}
@@ -766,7 +789,7 @@ void UExtraGameWeaponComponent::RemoveGrantedEffects()
 // 武器组 GA 全部以 INDEX_NONE 授予，触发方式由 GA 自身的 AbilityTriggers（InputTag）决定。
 void UExtraGameWeaponComponent::GrantWeaponGroupAbilities(const FExtraGameWeaponGroup& Group)
 {
-	if (!OwnerASC)
+	if (!IsAuthorityOwner() || !OwnerASC)
 	{
 		return;
 	}
@@ -786,7 +809,7 @@ void UExtraGameWeaponComponent::GrantWeaponGroupAbilities(const FExtraGameWeapon
 
 void UExtraGameWeaponComponent::ApplyWeaponGroupEffects(const FExtraGameWeaponGroup& Group)
 {
-	if (!OwnerASC)
+	if (!IsAuthorityOwner() || !OwnerASC)
 	{
 		return;
 	}
@@ -817,7 +840,7 @@ void UExtraGameWeaponComponent::ApplyWeaponGroupEffects(const FExtraGameWeaponGr
 
 void UExtraGameWeaponComponent::UpdateCharacterTags(const FExtraGameWeaponGroup* OldGroup, const FExtraGameWeaponGroup* NewGroup)
 {
-	if (!OwnerASC)
+	if (!IsAuthorityOwner() || !OwnerASC)
 	{
 		return;
 	}
@@ -835,12 +858,14 @@ void UExtraGameWeaponComponent::UpdateCharacterTags(const FExtraGameWeaponGroup*
 	}
 }
 
-// ──────────────────────────────────────────────────────────────
-// 轨迹伤害扫描
-// ──────────────────────────────────────────────────────────────
-
 void UExtraGameWeaponComponent::BeginWeaponTrace()
 {
+	// 伤害只在服务端结算（GA 基类 DoDamage 会拦下客户端），客户端开窗也只是白扫
+	if (!IsAuthorityOwner())
+	{
+		return;
+	}
+
 	// 直接重置并开启：即使上一次窗口因蒙太奇异常终止而未正常关闭，也不会卡死后续扫描
 	if (!GatherTraceSocketsFromCurrentGroup())
 	{
@@ -864,6 +889,7 @@ void UExtraGameWeaponComponent::BeginWeaponTrace()
 
 void UExtraGameWeaponComponent::TickWeaponTrace()
 {
+	//把客户端的调用隔绝
 	if (!bTraceActive)
 	{
 		return;

@@ -41,18 +41,36 @@ class EXTRACTGAMECHARACTER_API UExtraGameWeaponComponent : public UActorComponen
 public:
 	UExtraGameWeaponComponent();
 
+	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
+
+	// 武器组复制到达：本端按新组生成 / 显示 Mesh
+	UFUNCTION()
+	void OnRep_CurrentGroupTag();
+
+	// 整体显隐复制到达：本端按 bWeaponVisible 应用当前组 Mesh 显隐（服务端不触发）
+	UFUNCTION()
+	void OnRep_WeaponVisibilitySerial();
+
 	// ── 配置 ─────────────────────────────────────────────────
 	// 武器 DataAsset（在角色蓝图中配置）
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Config")
 	TObjectPtr<UExtraGameWeaponData> WeaponDataAsset;
 	
 	// 当前装备的武器组 Tag
-	UPROPERTY(BlueprintReadOnly, Category = "Weapon|Runtime")
+	// 服务端权威：装备 / 卸载 / 切组后复制给客户端，各端在 OnRep 里生成并显示本端的武器 Mesh
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentGroupTag, BlueprintReadOnly, Category = "Weapon|Runtime")
 	FGameplayTag CurrentGroupTag;
 
 	// 当前武器组 Mesh 整体是否可见（过场 / 攀爬时设为 false）
-	UPROPERTY(EditDefaultsOnly, Category = "Weapon|Runtime")
+	// 服务端权威：显隐入口改动后随 WeaponVisibilitySerial 一起复制给各端
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Runtime")
 	bool bWeaponVisible = true;
+
+	// 整体显隐请求序号：每次 Show/Hide 整体入口都自增。
+	// bool无法完全满足需求，即使是两次同一个显隐条件，也应该调用一次对应逻辑，因为显隐是AN触发的，要在特定帧一定要达到对应的效果
+	// 所以使用Serial值，保证每次赋值都一定会调用回调函数
+	UPROPERTY(ReplicatedUsing = OnRep_WeaponVisibilitySerial, BlueprintReadOnly, Category = "Weapon|Runtime")
+	int32 WeaponVisibilitySerial = 0;
 
 	// ── 显隐 Fade 配置（材质 FadeAmount 驱动） ──────────────
 	// 武器材质中控制透明度的标量参数名（-1 = 不透明，1 = 完全透明）
@@ -202,6 +220,12 @@ private:
 	// 隐藏指定武器组中所有 Mesh
 	void HideGroupWeaponMeshes(FGameplayTag GroupTag);
 
+	// 纯表现层：按 GroupTag 生成 / 显示该组 Mesh，其余已生成 Mesh 全部隐藏。
+	void UpdateGroupMeshPresentation(FGameplayTag GroupTag);
+
+	// 纯表现层：按 bWeaponVisible 与 HiddenWeaponEntries 把当前组 Mesh 逐个淡入 / 淡出。
+	void ApplyMasterWeaponVisibility();
+
 	// ── 显隐 Fade（材质 FadeAmount 驱动） ────────────────────
 	// 单武器 Fade 运行时状态（非反射，无需序列化）
 	struct FExtraWeaponFadeState
@@ -253,6 +277,9 @@ private:
 
 	// ── 内部辅助 ────────────────────────────────────────────
 	void CacheOwnerASC();
+
+	// 权威端判定：GAS（GA/GE/Tags）与轨迹伤害结算只在服务端执行，客户端只做武器显隐表现
+	bool IsAuthorityOwner() const;
 
 	// ── 多挂点重挂（ShowWeaponEntryOnSocket 用）─────────────
 	// 解析 WeaponTag 对应武器数据：优先当前组，其次全局表（跨组保留的 Mesh）

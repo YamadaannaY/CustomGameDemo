@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "ExtraCharacter.h"
+#include "GameplayAbilitySpec.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "MotionWarpingComponent.h"
@@ -118,6 +119,10 @@ public:
 	//RPC发给服务端让它也播，只慢一个RPC发送时间
 	UFUNCTION(Server, Reliable)
 	void Server_NotifyStopMontagePlayed(bool bLeft);
+
+	// 客户端决定「因移动取消 GA」时，把标记回送服务端，让服务端本端也走相同收尾（停蒙太奇）
+	UFUNCTION(Server, Reliable)
+	void Server_NotifyAbilityEndedByMovement(FGameplayAbilitySpecHandle AbilityHandle);
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	USpringArmComponent* CamBoom;
