@@ -75,14 +75,22 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 	if (OwnerMovementComp)
 	{
-		bisFalling=OwnerMovementComp->IsFalling() && OwnerCharacter->JumpCurrentCount==0 ;
+		// JumpCurrentCount 是 ACharacter 的非复制成员（模拟代理上恒为 0），改用角色上复制来的滞空状态；
+		// 但那份复制值要晚一个 RTT 才到，模拟代理在起跳瞬间会把它误判成「掉落」，
+		// 上升段（Velocity.Z > 0）本端即可判定，用它兜底
+		const bool bJumpingAirborne = OwnerCharacter->IsJumping() || OwnerMovementComp->Velocity.Z > 0.f;
+		bisFalling=OwnerMovementComp->IsFalling() && !bJumpingAirborne ;
 		bisWalking = OwnerMovementComp->IsWalking();
-		bisJumping = OwnerMovementComp->IsFalling() && OwnerCharacter->JumpCurrentCount > 0 ;
+		bisJumping = OwnerMovementComp->IsFalling() && bJumpingAirborne ;
 		bWalkMode =OwnerCharacter->GetWalkMode();
 		
 		Acceleration = OwnerMovementComp->GetCurrentAcceleration().Length();
 
-		// 模拟代理上上一行恒为 0，改以角色上复制来的输入状态为准
+		if (OwnerCharacter->GetLocalRole() == ROLE_SimulatedProxy)
+		{
+			Acceleration = 0.f;
+		}
+
 		bHasMoveInputCached = OwnerCharacter->HasMoveInput();
 	}
 
