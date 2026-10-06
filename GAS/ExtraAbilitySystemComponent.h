@@ -47,6 +47,16 @@ public:
 	// 仅当登记的是 InHandle 时才清除，避免旧 GA 的延迟清理误删新持有者
 	void ClearCancelWindowHolder(const FGameplayAbilitySpecHandle& InHandle);
 
+	// ── 输入事件通道 ──────────────────────────────────
+	// SendGameplayEventToActor 是纯本地派发、不参与复制：本地客户端发出的输入，服务端那份 ASC
+	// 收不到，依赖它的 GA（如连段推进）在服务端就不会有反应。所有输入事件都从本入口走——
+	// 本端立即派发，同时镜像给服务端由其再派发一次，于是各端的 GA 都能收到同一次输入，
+	// GA 内部不必写任何网络代码（各端收到后各做各的本地表现）。
+	void DispatchInputEvent(const FGameplayTag InputTag);
+
+	UFUNCTION(Server, Reliable)
+	void Server_DispatchInputEvent(const FGameplayTag InputTag);
+
 	// 角色级能力：全部以 INDEX_NONE 授予，触发方式由各 GA 自身的 AbilityTriggers（InputTag）决定。
 	// eg: Dodge(GA_Evade)归这里，不可装卸，武器技能组(Combo/AirAttack等)归 WeaponData 的 GrantedAbilities，可装卸。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Innate")

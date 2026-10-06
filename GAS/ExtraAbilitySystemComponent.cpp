@@ -2,6 +2,7 @@
 #include "ExtraGameplayAbility.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
+#include "AbilitySystemBlueprintLibrary.h"
 #include "Engine/Engine.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectTypes.h"
@@ -20,6 +21,31 @@ namespace
 
 	// 未回满时的刷新间隔（只在有层正在回充时运行，回满即停）
 	constexpr float Skill02DebugRefreshInterval = 0.1f;
+}
+
+void UExtraAbilitySystemComponent::DispatchInputEvent(const FGameplayTag InputTag)
+{
+	AActor* Avatar = GetAvatarActor();
+	if (!Avatar || !InputTag.IsValid())
+	{
+		return;
+	}
+
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Avatar, InputTag, FGameplayEventData());
+
+	// 服务端本端即权威，镜像只用于把本地客户端的输入送到服务端
+	if (!Avatar->HasAuthority())
+	{
+		Server_DispatchInputEvent(InputTag);
+	}
+}
+
+void UExtraAbilitySystemComponent::Server_DispatchInputEvent_Implementation(const FGameplayTag InputTag)
+{
+	if (AActor* Avatar = GetAvatarActor())
+	{
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Avatar, InputTag, FGameplayEventData());
+	}
 }
 
 void UExtraAbilitySystemComponent::BeginPlay()

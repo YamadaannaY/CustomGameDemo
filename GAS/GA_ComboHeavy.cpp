@@ -2,6 +2,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
@@ -43,10 +44,18 @@ void UGA_ComboHeavy::SetupComboMontageListeners()
 
 void UGA_ComboHeavy::OnComboSectionChanged()
 {
-	// 本形态仍按住攻击键则自动续段（父类默认手动，自动连段只在此具体形态开启）
-	if (IsHoldingAttack())
+	// 本形态仍按住攻击键则自动续段（父类默认手动，自动连段只在此具体形态开启）。
+	// 「仍按住」只有本地客户端知道（bHoldingAttack 不复制），所以自动续段由客户端发起：
+	// 重发一次轻击输入，走与真实按键完全相同的通道（本端派发 + 镜像到服务端），
+	// 于是两端各自的 GA 都收到这次输入、各自跳各自的 Montage
+	if (!IsHoldingAttack())
 	{
-		TryCommitCombo();
+		return;
+	}
+
+	if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+	{
+		ASC->DispatchInputEvent(UUExtraAbilitySystemStatic::GetLightAttackInputTag());
 	}
 }
 

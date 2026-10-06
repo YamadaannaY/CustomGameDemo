@@ -56,6 +56,7 @@ void AExtraPlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, bWalkMode, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, RepPendingAction, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, RepTargetYaw, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, bIsJumping, COND_SkipOwner);
 }
 
 void AExtraPlayerCharacter::Server_SetMoveInputState_Implementation(bool bNewHasMoveInput, EMoveReleaseAction ReleaseAction, float InTargetYaw)
@@ -189,6 +190,11 @@ void AExtraPlayerCharacter::BeginPlay()
 void AExtraPlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	
+	if (HasAuthority() || IsLocallyControlled())
+	{
+		bIsJumping = JumpCurrentCount > 0;
+	}
 
 	// 本端朝向已由 CMC 算好同步给服务器：
 	// 服务器复现不出双层插值转向，让它抄写客户端的值
@@ -784,7 +790,7 @@ void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& Input
 		AttackTag = UUExtraAbilitySystemStatic::GetAirDiveInputTag();
 	}
 
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, AttackTag, FGameplayEventData());
+	AbilitySystemComponent->DispatchInputEvent(AttackTag);
 }
 
 void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& InputActionValue)
@@ -798,8 +804,10 @@ void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& Inp
 	}
 
 	// 松手广播：二阶段蓄力重击 GA 监听此事件，收到即停当前段播结束段打出攻击
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-		this, UUExtraAbilitySystemStatic::GetHeavyAttackReleaseInputTag(), FGameplayEventData());
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->DispatchInputEvent(UUExtraAbilitySystemStatic::GetHeavyAttackReleaseInputTag());
+	}
 }
 
 void AExtraPlayerCharacter::OnReachHeavyThreshold()
@@ -818,12 +826,10 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 		const bool bAttackProReady =
 			AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetProReadyTag());
 
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-			this,
+		AbilitySystemComponent->DispatchInputEvent(
 			bAttackProReady
 				? UUExtraAbilitySystemStatic::GetAttackProInputTag()
-				: UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(),
-			FGameplayEventData());
+				: UUExtraAbilitySystemStatic::GetHeavyAttackInputTag());
 		return;
 	}
 
@@ -833,8 +839,7 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 		const float EnergyValue = AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
 		if (EnergyValue >= GetHeavyComboEnergyNeed())
 		{
-			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-				this, UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(), FGameplayEventData());
+			AbilitySystemComponent->DispatchInputEvent(UUExtraAbilitySystemStatic::GetHeavyAttackInputTag());
 		}
 	}
 }
@@ -862,8 +867,7 @@ void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionV
 
 	if (AbilitySystemComponent)
 	{
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-			this, UUExtraAbilitySystemStatic::GetSkillInputTag(), FGameplayEventData());
+		AbilitySystemComponent->DispatchInputEvent(UUExtraAbilitySystemStatic::GetSkillInputTag());
 	}
 }
 
@@ -876,9 +880,7 @@ void AExtraPlayerCharacter::OnUltimateStarted(const FInputActionValue& InputActi
 {
 	if (AbilitySystemComponent)
 	{
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-			this, UUExtraAbilitySystemStatic::
-			GetUltimateInputTag(), FGameplayEventData());
+		AbilitySystemComponent->DispatchInputEvent(UUExtraAbilitySystemStatic::GetUltimateInputTag());
 	}
 }
 
@@ -886,7 +888,6 @@ void AExtraPlayerCharacter::OnDodgeStarted(const FInputActionValue& InputActionV
 {
 	if (AbilitySystemComponent)
 	{
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-			this, UUExtraAbilitySystemStatic::GetDodgeInputTag(), FGameplayEventData());
+		AbilitySystemComponent->DispatchInputEvent(UUExtraAbilitySystemStatic::GetDodgeInputTag());
 	}
 }

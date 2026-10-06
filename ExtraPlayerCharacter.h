@@ -54,6 +54,9 @@ public:
 
 	FORCEINLINE bool HasMoveInput() const { return bHasMoveInput; }
 
+	// 是否处于跳跃滞空（动画层区分「起跳」与「掉落」用；各端均可读的复制值）
+	FORCEINLINE bool IsJumping() const { return bIsJumping; }
+
 	//获取当前输入相对于摄像机视角的方向
 	FORCEINLINE const FVector& GetInputDirection() const { return InputDirection; }
 
@@ -123,6 +126,7 @@ public:
 	// 客户端决定「因移动取消 GA」时，把标记回送服务端，让服务端本端也走相同收尾（停蒙太奇）
 	UFUNCTION(Server, Reliable)
 	void Server_NotifyAbilityEndedByMovement(FGameplayAbilitySpecHandle AbilityHandle);
+	
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	USpringArmComponent* CamBoom;
@@ -293,6 +297,12 @@ private:
 	// 是否持有移动输入,用来做服务端的加速度判断（客户端CMC的Acc是不会复制的）
 	UPROPERTY(Replicated)
 	bool bHasMoveInput=false;
+
+	// 是否处于跳跃滞空。JumpCurrentCount 是 ACharacter 的非复制成员（VisibleInstanceOnly，
+	// 不带 Replicated），模拟代理上恒为 0，动画层无法据它区分「起跳」与「掉落」；
+	// 这里由权威端与 owner 端每帧镜像一份可复制状态（同 bHasMoveInput 的做法）
+	UPROPERTY(Replicated)
+	bool bIsJumping = false;
 
 	// 服务器权威的「本轮松手要播的急停/转身动作」，复制给模拟代理
 	UPROPERTY(Replicated)
