@@ -32,10 +32,7 @@ UGA_HeavyAttack::UGA_HeavyAttack()
 	// 启用锁定目标转向（MR）：拔弓朝向锁定目标
 	bRotateToLockTarget = true;
 
-	FAbilityTriggerData HeavyAttackTrigger;
-	HeavyAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	HeavyAttackTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetHeavyAttackInputTag();
-	AbilityTriggers.Add(HeavyAttackTrigger);
+	InputTag = UUExtraAbilitySystemStatic::GetHeavyAttackInputTag();
 }
  
 void UGA_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,

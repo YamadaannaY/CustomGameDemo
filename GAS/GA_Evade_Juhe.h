@@ -65,7 +65,7 @@ protected:
 
 	// 居合期间的普攻输入：架势段接第一段前冲，前冲中/窗口内接下一段，分界后不再响应
 	UFUNCTION()
-	void OnJuheAttackInput(FGameplayEventData EventData);
+	void OnJuheAttackInput(float TimeWaited);
 
 	// 居合 Montage 内 AN 发的分界事件：此后普攻回归正常 Combo
 	UFUNCTION()
@@ -73,7 +73,7 @@ protected:
 
 	// 居合期间唯一一次 Dodge 输入：走基类正常后撤 Evade 动画
 	UFUNCTION()
-	void OnJuheDodgeInput(FGameplayEventData EventData);
+	void OnJuheDodgeInput(float TimeWaited);
 
 	// 本 GA 播放的 Montage 收尾：前冲段进入接续窗口，其余段照常结束
 	UFUNCTION()

@@ -1,6 +1,5 @@
 #include "GA_AirAttack.h"
 #include "AbilitySystemComponent.h"
-#include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Engine/World.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
@@ -44,10 +43,7 @@ UGA_AirAttack::UGA_AirAttack()
 
 	// 空中下砸用专属 Tag 触发（不是 InputTag.LightAttack）：空中轻击由角色按形态分派，
 	// 二阶段要让给空中连打 GA，两者若共用 LightAttack 会按 spec 顺序抢输入
-	FAbilityTriggerData AirDiveTrigger;
-	AirDiveTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	AirDiveTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetAirDiveInputTag();
-	AbilityTriggers.Add(AirDiveTrigger);
+	InputTag = UUExtraAbilitySystemStatic::GetAirDiveInputTag();
 }
 
 void UGA_AirAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

@@ -23,6 +23,9 @@ protected:
 	
 	virtual void AcknowledgePossession(class APawn* P) override;
 
+	// 每帧处理本帧收集到的输入
+	virtual void PostProcessInput(const float DeltaTime, const bool bGamePaused) override;
+
 	UPROPERTY()
 	UGameplayWidget* GameplayWidget;
 

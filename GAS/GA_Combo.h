@@ -26,7 +26,7 @@ public:
 protected:
 	// 推进到下一段：按本端已解析出的 NextComboName 跳本端这份 Montage。
 	// Montage 的 Section 不参与网络复制——各端播的是各自那份 Montage，所以这里不做跨端通信，
-	// 只要求各端都收到同一次输入即可（由 UExtraAbilitySystemComponent::DispatchInputEvent 保证），
+	// 只要求各端都收到同一次输入即可（由 ASC 的输入复制通道保证），
 	// 收到后各端各自跳段，两端自然一致。
 	void TryCommitCombo();
 
@@ -51,12 +51,12 @@ protected:
 	virtual void SetupComboMontageListeners();
 
 private:
-	//实现一个WaitGameplayEvent，监听 LightAttack InputTag，触发回调 HandleInputPress
+	//挂载本 GA 输入按下事件的监听，收到即处理并续上下一次
 	void SetupWaitComboInputPress();
 
-	//再次实现WaitGameplayEvent处理下一次输入，形成循环，同时处理当前输入
+	//本 GA 的输入按下回调，处理完成后重新挂载，形成循环
 	UFUNCTION()
-	void HandleInputPress(FGameplayEventData EventData);
+	void HandleInputPress(float TimeWaited);
 
 	//EventReceived的回调函数，找到下一个Tag的后缀，即NextComboName
 	UFUNCTION()

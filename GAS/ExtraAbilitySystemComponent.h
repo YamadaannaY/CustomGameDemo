@@ -47,15 +47,19 @@ public:
 	// 仅当登记的是 InHandle 时才清除，避免旧 GA 的延迟清理误删新持有者
 	void ClearCancelWindowHolder(const FGameplayAbilitySpecHandle& InHandle);
 
-	// ── 输入事件通道 ──────────────────────────────────
-	// SendGameplayEventToActor 是纯本地派发、不参与复制：本地客户端发出的输入，服务端那份 ASC
-	// 收不到，依赖它的 GA（如连段推进）在服务端就不会有反应。所有输入事件都从本入口走——
-	// 本端立即派发，同时镜像给服务端由其再派发一次，于是各端的 GA 都能收到同一次输入，
-	// GA 内部不必写任何网络代码（各端收到后各做各的本地表现）。
-	void DispatchInputEvent(const FGameplayTag InputTag);
+	// ── 输入通道─────────────────────────────────
+	// 输入只负责收集Tag对应的GASpecHandle，统一在 ProcessAbilityInput 里处理
+	
+	//将Tag对应GA加入Pressed数组
+	void AbilityInputTagPressed(const FGameplayTag& InputTag);
+	//将Tag对应GA加入Released数组
+	void AbilityInputTagReleased(const FGameplayTag& InputTag);
 
-	UFUNCTION(Server, Reliable)
-	void Server_DispatchInputEvent(const FGameplayTag InputTag);
+	// 处理本帧收集到的输入。只在本地玩家端每帧的最后调一次
+	void ProcessAbilityInput();
+
+	// 授予时把 GA 声明的 InputTag 打到 spec 的DynamicTag 上
+	static void ApplyAbilityInputTag(FGameplayAbilitySpec& Spec);
 
 	// 角色级能力：全部以 INDEX_NONE 授予，触发方式由各 GA 自身的 AbilityTriggers（InputTag）决定。
 	// eg: Dodge(GA_Evade)归这里，不可装卸，武器技能组(Combo/AirAttack等)归 WeaponData 的 GrantedAbilities，可装卸。
@@ -102,4 +106,10 @@ private:
 
 	// CancelWindow 持有者句柄；Invalid 表示当前无窗口
 	FGameplayAbilitySpecHandle CancellingGASpecHandle;
+
+	// 本帧收集到的输入句柄，ProcessAbilityInput 消费后清空。
+	// Held 保留"当前仍按住"的那些，供按住类能力查询
+	TArray<FGameplayAbilitySpecHandle> InputPressedSpecHandles;
+	TArray<FGameplayAbilitySpecHandle> InputHeldSpecHandles;
+	TArray<FGameplayAbilitySpecHandle> InputReleasedSpecHandles;
 };

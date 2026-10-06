@@ -18,10 +18,7 @@ UGA_AttackPro_Phase_2::UGA_AttackPro_Phase_2()
 	ActivationRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetProReadyTag());
 
 	// 长按普攻达到阈值时，角色按「是否就绪」分派到这个专属 Tag
-	FAbilityTriggerData AttackProTrigger;
-	AttackProTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	AttackProTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetAttackProInputTag();
-	AbilityTriggers.Add(AttackProTrigger);
+	InputTag = UUExtraAbilitySystemStatic::GetAttackProInputTag();
 }
 
 void UGA_AttackPro_Phase_2::ActivateAbility(const FGameplayAbilitySpecHandle Handle,

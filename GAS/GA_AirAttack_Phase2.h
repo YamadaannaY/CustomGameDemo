@@ -151,9 +151,12 @@ private:
 	UFUNCTION()
 	void OnComboWindowEnd(FGameplayEventData Payload);
 
+	// 挂载轻击输入监听：WaitInputPress 是一次性的，每次收到后在回调里重新挂载
+	void SetupLightAttackInputListener();
+
 	// 输入：仅在窗口内、且未打满三段时推进
 	UFUNCTION()
-	void OnLightAttackInput(FGameplayEventData Payload);
+	void OnLightAttackInput(float TimeWaited);
 
 	// 本段自然播完（窗口内不输入）→ 结束 GA
 	UFUNCTION()

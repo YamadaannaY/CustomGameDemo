@@ -55,7 +55,8 @@ void UGA_ComboHeavy::OnComboSectionChanged()
 
 	if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
 	{
-		ASC->DispatchInputEvent(UUExtraAbilitySystemStatic::GetLightAttackInputTag());
+		ASC->AbilityInputTagPressed(UUExtraAbilitySystemStatic::GetLightAttackInputTag());
+		ASC->ProcessAbilityInput();
 	}
 }
 
@@ -106,11 +107,12 @@ void UGA_ComboHeavy::OnHeavyTransitionFrame(FGameplayEventData EventData)
 		return;
 	}
 
-	// 切入帧：发送重击输入事件，触发重击 GA，并结束当前轻击 GA
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-		GetAvatarActorFromActorInfo(),
-		UUExtraAbilitySystemStatic::GetHeavyAttackInputTag(),
-		FGameplayEventData());
+	// 切入帧：按下重击输入触发重击 GA，并结束当前轻击 GA
+	if (UExtraAbilitySystemComponent* ExtraASC = Cast<UExtraAbilitySystemComponent>(ASC))
+	{
+		ExtraASC->AbilityInputTagPressed(UUExtraAbilitySystemStatic::GetHeavyAttackInputTag());
+		ExtraASC->ProcessAbilityInput();
+	}
 
 	K2_EndAbility();
 }

@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "Animation/AnimInstance.h"
 #include "GameplayEffect.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
@@ -24,10 +25,7 @@ UGA_HeavyAttackCharge::UGA_HeavyAttackCharge()
 
 	bRotateToLockTarget = true;
 
-	FAbilityTriggerData HeavyAttackTrigger;
-	HeavyAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	HeavyAttackTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetHeavyAttackInputTag();
-	AbilityTriggers.Add(HeavyAttackTrigger);
+	InputTag = UUExtraAbilitySystemStatic::GetHeavyAttackInputTag();
 }
 
 void UGA_HeavyAttackCharge::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -60,10 +58,10 @@ void UGA_HeavyAttackCharge::ActivateAbility(const FGameplayAbilitySpecHandle Han
 		
 		StartTask->ReadyForActivation();
 
-		// GA 结束时 Task 自动清理，不会影响下一次激活
-		UAbilityTask_WaitGameplayEvent* WaitReleaseTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-			this, UUExtraAbilitySystemStatic::GetHeavyAttackReleaseInputTag(), nullptr, true, true);
-		WaitReleaseTask->EventReceived.AddDynamic(this, &ThisClass::HandleRelease);
+		// GA 结束时 Task 自动清理，不会影响下一次激活。
+		// 监听本 GA 自己的输入松开：这份输入经 ASC 的输入复制通道同步，两端都会触发
+		UAbilityTask_WaitInputRelease* WaitReleaseTask = UAbilityTask_WaitInputRelease::WaitInputRelease(this);
+		WaitReleaseTask->OnRelease.AddDynamic(this, &ThisClass::HandleRelease);
 		WaitReleaseTask->ReadyForActivation();
 	}
 }
@@ -135,7 +133,7 @@ void UGA_HeavyAttackCharge::EnterEndPhase()
 	EndTask->ReadyForActivation();
 }
 
-void UGA_HeavyAttackCharge::HandleRelease(FGameplayEventData EventData)
+void UGA_HeavyAttackCharge::HandleRelease(float TimeHeld)
 {
 	// GA 激活后任意时刻松手 → 立即停当前段、播结束段打出攻击
 	EnterEndPhase();

@@ -1,8 +1,10 @@
 #include "GA_Skill_02.h"
+#include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "Animation/AnimInstance.h"
 #include "Engine/World.h"
 #include "GameplayEffect.h"
@@ -30,10 +32,7 @@ UGA_Skill_02::UGA_Skill_02()
 	// 落地斩属于空中下落类攻击：落点必须拉出目标胶囊，否则会先被水平拖到目标正上方、
 	LockOnWarpStandoff = 100.f;
 
-	FAbilityTriggerData SkillTrigger;
-	SkillTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	SkillTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetSkillInputTag();
-	AbilityTriggers.Add(SkillTrigger);
+	InputTag = UUExtraAbilitySystemStatic::GetSkillInputTag();
 }
 
 bool UGA_Skill_02::CheckCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -258,11 +257,11 @@ void UGA_Skill_02::OnJuheCheckFrame(FGameplayEventData Payload)
 	// 这里补挂 JuheReady 放行（居合激活后会自己把它清零消费掉）
 	ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 1);
 
-	// 先发闪避输入把居合激活起来、再结束自己——避免在「结束自己」的调用栈里激活别人。
-	if (AActor* Avatar = GetAvatarActorFromActorInfo())
+	// 先按下闪避输入把居合激活起来、再结束自己——避免在「结束自己」的调用栈里激活别人。
+	if (UExtraAbilitySystemComponent* ExtraASC = Cast<UExtraAbilitySystemComponent>(ASC))
 	{
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-			Avatar, UUExtraAbilitySystemStatic::GetDodgeInputTag(), FGameplayEventData());
+		ExtraASC->AbilityInputTagPressed(UUExtraAbilitySystemStatic::GetDodgeInputTag());
+		ExtraASC->ProcessAbilityInput();
 	}
 
 	K2_EndAbility();
@@ -285,9 +284,8 @@ void UGA_Skill_02::SetupWaitSkillInput()
 		return;
 	}
 	
-	UAbilityTask_WaitGameplayEvent* WaitSkillInputTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetSkillInputTag(), nullptr, false, true);
-	WaitSkillInputTask->EventReceived.AddDynamic(this, &ThisClass::OnSkillInputDuringRise);
+	UAbilityTask_WaitInputPress* WaitSkillInputTask = UAbilityTask_WaitInputPress::WaitInputPress(this);
+	WaitSkillInputTask->OnPress.AddDynamic(this, &ThisClass::OnSkillInputDuringRise);
 	WaitSkillInputTask->ReadyForActivation();
 }
 
@@ -313,8 +311,11 @@ void UGA_Skill_02::OnRiseMontageInterrupted()
 	K2_EndAbility();
 }
 
-void UGA_Skill_02::OnSkillInputDuringRise(FGameplayEventData Payload)
+void UGA_Skill_02::OnSkillInputDuringRise(float TimeWaited)
 {
+	// WaitInputPress 是一次性的，先续上下一次监听
+	SetupWaitSkillInput();
+
 	if (CurrentPhase != ESkill02Phase::Rise)
 	{
 		return;

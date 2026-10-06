@@ -30,7 +30,7 @@ public:
 
 	// 二次闪避：第0帧~EvadeToSprint 通知之间的重复 Dodge 输入，重播当前闪避Montage
 	UFUNCTION()
-	void HandleDodgeInputPress(FGameplayEventData EventData);
+	void HandleDodgeInputPress(float TimeWaited);
 
 	// 空中 Evade 落地回调：落地立即结束 GA（空中闪避最终必然落地，落地时 montage 可能仍未播完）
 	UFUNCTION()

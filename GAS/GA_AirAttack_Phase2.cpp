@@ -5,10 +5,12 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "Animation/AnimInstance.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 #include "ExtractGameCharacter/Projectile/ExtraSwordQi.h"
+#include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 #include "GameFramework/Character.h"
@@ -46,10 +48,7 @@ UGA_AirAttack_Phase2::UGA_AirAttack_Phase2()
 	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
 	bRotateToLockTarget = true;
 
-	FAbilityTriggerData LightAttackTrigger;
-	LightAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	LightAttackTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetLightAttackInputTag();
-	AbilityTriggers.Add(LightAttackTrigger);
+	InputTag = UUExtraAbilitySystemStatic::GetLightAttackInputTag();
 }
 
 void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -104,11 +103,8 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
-		// 轻击输入：全程监听，是否生效由窗口与段数决定（窗口外直接丢弃）
-		UAbilityTask_WaitGameplayEvent* InputTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-			this, UUExtraAbilitySystemStatic::GetLightAttackInputTag(), nullptr, false, true);
-		InputTask->EventReceived.AddDynamic(this, &ThisClass::OnLightAttackInput);
-		InputTask->ReadyForActivation();
+		// 轻击输入：是否生效由窗口与段数决定（窗口外直接丢弃）
+		SetupLightAttackInputListener();
 
 		// 可衔接窗口开 / 关（Montage 上的 AN_AttackComboWindow 发送）
 		UAbilityTask_WaitGameplayEvent* WindowBeginTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
@@ -244,8 +240,19 @@ void UGA_AirAttack_Phase2::OnComboWindowEnd(FGameplayEventData Payload)
 	bComboWindowOpen = false;
 }
 
-void UGA_AirAttack_Phase2::OnLightAttackInput(FGameplayEventData Payload)
+void UGA_AirAttack_Phase2::SetupLightAttackInputListener()
 {
+	// WaitInputPress 是一次性的：每次收到输入后由回调重新挂载，形成全程监听
+	UAbilityTask_WaitInputPress* InputTask = UAbilityTask_WaitInputPress::WaitInputPress(this);
+	InputTask->OnPress.AddDynamic(this, &ThisClass::OnLightAttackInput);
+	InputTask->ReadyForActivation();
+}
+
+void UGA_AirAttack_Phase2::OnLightAttackInput(float TimeWaited)
+{
+	// 先续上下一次监听：下面每个分支都可能提前返回
+	SetupLightAttackInputListener();
+
 	if (bTransitioning)
 	{
 		return;
@@ -294,15 +301,12 @@ void UGA_AirAttack_Phase2::HandoffToDiveAttack()
 
 void UGA_AirAttack_Phase2::TriggerDiveHandoff()
 {
-	AActor* Avatar = GetAvatarActorFromActorInfo();
-	if (!Avatar)
+	// 按下空中下砸的输入 Tag：GA_AirAttack 按它绑定，两端各自的 ASC 都会处理到这次输入
+	if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
 	{
-		return;
+		ASC->AbilityInputTagPressed(UUExtraAbilitySystemStatic::GetAirDiveInputTag());
+		ASC->ProcessAbilityInput();
 	}
-
-	// 发空中下砸专属 Tag 触发 GA_AirAttack。
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-		Avatar, UUExtraAbilitySystemStatic::GetAirDiveInputTag(), FGameplayEventData());
 }
 
 void UGA_AirAttack_Phase2::SetupSwordSlashListener()

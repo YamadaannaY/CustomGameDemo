@@ -99,7 +99,7 @@ private:
 
 	// 段1播放期间收到技能输入：只记有触发输入，此刻能否切交给 TryEnterLandAttack 判定
 	UFUNCTION()
-	void OnSkillInputDuringRise(FGameplayEventData Payload);
+	void OnSkillInputDuringRise(float TimeWaited);
 
 	// 能否进入段2的判定，满足「已过标记帧 + 仍在空中 + 有挂起输入」时消耗第二层充能并切落地斩
 	void TryEnterLandAttack();

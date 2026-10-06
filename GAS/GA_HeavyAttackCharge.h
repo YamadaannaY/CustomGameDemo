@@ -80,9 +80,9 @@ private:
 	// 切到结束段：置位 bInEnding → 停当前段 → 播结束 Montage
 	void EnterEndPhase();
 
-	// 松手事件回调：进入结束段打出攻击
+	// 松手回调：进入结束段打出攻击
 	UFUNCTION()
-	void HandleRelease(FGameplayEventData EventData);
+	void HandleRelease(float TimeHeld);
 
 	// 起手段播完：未松手则进循环段
 	UFUNCTION()

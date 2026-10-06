@@ -739,12 +739,13 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 		return;
 	}
 
-	// warp target 仅本机设置（本地控制），避免服务端重复写入 / 客户端双重转向
+	// warp target 两端各写一份：
+	// 远端玩家的服务端实例（DS 上玩家 Pawn 的 IsLocallyControlled() 为 false）也要算，
+	// 因为 MW 改写的是 root motion 位移，只有两端算同一套目标，客户端预测出的位移服务端才复现得出来；
+	// 否则服务端跑的是未 warp 的原始根位移，与客户端上报的位置相差上百 cm → 每帧 ClientAdjustPosition。
+	// 服务端能读到目标，靠 ULockOnComponent 变化时经 Server_SetLockTarget 上报。
 	const APawn* Pawn = Cast<APawn>(PlayerChar);
-	if (Pawn && !Pawn->IsLocallyControlled())
-	{
-		return;
-	}
+	const bool bRemoteServerInstance = Pawn && !Pawn->IsLocallyControlled();
 
 	UMotionWarpingComponent* MWC = PlayerChar->GetMotionWarpingComponent();
 	if (!MWC)
@@ -806,8 +807,14 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 		// 无目标且无输入
 		FaceDir = PlayerChar->GetActorForwardVector();
 	}
-	
-	
+
+	// 服务端只复现位移：朝向已由客户端每帧 Server_SyncClientYaw 抄写主导（Montage 期间
+	// UExtraGameMovementComponent::PhysicsRotation 让位给动画），这里再 warp 旋转会和抄写抢朝向
+	if (bRemoteServerInstance)
+	{
+		bWarpRotation = false;
+	}
+
 	FMotionWarpingTarget WarpTarget;
 	WarpTarget.Name = LockOnWarpTargetName;
 	WarpTarget.Location = WarpLocation;

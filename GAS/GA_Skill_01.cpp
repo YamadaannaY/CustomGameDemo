@@ -19,10 +19,7 @@ UGA_Skill_01::UGA_Skill_01()
 	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
 	bRotateToLockTarget = true;
 
-	FAbilityTriggerData SkillTrigger;
-	SkillTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	SkillTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetSkillInputTag();
-	AbilityTriggers.Add(SkillTrigger);
+	InputTag = UUExtraAbilitySystemStatic::GetSkillInputTag();
 }
 
 void UGA_Skill_01::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

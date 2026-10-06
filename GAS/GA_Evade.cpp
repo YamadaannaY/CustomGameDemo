@@ -3,6 +3,7 @@
 #include "GameplayTagContainer.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/ExtraGameAnimInstance.h"
@@ -27,10 +28,7 @@ UGA_Evade::UGA_Evade()
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetHeavyAttackAbilityTag());
 
 	// 通过 InputTag 触发
-	FAbilityTriggerData DodgeTrigger;
-	DodgeTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	DodgeTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetDodgeInputTag();	
-	AbilityTriggers.Add(DodgeTrigger);
+	InputTag = UUExtraAbilitySystemStatic::GetDodgeInputTag();
 }
 
 void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -191,13 +189,12 @@ void UGA_Evade::HandlePlayMontageTaskDelegates(UAbilityTask_PlayMontageAndWait* 
 
 void UGA_Evade::SetupWaitDodgeInputPress()
 {
-	UAbilityTask_WaitGameplayEvent* WaitDodgeInputTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetDodgeInputTag(), nullptr, true, false);
-	WaitDodgeInputTask->EventReceived.AddDynamic(this, &ThisClass::HandleDodgeInputPress);
+	UAbilityTask_WaitInputPress* WaitDodgeInputTask = UAbilityTask_WaitInputPress::WaitInputPress(this);
+	WaitDodgeInputTask->OnPress.AddDynamic(this, &ThisClass::HandleDodgeInputPress);
 	WaitDodgeInputTask->ReadyForActivation();
 }
 
-void UGA_Evade::HandleDodgeInputPress(FGameplayEventData EventData)
+void UGA_Evade::HandleDodgeInputPress(float TimeWaited)
 {
 	// 与 GA_Combo 逻辑一致：先重新监听下一次输入，形成循环，再由次数守卫决定是否响应
 	SetupWaitDodgeInputPress();

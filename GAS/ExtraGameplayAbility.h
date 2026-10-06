@@ -29,6 +29,13 @@ public:
 
 	UAnimInstance* GetOwnerAnimInstance() const;
 
+	// 本 GA 的输入 Tag：授予时由 ASC 打到 spec 的动态 tag 上，输入层用同一个 Tag 调
+	// AbilityInputTagPressed/Released 就能找到它。留空 = 不由输入触发（被动 / 工具类 GA）。
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	FGameplayTag InputTag;
+
+	FORCEINLINE FGameplayTag GetInputTag() const { return InputTag; }
+
 	// 服务端收到「客户端因移动取消本 GA」的 RPC 后调用：让服务端 EndAbility 走与客户端相同的收尾（停 Montage）
 	void SetEndingFromMovement() { bEndingFromMovement = true; }
 

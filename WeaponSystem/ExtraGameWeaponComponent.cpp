@@ -3,6 +3,7 @@
 #include "ExtraGameWeaponComponent.h"
 #include "ExtraGameWeaponData.h"
 #include "ExtractGameCharacter/GAS/ExtraGameplayAbility.h"
+#include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -801,8 +802,9 @@ void UExtraGameWeaponComponent::GrantWeaponGroupAbilities(const FExtraGameWeapon
 			continue;
 		}
 
-		FGameplayAbilitySpecHandle Handle = OwnerASC->GiveAbility(
-			FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
+		FGameplayAbilitySpec Spec(AbilityClass, 1, INDEX_NONE, this);
+		UExtraAbilitySystemComponent::ApplyAbilityInputTag(Spec);
+		FGameplayAbilitySpecHandle Handle = OwnerASC->GiveAbility(Spec);
 		ActiveAbilityHandles.Add(Handle);
 	}
 }

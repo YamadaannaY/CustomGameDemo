@@ -3,6 +3,7 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "Animation/AnimMontage.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 
@@ -34,10 +35,7 @@ UGA_Combo::UGA_Combo() : ComboMontage(nullptr)
 	
 	bRotateToInputWhenNoTarget = true ; 
 
-	FAbilityTriggerData LightAttackTrigger;
-	LightAttackTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	LightAttackTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetLightAttackInputTag();
-	AbilityTriggers.Add(LightAttackTrigger);
+	InputTag = UUExtraAbilitySystemStatic::GetLightAttackInputTag();
 }
 
 void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -97,7 +95,7 @@ FName UGA_Combo::GetLastComboSectionName() const
 		: NAME_None;
 }
 
-void UGA_Combo::HandleInputPress(FGameplayEventData EventData)
+void UGA_Combo::HandleInputPress(float TimeWaited)
 {
 	SetupWaitComboInputPress();
 	TryCommitCombo();
@@ -105,10 +103,10 @@ void UGA_Combo::HandleInputPress(FGameplayEventData EventData)
 
 void UGA_Combo::SetupWaitComboInputPress()
 {
-	// 废弃 WaitInputPress，改为监听 LightAttack InputTag 的 GameplayEvent
-	UAbilityTask_WaitGameplayEvent* WaitComboInputTag = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetLightAttackInputTag(), nullptr, true, false);
-	WaitComboInputTag->EventReceived.AddDynamic(this, &ThisClass::HandleInputPress);
+	// 监听本 GA 自己的输入按下事件：这份输入经 ASC 的输入复制通道同步（见
+	// UExtraAbilitySystemComponent::ProcessAbilityInput），两端都会触发，各端各自推进本端 Montage
+	UAbilityTask_WaitInputPress* WaitComboInputTag = UAbilityTask_WaitInputPress::WaitInputPress(this);
+	WaitComboInputTag->OnPress.AddDynamic(this, &ThisClass::HandleInputPress);
 	WaitComboInputTag->ReadyForActivation();
 }
 

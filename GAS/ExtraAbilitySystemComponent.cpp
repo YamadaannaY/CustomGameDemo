@@ -1,8 +1,8 @@
 #include "ExtraAbilitySystemComponent.h"
 #include "ExtraGameplayAbility.h"
+#include "Abilities/GameplayAbility.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
-#include "AbilitySystemBlueprintLibrary.h"
 #include "Engine/Engine.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectTypes.h"
@@ -21,31 +21,121 @@ namespace
 
 	// 未回满时的刷新间隔（只在有层正在回充时运行，回满即停）
 	constexpr float Skill02DebugRefreshInterval = 0.1f;
+
+	// GAS 输入事件（InputPressed / InputReleased）按 (Handle, PredictionKey) 复合键查表，
+	// 这里的 key 必须与 WaitInputPress / WaitInputRelease 绑定时用的一致，即
+	// GA 实例的 CurrentActivationInfo对应的Key
+	// 引擎原生的 AbilityLocalInputPressed 就是这么取的。
+	FPredictionKey GetAbilityInputEventPredictionKey(const FGameplayAbilitySpec& Spec)
+	{
+		const TArray<UGameplayAbility*> Instances = Spec.GetAbilityInstances();
+		return Instances.IsEmpty()
+			? Spec.ActivationInfo.GetActivationPredictionKey()
+			: Instances.Last()->GetCurrentActivationInfoRef().GetActivationPredictionKey();
+	}
 }
 
-void UExtraAbilitySystemComponent::DispatchInputEvent(const FGameplayTag InputTag)
+void UExtraAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& InputTag)
 {
-	AActor* Avatar = GetAvatarActor();
-	if (!Avatar || !InputTag.IsValid())
+	if (!InputTag.IsValid())
 	{
 		return;
 	}
 
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Avatar, InputTag, FGameplayEventData());
-
-	// 服务端本端即权威，镜像只用于把本地客户端的输入送到服务端
-	if (!Avatar->HasAuthority())
+	for (const FGameplayAbilitySpec& Spec : ActivatableAbilities.Items)
 	{
-		Server_DispatchInputEvent(InputTag);
+		if (Spec.Ability && Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
+		{
+			InputPressedSpecHandles.AddUnique(Spec.Handle);
+			InputHeldSpecHandles.AddUnique(Spec.Handle);
+		}
 	}
 }
 
-void UExtraAbilitySystemComponent::Server_DispatchInputEvent_Implementation(const FGameplayTag InputTag)
+void UExtraAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& InputTag)
 {
-	if (AActor* Avatar = GetAvatarActor())
+	if (!InputTag.IsValid())
 	{
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Avatar, InputTag, FGameplayEventData());
+		return;
 	}
+
+	for (const FGameplayAbilitySpec& Spec : ActivatableAbilities.Items)
+	{
+		if (Spec.Ability && Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
+		{
+			InputReleasedSpecHandles.AddUnique(Spec.Handle);
+			InputHeldSpecHandles.Remove(Spec.Handle);
+		}
+	}
+}
+
+void UExtraAbilitySystemComponent::ProcessAbilityInput()
+{
+	// 先处理松开：按住类能力可能因此结束
+	for (const FGameplayAbilitySpecHandle& Handle : InputReleasedSpecHandles)
+	{
+		if (FGameplayAbilitySpec* Spec = FindAbilitySpecFromHandle(Handle))
+		{
+			if (Spec->Ability)
+			{
+				Spec->InputPressed = false;
+
+				if (Spec->IsActive())
+				{
+					AbilitySpecInputReleased(*Spec);
+
+					// 上面那个只把输入 pipe 给 GA 的 InputReleased 虚函数、不广播 GAS 的输入事件；
+					// 而 WaitInputRelease 监听的正是那个事件，这里补一次广播
+					InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputReleased, Spec->Handle,
+						GetAbilityInputEventPredictionKey(*Spec));
+				}
+			}
+		}
+	}
+	InputReleasedSpecHandles.Reset();
+
+	for (const FGameplayAbilitySpecHandle& Handle : InputPressedSpecHandles)
+	{
+		FGameplayAbilitySpec* Spec = FindAbilitySpecFromHandle(Handle);
+		if (!Spec || !Spec->Ability)
+		{
+			continue;
+		}
+
+		Spec->InputPressed = true;
+
+		if (Spec->IsActive())
+		{
+			// 已激活：把这次输入喂给它
+			AbilitySpecInputPressed(*Spec);
+
+			if (!InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, Spec->Handle,
+				GetAbilityInputEventPredictionKey(*Spec)))
+			{
+				// 没有监听者 = key 与 WaitInputPress 绑定时用的不一致（诊断用，定位后可删）
+				UE_LOG(LogTemp, Warning,
+					TEXT("[InputChannel] InputPressed 没有监听者，PredictionKey 可能不匹配：%s"),
+					*GetNameSafe(Spec->Ability));
+			}
+		}
+		else
+		{
+			// 未激活：尝试激活。LocalPredicted 下会连带 ServerTryActivateAbility 让服务端也激活
+			TryActivateAbility(Handle);
+		}
+	}
+	InputPressedSpecHandles.Reset();
+}
+
+void UExtraAbilitySystemComponent::ApplyAbilityInputTag(FGameplayAbilitySpec& Spec)
+{
+	const UExtraGameplayAbility* AbilityCDO = Cast<UExtraGameplayAbility>(Spec.Ability);
+	if (!AbilityCDO || !AbilityCDO->GetInputTag().IsValid())
+	{
+		return;
+	}
+
+	Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->GetInputTag());
 }
 
 void UExtraAbilitySystemComponent::BeginPlay()
@@ -282,7 +372,9 @@ void UExtraAbilitySystemComponent::GiveInitialAbilities()
 		{
 			continue;
 		}
-		FGameplayAbilitySpecHandle Handle = GiveAbility(FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
+		FGameplayAbilitySpec Spec(AbilityClass, 1, INDEX_NONE, this);
+		ApplyAbilityInputTag(Spec);
+		FGameplayAbilitySpecHandle Handle = GiveAbility(Spec);
 		InnateAbilityHandles.Add(Handle);
 	}
 }

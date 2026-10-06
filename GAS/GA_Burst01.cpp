@@ -16,10 +16,7 @@ UGA_Burst01::UGA_Burst01()
 	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetAbilityTag());
 
-	FAbilityTriggerData BurstTrigger;
-	BurstTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-	BurstTrigger.TriggerTag = UUExtraAbilitySystemStatic::GetUltimateInputTag();
-	AbilityTriggers.Add(BurstTrigger);
+	InputTag = UUExtraAbilitySystemStatic::GetUltimateInputTag();
 
 	// 仅第一形态（State.Phase1 在 ASC owned tags 上）可激活：
 	// 本 GA 常驻授予（Innate），靠该 tag 门控，切到第二形态后 tag 移除 → 大招自然失效，

@@ -3,6 +3,7 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
@@ -241,21 +242,19 @@ bool UGA_Evade_Juhe::TryHoldForAirLanding()
 
 void UGA_Evade_Juhe::SetupWaitJuheAttackInput()
 {
-	UAbilityTask_WaitGameplayEvent* WaitAttackTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetLightAttackInputTag(), nullptr, true, false);
-	WaitAttackTask->EventReceived.AddDynamic(this, &ThisClass::OnJuheAttackInput);
+	UAbilityTask_WaitInputPress* WaitAttackTask = UAbilityTask_WaitInputPress::WaitInputPress(this);
+	WaitAttackTask->OnPress.AddDynamic(this, &ThisClass::OnJuheAttackInput);
 	WaitAttackTask->ReadyForActivation();
 }
 
 void UGA_Evade_Juhe::SetupWaitJuheDodgeInput()
 {
-	UAbilityTask_WaitGameplayEvent* WaitDodgeTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetDodgeInputTag(), nullptr, true, false);
-	WaitDodgeTask->EventReceived.AddDynamic(this, &ThisClass::OnJuheDodgeInput);
+	UAbilityTask_WaitInputPress* WaitDodgeTask = UAbilityTask_WaitInputPress::WaitInputPress(this);
+	WaitDodgeTask->OnPress.AddDynamic(this, &ThisClass::OnJuheDodgeInput);
 	WaitDodgeTask->ReadyForActivation();
 }
 
-void UGA_Evade_Juhe::OnJuheAttackInput(FGameplayEventData EventData)
+void UGA_Evade_Juhe::OnJuheAttackInput(float TimeWaited)
 {
 	// 分界事件之后普攻归正常 Combo GA
 	if (bJuhePhaseEnded)
@@ -476,7 +475,7 @@ void UGA_Evade_Juhe::OnJuhePhaseEnd(FGameplayEventData EventData)
 	RemoveJuheState();
 }
 
-void UGA_Evade_Juhe::OnJuheDodgeInput(FGameplayEventData EventData)
+void UGA_Evade_Juhe::OnJuheDodgeInput(float TimeWaited)
 {
 
 	// 空中居合走空中后撤动画，地面走地面后撤动画

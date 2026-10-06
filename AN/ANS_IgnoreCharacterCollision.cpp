@@ -26,6 +26,19 @@ void UANS_IgnoreCharacterCollision::NotifyBegin(USkeletalMeshComponent* MeshComp
 	// 蒙太奇被强行打断时挂 BlendOut 恢复碰撞
 	if (UAnimInstance* AnimInst = MeshComp->GetAnimInstance())
 	{
+		// 同一区间可能在同一实例上二次进入（Montage 重播 / 同资产多实例并行播放），
+		// 直接 AddDynamic 会留下重复回调并触发引擎 ensure，故先解绑再绑
+		AnimInst->OnMontageBlendingOut.RemoveDynamic(this, &ThisClass::OnOwnerMontageBlendingOut);
+
+		// 上一次的绑定若落在别的动画实例上（同一资产被另一角色播放过），一并摘掉，避免残留回调
+		if (UAnimInstance* PrevAnimInst = BoundAnimInstance.Get())
+		{
+			if (PrevAnimInst != AnimInst)
+			{
+				PrevAnimInst->OnMontageBlendingOut.RemoveDynamic(this, &ThisClass::OnOwnerMontageBlendingOut);
+			}
+		}
+
 		BoundAnimInstance = AnimInst;
 		AnimInst->OnMontageBlendingOut.AddDynamic(this, &ThisClass::OnOwnerMontageBlendingOut);
 	}
