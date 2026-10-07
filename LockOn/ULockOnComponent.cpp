@@ -5,6 +5,7 @@
 #include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
+#include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "ExtractGameCharacter/ExtraCharacter.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
@@ -12,20 +13,23 @@
 ULockOnComponent::ULockOnComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+
+	SetIsReplicatedByDefault(true);
+}
+
+void ULockOnComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ULockOnComponent, CurrentLockTarget);
 }
 
 void ULockOnComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	if (!OwnerPawn)
-	{
-		return;
-	}
-
-	// 检测只在本机执行（本地控制的 Pawn），避免服务端/模拟端重复锁定
-	if (!OwnerPawn->IsLocallyControlled())
+	// 检测只在服务端跑：客户端不能自己决定锁定目标，且锁定目标会决定攻击朝向/位移，必须权威
+	if (!GetOwner() || !GetOwner()->HasAuthority())
 	{
 		return;
 	}
@@ -47,13 +51,67 @@ void ULockOnComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ULockOnComponent::ClearLockTarget()
 {
-	CurrentLockTarget.Reset();
+	// 锁定状态只有服务端权威
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
+	if (!CurrentLockTarget)
+	{
+		return;
+	}
+
+	CurrentLockTarget = nullptr;
+	
+	LogLockTargetChanged();
 }
 
 void ULockOnComponent::ForceRefresh()
 {
-	UE_LOG(LogTemp,Warning,TEXT("Lock Comp Take a force refresh"));
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
 	UpdateLockTarget();
+}
+
+void ULockOnComponent::OnRep_CurrentLockTarget()
+{
+	LogLockTargetChanged();
+}
+
+void ULockOnComponent::LogLockTargetChanged() const
+{
+	if (GetOwnerRole() == ROLE_SimulatedProxy || GetOwnerRole()==ROLE_Authority) return ;
+	
+	AActor* MyOwner = GetOwner();
+	if (!MyOwner)
+	{
+		return ; 	
+	}
+	
+	FString OwnerName = MyOwner->GetName();
+	
+	if (AActor* NewTarget = CurrentLockTarget.Get())
+	{
+		const FString Msg = FString::Printf(TEXT("[LockOn] %s 锁定目标: %s"), *OwnerName,*NewTarget->GetName());
+		UE_LOG(LogTemp, Warning, TEXT("%s"), *Msg);
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, Msg);
+		}
+	}
+	else
+	{
+		const FString Msg = TEXT("[LockOn] %s 锁定目标: 无",*OwnerName);
+		UE_LOG(LogTemp, Warning, TEXT("%s"), *Msg);
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, Msg);
+		}
+	}
 }
 
 void ULockOnComponent::UpdateLockTarget()
@@ -64,78 +122,69 @@ void ULockOnComponent::UpdateLockTarget()
 	}
 
 	// 缓存旧目标，用于末尾判断锁定对象是否发生变化
-	const TWeakObjectPtr<AActor> PreviousTarget = CurrentLockTarget;
+	AActor* const PreviousTarget = CurrentLockTarget.Get();
 
 	// 已有目标且保持模式：目标仍有效且在解除距离内 → 保持不动，避免攻击中频繁跳目标
-	if (bHoldTargetUntilBreak && CurrentLockTarget.IsValid())
+	bool bRescan = true;
+	if (bHoldTargetUntilBreak && CurrentLockTarget)
 	{
-		AActor* Cur = CurrentLockTarget.Get();
-		if (IsValidTarget(Cur))
+		AActor* Cur = CurrentLockTarget;
+		if (IsValidTarget(Cur) &&
+			FVector::DistSquared(GetOwner()->GetActorLocation(), Cur->GetActorLocation()) <= LockBreakRange * LockBreakRange)
 		{
-			if (FVector::DistSquared(GetOwner()->GetActorLocation(), Cur->GetActorLocation()) <= LockBreakRange * LockBreakRange)
-			{
-				return;
-			}
-		}
-		// 目标失效 / 超距 → 清除,重新扫描一次
-		CurrentLockTarget.Reset();
-	}
-
-	const FVector Origin = GetOwner()->GetActorLocation();
-	const FCollisionShape Shape = FCollisionShape::MakeSphere(LockRadius);
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(GetOwner());
-
-	TArray<FOverlapResult> Overlaps;
-	if (!GetWorld()->OverlapMultiByChannel(Overlaps, Origin, FQuat::Identity, ECC_Pawn, Shape, QueryParams))
-	{
-		CurrentLockTarget.Reset();
-		return;
-	}
-	
-	float BestDistSq = TNumericLimits<float>::Max();
-	AActor* BestTarget = nullptr;
-	for (const FOverlapResult& Overlap : Overlaps)
-	{
-		AActor* Candidate = Overlap.GetActor();
-		if (!Candidate || !IsValidTarget(Candidate))
-		{
-			continue;
-		}
-
-		//遍历找到最近的目标
-		const float DistSq = FVector::DistSquared(Origin, Candidate->GetActorLocation());
-		if (DistSq < BestDistSq)
-		{
-			BestDistSq = DistSq;
-			BestTarget = Candidate;
-		}
-	}
-
-	CurrentLockTarget = BestTarget;
-
-	// 锁定对象变化时（新锁定 / 解除），Log 与屏幕各打印一次
-	if (CurrentLockTarget != PreviousTarget)
-	{
-		if (AActor* NewTarget = CurrentLockTarget.Get())
-		{
-			const FString Msg = FString::Printf(TEXT("[LockOn] 锁定目标: %s"), *NewTarget->GetName());
-			UE_LOG(LogTemp, Warning, TEXT("%s"), *Msg);
-			if (GEngine)
-			{
-				GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, Msg);
-			}
+			bRescan = false;
 		}
 		else
 		{
-			const FString Msg = TEXT("[LockOn] 锁定目标: 无");
-			UE_LOG(LogTemp, Warning, TEXT("%s"), *Msg);
-			if (GEngine)
-			{
-				GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, Msg);
-			}
+			// 目标失效 / 超距 → 清除,重新扫描一次
+			CurrentLockTarget = nullptr;
 		}
 	}
+
+	if (bRescan)
+	{
+		const FVector Origin = GetOwner()->GetActorLocation();
+		const FCollisionShape Shape = FCollisionShape::MakeSphere(LockRadius);
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(GetOwner());
+
+		TArray<FOverlapResult> Overlaps;
+		if (!GetWorld()->OverlapMultiByChannel(Overlaps, Origin, FQuat::Identity, ECC_Pawn, Shape, QueryParams))
+		{
+			CurrentLockTarget = nullptr;
+		}
+		else
+		{
+			float BestDistSq = TNumericLimits<float>::Max();
+			AActor* BestTarget = nullptr;
+			for (const FOverlapResult& Overlap : Overlaps)
+			{
+				AActor* Candidate = Overlap.GetActor();
+				if (!Candidate || !IsValidTarget(Candidate))
+				{
+					continue;
+				}
+
+				//遍历找到最近的目标
+				const float DistSq = FVector::DistSquared(Origin, Candidate->GetActorLocation());
+				if (DistSq < BestDistSq)
+				{
+					BestDistSq = DistSq;
+					BestTarget = Candidate;
+				}
+			}
+
+			CurrentLockTarget = BestTarget;
+		}
+	}
+
+	// 锁定对象变化时（新锁定 / 解除）：服务端自身赋值不触发 OnRep，这里显式打印一次
+	if (CurrentLockTarget.Get() == PreviousTarget)
+	{
+		return;
+	}
+
+	LogLockTargetChanged();
 }
 
 bool ULockOnComponent::IsValidTarget(AActor* Candidate) const
