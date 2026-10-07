@@ -42,8 +42,8 @@ UAnimInstance* UExtraGameplayAbility::GetOwnerAnimInstance() const
 }
 
 void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
-	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
-	bool bReplicateEndAbility, bool bWasCancelled)
+                                       const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
+                                       bool bReplicateEndAbility, bool bWasCancelled)
 {
 	//因为移动CancelGA时，手动停Montage
 	if (bEndingFromMovement)
@@ -149,6 +149,11 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 	FOnGameplayAbilityEnded::FDelegate* OnGameplayAbilityEndedDelegate, const FGameplayEventData* TriggerEventData)
 {
 	Super::PreActivate(Handle, ActorInfo, ActivationInfo, OnGameplayAbilityEndedDelegate, TriggerEventData);
+	
+	if (AExtraPlayerCharacter* PlayerChar = GetOwningAvatarCharacter())
+	{
+		PlayerChar->CancelStopMontageIfPlaying();
+	}
 
 	// 移动打断在此统一监听。由AN_Cancel在动画帧发送
 	if (bEnableMovementCancel)
@@ -351,7 +356,7 @@ void UExtraGameplayAbility::DoDamage(const FGameplayEventData& Data)
 	Context.AddInstigator(Avatar, Avatar);
 	Context.AddSourceObject(Avatar);
 	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffect, GetAbilityLevel(), Context);
-	
+
 	for (AActor* HitActor : HitActors)
 	{
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
@@ -743,7 +748,7 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 	// 远端玩家的服务端实例（DS 上玩家 Pawn 的 IsLocallyControlled() 为 false）也要算，
 	// 因为 MW 改写的是 root motion 位移，只有两端算同一套目标，客户端预测出的位移服务端才复现得出来；
 	// 否则服务端跑的是未 warp 的原始根位移，与客户端上报的位置相差上百 cm → 每帧 ClientAdjustPosition。
-	// 服务端能读到目标，靠 ULockOnComponent 变化时经 Server_SetLockTarget 上报。
+	// 服务端读得到目标，因为锁定检测本身就跑在服务端（ULockOnComponent），结果再复制到各端。
 	const APawn* Pawn = Cast<APawn>(PlayerChar);
 	const bool bRemoteServerInstance = Pawn && !Pawn->IsLocallyControlled();
 

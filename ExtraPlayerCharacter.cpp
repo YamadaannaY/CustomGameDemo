@@ -750,16 +750,23 @@ void AExtraPlayerCharacter::CancelStopMontageIfPlaying()
 		return;
 	}
 
-	// 停步 Montage（急停/转身）都带 RootMotion，输入恢复时直接打断进入跑步
-	UAnimMontage* ActiveMontage = AnimInst->GetCurrentActiveMontage();
-	if (ActiveMontage == LeftStopRunMontage ||
-		ActiveMontage == RightStopRunMontage ||
-		ActiveMontage == TurnLeft90Montage ||
-		ActiveMontage == TurnRight90Montage ||
-		ActiveMontage == LeftStopMontage ||
-		ActiveMontage == RightStopMontage)
+	// 清掉停步请求。
+	if (UExtraGameAnimInstance* GameAI = Cast<UExtraGameAnimInstance>(AnimInst))
 	{
-		AnimInst->Montage_StopWithBlendOut(ActiveMontage->BlendOut);
+		GameAI->ClearStopRequest();
+	}
+	
+	const UAnimMontage* StopMontages[] = {
+		LeftStopRunMontage, RightStopRunMontage,
+		TurnLeft90Montage, TurnRight90Montage,
+		LeftStopMontage, RightStopMontage };
+
+	for (const UAnimMontage* StopMontage : StopMontages)
+	{
+		if (StopMontage && AnimInst->Montage_IsPlaying(StopMontage))
+		{
+			AnimInst->Montage_StopWithBlendOut(StopMontage->BlendOut, StopMontage);
+		}
 	}
 }
 
@@ -790,7 +797,7 @@ void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& Input
 		AttackTag = UUExtraAbilitySystemStatic::GetAirDiveInputTag();
 	}
 
-	AbilitySystemComponent->DispatchInputEvent(AttackTag);
+	AbilitySystemComponent->AbilityInputTagPressed(AttackTag);
 }
 
 void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& InputActionValue)
@@ -803,10 +810,12 @@ void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& Inp
 		GetWorldTimerManager().ClearTimer(HeavyAttackHoldTimerHandle);
 	}
 
-	// 松手广播：二阶段蓄力重击 GA 监听此事件，收到即停当前段播结束段打出攻击
+	// 松手：让监听输入松开的能力收到 release（蓄力重击靠它打出结束段）。
+	// 轻击与重击共用同一个物理键，两个都松开
 	if (AbilitySystemComponent)
 	{
-		AbilitySystemComponent->DispatchInputEvent(UUExtraAbilitySystemStatic::GetHeavyAttackReleaseInputTag());
+		AbilitySystemComponent->AbilityInputTagReleased(UUExtraAbilitySystemStatic::GetHeavyAttackInputTag());
+		AbilitySystemComponent->AbilityInputTagReleased(UUExtraAbilitySystemStatic::GetLightAttackInputTag());
 	}
 }
 
@@ -826,10 +835,12 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 		const bool bAttackProReady =
 			AbilitySystemComponent->HasMatchingGameplayTag(UUExtraAbilitySystemStatic::GetProReadyTag());
 
-		AbilitySystemComponent->DispatchInputEvent(
+		// 长按达阈值：等同一次重击输入。这里在定时器回调里，已错过本帧的 ProcessAbilityInput，手动补一次
+		AbilitySystemComponent->AbilityInputTagPressed(
 			bAttackProReady
 				? UUExtraAbilitySystemStatic::GetAttackProInputTag()
 				: UUExtraAbilitySystemStatic::GetHeavyAttackInputTag());
+		AbilitySystemComponent->ProcessAbilityInput();
 		return;
 	}
 
@@ -839,7 +850,8 @@ void AExtraPlayerCharacter::OnReachHeavyThreshold()
 		const float EnergyValue = AbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
 		if (EnergyValue >= GetHeavyComboEnergyNeed())
 		{
-			AbilitySystemComponent->DispatchInputEvent(UUExtraAbilitySystemStatic::GetHeavyAttackInputTag());
+			AbilitySystemComponent->AbilityInputTagPressed(UUExtraAbilitySystemStatic::GetHeavyAttackInputTag());
+			AbilitySystemComponent->ProcessAbilityInput();
 		}
 	}
 }
@@ -867,7 +879,7 @@ void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionV
 
 	if (AbilitySystemComponent)
 	{
-		AbilitySystemComponent->DispatchInputEvent(UUExtraAbilitySystemStatic::GetSkillInputTag());
+		AbilitySystemComponent->AbilityInputTagPressed(UUExtraAbilitySystemStatic::GetSkillInputTag());
 	}
 }
 
@@ -880,7 +892,7 @@ void AExtraPlayerCharacter::OnUltimateStarted(const FInputActionValue& InputActi
 {
 	if (AbilitySystemComponent)
 	{
-		AbilitySystemComponent->DispatchInputEvent(UUExtraAbilitySystemStatic::GetUltimateInputTag());
+		AbilitySystemComponent->AbilityInputTagPressed(UUExtraAbilitySystemStatic::GetUltimateInputTag());
 	}
 }
 
@@ -888,6 +900,6 @@ void AExtraPlayerCharacter::OnDodgeStarted(const FInputActionValue& InputActionV
 {
 	if (AbilitySystemComponent)
 	{
-		AbilitySystemComponent->DispatchInputEvent(UUExtraAbilitySystemStatic::GetDodgeInputTag());
+		AbilitySystemComponent->AbilityInputTagPressed(UUExtraAbilitySystemStatic::GetDodgeInputTag());
 	}
 }

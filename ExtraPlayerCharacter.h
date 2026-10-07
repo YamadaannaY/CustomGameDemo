@@ -127,6 +127,8 @@ public:
 	UFUNCTION(Server, Reliable)
 	void Server_NotifyAbilityEndedByMovement(FGameplayAbilitySpecHandle AbilityHandle);
 	
+	// 停步 Montage 正在播放时，收到移动输入即打断
+	void CancelStopMontageIfPlaying();
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	USpringArmComponent* CamBoom;
@@ -235,7 +237,7 @@ private:
 	// Unreliable：高频且可丢，丢一帧只是服务器朝向停一帧，下一帧即补上
 	UFUNCTION(Server, Unreliable)
 	void Server_SyncClientYaw(float Yaw);
-	
+
 	//客户端输入层触发Ctrl，切换WalkMode，服务端抄写这个值
 	UFUNCTION(Server, Reliable)
 	void Server_ChangeWalkMode(bool WalkMode);
@@ -276,14 +278,7 @@ private:
 
 	void PlayTurnMontage(bool bTurnLeft);
 	
-	// 停步 Montage 正在播放时，收到移动输入即打断
-	void CancelStopMontageIfPlaying();
-
-	// 统一的动作 Montage 播放入口：模拟代理会从服务器当前进度起播（见实现里的注释）
-	void PlayActionMontage(UAnimMontage* MontageToPlay);
-
 	// 停步/转身 montage 结束（正常播完或被打断）回调
-	UFUNCTION()
 	void OnStopMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
 	FVector InputDirection;
