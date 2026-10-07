@@ -18,6 +18,12 @@ AExtraCharacter::AExtraCharacter(const FObjectInitializer& ObjectInitializer)
 	PrimaryActorTick.bCanEverTick = true;
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::Type::NoCollision);
 
+	// DS 专用：ACharacter 构造函数把 Mesh 设成 AlwaysTickPose，该模式下（无渲染 → bRecentlyRendered 恒为 false）
+	// 只 tick 动画图、不刷新骨骼姿势。结果是服务端 AN 事件照常触发，但 GetSocketLocation 取到的是冻住的姿势
+	// ——武器轨迹扫描会一直扫在错误位置（表现为零命中，socket 只随根位移平移）。
+	// AlwaysTickPoseAndRefreshBones 让服务端每帧刷新骨骼变换，命中判定才拿得到真实Socket位置。
+	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+
 	// 允许被武器轨迹扫描（SweepMultiByChannel ECC_GameTraceChannel1）命中；
 	// 玩家自身由扫描代码 AddIgnoredActor(Owner) 免疫，队友命中需后续按 Team 过滤。
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
@@ -54,7 +60,6 @@ void AExtraCharacter::OnConstruction(const FTransform& Transform)
 	if (!OverHeadWidgetComponent) return;
 
 	// 世界模式下 DrawSize 是世界尺寸(cm)：300x30 就是 3 米宽；它同时是 UMG 画布与渲染分辨率，
-	// 直接改小会压垮 Widget 内部布局（那里按 300x30 像素排），所以世界尺寸靠缩放收。
 	OverHeadWidgetComponent->SetDrawSize(FVector2D(OverHeadGaugeXSize, OverHeadGaugeYSize));
 	OverHeadWidgetComponent->SetRelativeScale3D(FVector(OverHeadGaugeWorldScale));
 }
