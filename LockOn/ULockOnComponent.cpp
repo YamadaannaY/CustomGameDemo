@@ -105,7 +105,7 @@ void ULockOnComponent::LogLockTargetChanged() const
 	}
 	else
 	{
-		const FString Msg = TEXT("[LockOn] %s 锁定目标: 无",*OwnerName);
+		const FString Msg = TEXT("[LockOn] %s 锁定目标: 无");
 		UE_LOG(LogTemp, Warning, TEXT("%s"), *Msg);
 		if (GEngine)
 		{

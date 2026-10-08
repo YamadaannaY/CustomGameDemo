@@ -79,20 +79,21 @@ void AExtraPlayerCharacter::Server_SetMoveInputState_Implementation(bool bNewHas
 		// 同样打断停步 Montage
 		CancelStopMontageIfPlaying();
 
-		// 重新移动：本轮松手动作全部作废，远端（模拟代理）据此复位它的"已消费"标记
+		// 重新移动：本轮松手动作全部作废，模拟代理据此复位它的"已消费"标记
 		RepPendingAction = EMoveReleaseAction::None;
 		return;
 	}
 
+	//松开移动进入的逻辑判断
 	switch (ReleaseAction)
 	{
-		// 真正开始停步只需要做的就是重置停步相关变量+切换 CMC 的停步减速度，什么时候播取决于Tick中模拟端
 	case EMoveReleaseAction::RequestStop:
 		if (AI)
 		{
+			//松手那一刻重置一次
 			AI->ClearStopRequest();
 		}
-
+		//切换 CMC 的停步减速度
 		if (UExtraGameMovementComponent* MoveComp = Cast<UExtraGameMovementComponent>(GetCharacterMovement()))
 		{
 			MoveComp->SetStopRequested(true);

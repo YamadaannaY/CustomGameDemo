@@ -279,6 +279,7 @@ private:
 	void PlayTurnMontage(bool bTurnLeft);
 	
 	// 停步/转身 montage 结束（正常播完或被打断）回调
+	UFUNCTION()
 	void OnStopMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
 	FVector InputDirection;

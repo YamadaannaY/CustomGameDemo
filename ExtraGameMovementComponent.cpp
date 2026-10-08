@@ -124,20 +124,13 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 	}
 	
 	// 服务器上本地控制的角色（autonomous proxy）朝向由客户端主导：
-	// 客户端拥有即时的输入与相机数据，服务器只有经过网络延迟的副本，所以直接用客户端RPC发来的值
+	// 客户端拥有即时的输入与相机数据，服务器只有经过网络延迟的副本，所以直接用客户端RPC发来的值。
+	// 赋值本身在 Server_SyncClientYaw 里完成（那边立即生效，不必等本函数），
+	// 这里只需拦住服务器自己的转向逻辑，避免它用本地 Acceleration 再算一遍。
 	if (CharacterOwner->GetLocalRole() == ROLE_Authority
 		&& CharacterOwner->GetRemoteRole() == ROLE_AutonomousProxy
 		&& bHasClientAuthoritativeYaw)
 	{
-		const FRotator Desired(0.f, ClientAuthoritativeYaw, 0.f);
-
-		// Unreliable 上报间隔不均时直接硬设会抖，用远快于上报周期的速率平滑收口
-		const FRotator Smoothed = FMath::RInterpConstantTo(
-			UpdatedComponent->GetComponentRotation(), Desired, DeltaTime, ServerYawFollowRate);
-
-		TargetRotation = FRotator(0.f, Smoothed.Yaw, 0.f);
-		LastRotationTarget = Desired;
-		MoveUpdatedComponent(FVector::ZeroVector, TargetRotation, false);
 		return;
 	}
 	
@@ -173,7 +166,7 @@ void UExtraGameMovementComponent::CustomPhysicsRotation(float DeltaTime)
 	CachedCameraYawRate = 0.f;
 	if (const AController* OwnerController = CharacterOwner->GetController())
 	{
-		//模拟代理上没有Controller是
+		//模拟代理上没有Controller
 		const float CurrentCameraYaw = OwnerController->GetControlRotation().Yaw;
 		CachedCameraYawRate = FMath::Abs(
 			FMath::FindDeltaAngleDegrees(LastCameraYaw, CurrentCameraYaw)

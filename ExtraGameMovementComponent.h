@@ -66,20 +66,11 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Stop)", meta=(ClampMin="0.0"))
 	float StopBrakingDeceleration = 500.f;
 
-	// ── 服务器端朝向跟随 ──────────────────────────────────────────
-	// 服务器上本地控制角色（autonomous proxy）的朝向改由客户端主导：客户端每帧经
-	// Server_SyncClientYaw 上报算好的朝向。这个函数在ServerRPC中调用
 	void SetClientAuthoritativeYaw(float InYaw)
 	{
-		ClientAuthoritativeYaw = InYaw;
 		bHasClientAuthoritativeYaw = true;
 	}
-
-	// 服务器端朝向收口速率（deg/s）：Unreliable 上报间隔不均是常态，
-	// 直接硬设会抖，用一个远快于上报周期的速率平滑收口
-	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
-	float ServerYawFollowRate = 1440.f;
-
+	
 	// 把当前速度映射到 0..3的区间内：0 = 停，1 = 走，2 = 跑，3 = 冲刺
 	// 这样做的意义是为了换速度数据时曲线不用重画
 	float GetMappedSpeed() const;
@@ -120,7 +111,5 @@ private:
 	// 停步窗口标记，见 SetStopRequested
 	bool bStopRequested = false;
 
-	// 客户端每帧算好的Yaw值
-	float ClientAuthoritativeYaw = 0.f;
 	bool bHasClientAuthoritativeYaw = false;
 };
