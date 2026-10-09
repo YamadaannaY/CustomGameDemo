@@ -57,6 +57,7 @@ void AExtraPlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, RepPendingAction, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, RepTargetYaw, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter, bIsJumping, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(AExtraPlayerCharacter,InputDirection,COND_SkipOwner);
 }
 
 void AExtraPlayerCharacter::Server_SetMoveInputState_Implementation(bool bNewHasMoveInput, EMoveReleaseAction ReleaseAction, float InTargetYaw)
@@ -414,12 +415,14 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 			return;
 		}
 
-		//获取输入方向
+		//获取输入方向单位向量
 		const FVector RawInputDir = RawInputWorld / InputMagnitude;
 
 		// 转向已收归 MovementComp（角度差自适应速率）负责：输入层直接提交真实输入方向，
 		InputDirection = RawInputDir;
-
+		
+		Server_SendInputDirection(InputDirection);
+		
 		AddMovementInput(RawInputDir, FMath::Min(InputMagnitude, 1.0f));
 	}
 }
@@ -741,6 +744,11 @@ void AExtraPlayerCharacter::OnStopMontageEnded(UAnimMontage* Montage, bool bInte
 			}
 		}
 	}
+}
+
+void AExtraPlayerCharacter::Server_SendInputDirection_Implementation(FVector InputDir)
+{
+	InputDirection = InputDir;
 }
 
 void AExtraPlayerCharacter::CancelStopMontageIfPlaying()

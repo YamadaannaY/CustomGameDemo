@@ -34,6 +34,11 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	// 惯性化停播（BlendModeOut = Inertialization）的 Montage 经 GAS 复制通道停播时，
+	// 复制过去的 BlendTime 是 0（惯性化瞬间清0），
+	// 模拟端会以 0 时长 inertialize 而表现为跳变。这里补回资产自身的 BlendOut 时长。
+	virtual void CurrentMontageStop(float OverrideBlendOutTime = -1.0f) override;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Debug")
 	bool bShowSkill02ChargeDebug = true;
 

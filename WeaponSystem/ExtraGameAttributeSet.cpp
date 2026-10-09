@@ -30,6 +30,7 @@ void UExtraGameAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, MaxStamina, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, Shield, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet, EnergyMaxValue, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UExtraGameAttributeSet,EnergyValue,COND_None,REPNOTIFY_Always);
 }
 
 void UExtraGameAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -158,4 +159,9 @@ void UExtraGameAttributeSet::OnRep_Shield(const FGameplayAttributeData& OldShiel
 void UExtraGameAttributeSet::OnRep_EnergyMaxValue(const FGameplayAttributeData& OldEnergyMaxValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UExtraGameAttributeSet, EnergyMaxValue, OldEnergyMaxValue);
+}
+
+void UExtraGameAttributeSet::OnRep_EnergyValue(const FGameplayAttributeData& OldEnergyValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UExtraGameAttributeSet, EnergyValue, OldEnergyValue);
 }

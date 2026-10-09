@@ -1,6 +1,7 @@
 #include "ExtraAbilitySystemComponent.h"
 #include "ExtraGameplayAbility.h"
 #include "Abilities/GameplayAbility.h"
+#include "Animation/AnimMontage.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "Engine/Engine.h"
@@ -33,6 +34,19 @@ namespace
 			? Spec.ActivationInfo.GetActivationPredictionKey()
 			: Instances.Last()->GetCurrentActivationInfoRef().GetActivationPredictionKey();
 	}
+}
+
+void UExtraAbilitySystemComponent::CurrentMontageStop(float OverrideBlendOutTime)
+{
+	if (const UAnimMontage* MontageToStop = LocalAnimMontageInfo.AnimMontage)
+	{
+		if (OverrideBlendOutTime == 0.f && MontageToStop->BlendModeOut == EMontageBlendMode::Inertialization)
+		{
+			OverrideBlendOutTime = MontageToStop->GetDefaultBlendOutTime();
+		}
+	}
+
+	Super::CurrentMontageStop(OverrideBlendOutTime);
 }
 
 void UExtraAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& InputTag)

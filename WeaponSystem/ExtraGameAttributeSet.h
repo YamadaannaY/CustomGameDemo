@@ -74,8 +74,8 @@ public:
 	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, Shield);
 
 	// 能量值：轻击连段进入最后一段 +100 累积，普攻命中亦可累积（子类 GA 配置）；
-	// 封顶 EnergyMaxValue，满值解锁重击，重击触发后清零。纯本地战斗资源，驱动 UI/材质，不做网络复制。
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	// 封顶 EnergyMaxValue，满值解锁重击，重击触发后清零。纯本地战斗资源，驱动 UI/材质。
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat",ReplicatedUsing = OnRep_EnergyValue)
 	FGameplayAttributeData EnergyValue;
 	ATTRIBUTE_ACCESSORS(UExtraGameAttributeSet, EnergyValue);
 
@@ -97,8 +97,12 @@ protected:
 	virtual void OnRep_MaxStamina(const FGameplayAttributeData& OldMaxStamina);
 	UFUNCTION()
 	virtual void OnRep_Shield(const FGameplayAttributeData& OldShield);
+	
 	UFUNCTION()
 	virtual void OnRep_EnergyMaxValue(const FGameplayAttributeData& OldEnergyMaxValue);
+	
+	UFUNCTION()
+	virtual void OnRep_EnergyValue(const FGameplayAttributeData& OldEnergyValue);
 	
 	
 	bool bProcessingShieldAbsorption=false;

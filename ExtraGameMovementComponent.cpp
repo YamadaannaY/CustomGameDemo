@@ -123,9 +123,8 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 		return;
 	}
 	
-	// 服务器上本地控制的角色（autonomous proxy）朝向由客户端主导：
+	// 服务器上本地控制的角色朝向由客户端主导：
 	// 客户端拥有即时的输入与相机数据，服务器只有经过网络延迟的副本，所以直接用客户端RPC发来的值。
-	// 赋值本身在 Server_SyncClientYaw 里完成（那边立即生效，不必等本函数），
 	// 这里只需拦住服务器自己的转向逻辑，避免它用本地 Acceleration 再算一遍。
 	if (CharacterOwner->GetLocalRole() == ROLE_Authority
 		&& CharacterOwner->GetRemoteRole() == ROLE_AutonomousProxy
@@ -141,6 +140,7 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 	if (bAnimDrivingRotation)
 	{
 		TargetRotation = FRotator(0.f, UpdatedComponent->GetComponentRotation().Yaw, 0.f);
+		LastRotationTarget = TargetRotation;
 		return;
 	}
 

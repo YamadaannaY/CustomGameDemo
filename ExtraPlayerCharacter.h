@@ -46,7 +46,7 @@ public:
 	virtual void Jump() override;
 
 	FORCEINLINE UMotionWarpingComponent* GetMotionWarpingComponent() const { return MotionWarpingComp; }
-	
+
 	bool GetWalkMode() const { return  bWalkMode; }
 
 	// 冲刺模式开关：GA_Evade 截断蒙太奇进入冲刺时置 true；AnimInstance 离开 Sprint 状态经 OnSprintStateLeft 复位
@@ -282,7 +282,11 @@ private:
 	UFUNCTION()
 	void OnStopMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
+	UPROPERTY(Replicated)
 	FVector InputDirection;
+
+	UFUNCTION(Server, Reliable)
+	void Server_SendInputDirection(FVector InputDir);
 
 	// 由 GA_Evade 截断蒙太奇时设置，下一帧写入 Velocity 以保持冲刺速度（仅当前帧有效）
 	FVector SprintTransitionVelocity = FVector::ZeroVector;
