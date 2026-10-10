@@ -10,6 +10,8 @@ class UExtraAbilitySystemComponent;
 class UExtraGameWeaponComponent;
 class UExtraGameAttributeSet;
 class UOverHeadStatsGauge;
+class UAnimMontage;
+class USkeletalMeshComponent;
 
 UCLASS()
 class EXTRACTGAMECHARACTER_API AExtraCharacter : public ACharacter, public IAbilitySystemInterface, public IGenericTeamAgentInterface
@@ -30,6 +32,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Weapon")
 	UExtraGameWeaponComponent* GetWeaponComponent() const { return WeaponComponent; }
 
+	//打开Pass窗口
+	void BeginPassThroughWindow(USkeletalMeshComponent* MeshComp, UAnimMontage* Source);
+
+	//结束Pass窗口
+	void EndPassThroughWindow(UAnimMontage* Source);
+
 	// GAS 是否已初始化（防止 OnPossess 重复调用）
 	bool bGASInitialized = false;
 
@@ -46,6 +54,10 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+
+	virtual void Tick(float DeltaTime) override;
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	// 这里处理WidgetComp尺寸配置，构造函数中无法实时读取BP中配置的新值
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -116,4 +128,43 @@ protected:
 private:
 	UPROPERTY(Replicated)
 	FGenericTeamId TeamID;
+	
+	struct FPassThroughWindow
+	{
+		TWeakObjectPtr<UAnimMontage> Source;
+		TWeakObjectPtr<USkeletalMeshComponent> Mesh;
+		int32 StaleFrames = 0;
+	};
+
+	// 按当前窗口/被拉入状态重算忽略名单与斥力开关；幂等，差量更新
+	void RefreshPassThrough();
+
+	// RefreshPassThrough 的实际重算体；外层做重入保护后调用
+	void RebuildPassThroughState();
+
+	// 被其他角色的穿透窗口拉入 / 注销（对方穿透期间也要忽略对方并关掉自己的斥力）
+	void AddPuller(AExtraCharacter* InPuller);
+	void RemovePuller(AExtraCharacter* InPuller);
+
+	bool HasPeer(const AActor* Peer) const;
+	bool HasPulled(const AExtraCharacter* Pulled) const;
+	bool HasValidPuller() const;
+
+	TArray<FPassThroughWindow> PassThroughWindows;
+
+	// 拉入自己的对手；弱引用，角色被销毁时自动失效并剔除
+	TArray<TWeakObjectPtr<AExtraCharacter>> Pullers;
+
+	// 当前实际忽略的对象（= 自己的移动忽略列表内容）
+	TArray<TWeakObjectPtr<AActor>> PassThroughPeers;
+
+	// 被自己拉入过的对手，收窗口时按此反向注销
+	TArray<TWeakObjectPtr<AExtraCharacter>> PassThroughPulled;
+
+	bool bPhysicsInteractionDisabled = false;
+	bool bPhysicsInteractionBackup = true;
+
+	// 重入保护：拉入会触发对方重算，对方重算又可能回调本角色
+	bool bPassThroughRefreshing = false;
+	bool bPassThroughRefreshPending = false;
 };
