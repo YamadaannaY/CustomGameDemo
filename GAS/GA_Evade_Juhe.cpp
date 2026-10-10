@@ -3,7 +3,7 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
-#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
+#include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
@@ -100,18 +100,18 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 			World->GetTimerManager().SetTimer(JuheLandCheckTimer, this, &ThisClass::PollJuheLandCheck, LandCheckInterval, true);
 		}
 	}
-
-	// 普攻输入：架势段接前冲，前冲定时窗口内满足条件可以接下一段
-	SetupWaitJuheAttackInput();
+	
+	//接受Pressed的InputTag，派发到不同的逻辑
+	if (UExtraAbilitySystemComponent* ExtraASC = Cast<UExtraAbilitySystemComponent>(ASC))
+	{
+		ExtraASC->OnAbilityInputTagPressed.AddDynamic(this, &ThisClass::OnAbilityInputTagPressed);
+	}
 
 	// 居合 Montage 内的分界事件，监听到居合阶段结束，进入后摇的阶段
 	UAbilityTask_WaitGameplayEvent* WaitPhaseEndTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 		this, UUExtraAbilitySystemStatic::GetJuhePhaseEndTag());
 	WaitPhaseEndTask->EventReceived.AddDynamic(this, &ThisClass::OnJuhePhaseEnd);
 	WaitPhaseEndTask->ReadyForActivation();
-
-	// 居合期间唯一一次 Dodge：延迟一帧挂载，避免触发本次激活的输入被立即接收，用来退出居合
-	GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ThisClass::SetupWaitJuheDodgeInput);
 
 	PlayJuheMontage(GetActiveJuheMontages().JuheMontage, false);
 }
@@ -122,6 +122,12 @@ void UGA_Evade_Juhe::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
 	// 兜底：居合没走到分界/窗口结束就结束（被打断 / 动画播完）时也要放行普攻 GA
 	RemoveJuheState();
 	ClearJuheLandDetection();
+
+	if (UExtraAbilitySystemComponent* ExtraASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+	{
+		ExtraASC->OnAbilityInputTagPressed.RemoveDynamic(this, &ThisClass::OnAbilityInputTagPressed);
+	}
+
 	bEnterJuheBranch = false;
 	bAirJuhe = false;
 	bInLanding = false;
@@ -151,7 +157,7 @@ void UGA_Evade_Juhe::PlayJuheMontage(UAnimMontage* Montage, bool bForwardSegment
 	bPlayingDodgeSegment = bDodgeSegment;
 
 	JuheMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage);
-	JuheMontageTask->OnCompleted.AddDynamic(this, &ThisClass::OnJuheMontageFinished);
+	JuheMontageTask->OnCompleted.AddDynamic(this, &ThisClass::K2_EndAbility);
 	JuheMontageTask->OnBlendOut.AddDynamic(this, &ThisClass::OnJuheMontageFinished);
 	JuheMontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnJuheMontageFinished);
 	JuheMontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnJuheMontageFinished);
@@ -165,7 +171,7 @@ void UGA_Evade_Juhe::StopJuheMontage()
 		return;
 	}
 
-	JuheMontageTask->OnCompleted.RemoveDynamic(this, &ThisClass::OnJuheMontageFinished);
+	JuheMontageTask->OnCompleted.RemoveDynamic(this, &ThisClass::K2_EndAbility);
 	JuheMontageTask->OnBlendOut.RemoveDynamic(this, &ThisClass::OnJuheMontageFinished);
 	JuheMontageTask->OnInterrupted.RemoveDynamic(this, &ThisClass::OnJuheMontageFinished);
 	JuheMontageTask->OnCancelled.RemoveDynamic(this, &ThisClass::OnJuheMontageFinished);
@@ -240,21 +246,19 @@ bool UGA_Evade_Juhe::TryHoldForAirLanding()
 	return true;
 }
 
-void UGA_Evade_Juhe::SetupWaitJuheAttackInput()
+void UGA_Evade_Juhe::OnAbilityInputTagPressed(const FGameplayTag& PressedInputTag)
 {
-	UAbilityTask_WaitInputPress* WaitAttackTask = UAbilityTask_WaitInputPress::WaitInputPress(this);
-	WaitAttackTask->OnPress.AddDynamic(this, &ThisClass::OnJuheAttackInput);
-	WaitAttackTask->ReadyForActivation();
+	if (PressedInputTag == UUExtraAbilitySystemStatic::GetLightAttackInputTag())
+	{
+		OnJuheAttackInput();
+	}
+	else if (PressedInputTag == UUExtraAbilitySystemStatic::GetDodgeInputTag())
+	{
+		OnJuheDodgeInput();
+	}
 }
 
-void UGA_Evade_Juhe::SetupWaitJuheDodgeInput()
-{
-	UAbilityTask_WaitInputPress* WaitDodgeTask = UAbilityTask_WaitInputPress::WaitInputPress(this);
-	WaitDodgeTask->OnPress.AddDynamic(this, &ThisClass::OnJuheDodgeInput);
-	WaitDodgeTask->ReadyForActivation();
-}
-
-void UGA_Evade_Juhe::OnJuheAttackInput(float TimeWaited)
+void UGA_Evade_Juhe::OnJuheAttackInput()
 {
 	// 分界事件之后普攻归正常 Combo GA
 	if (bJuhePhaseEnded)
@@ -274,9 +278,6 @@ void UGA_Evade_Juhe::OnJuheAttackInput(float TimeWaited)
 		return;
 	}
 
-	//重挂下一次输入监听形成循环，进行居合连段
-	SetupWaitJuheAttackInput();
-
 	StartJuheForward();
 }
 
@@ -288,7 +289,7 @@ void UGA_Evade_Juhe::StartJuheForward()
 		return;
 	}
 
-	// 扣除寒意值（PreAttributeBaseChange 已按 [0, EnergyMaxValue] 封顶）
+	// 扣除寒意值
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		const float CurrentEnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
@@ -298,7 +299,6 @@ void UGA_Evade_Juhe::StartJuheForward()
 	bJuheForwardStarted = true;
 	bJuheForwarding = true;
 
-	// 每段前冲都重置接续窗口
 	// 每段前冲都重置接续窗口
 	RestartJuheForwardWindow();
 
@@ -313,7 +313,7 @@ void UGA_Evade_Juhe::StartJuheForward()
 	{
 		const int32 ForwardCount = ForwardASC->GetTagCount(UUExtraAbilitySystemStatic::GetProJuheCountTag());
 		
-		//居合次数超过三次不会再进入此if内，即ProReadyTag不再被这段代码修改，永远为1等待爆发重击GA进行消耗。
+		//居合次数超过三次不会再进入此if内，即ProReadyTag不再被修改，永远为1等待爆发重击GA进行消耗。
 		if (ForwardCount < UUExtraAbilitySystemStatic::AttackProJuheRequired)
 		{
 			const int32 NextCount = ForwardCount + 1;
@@ -365,7 +365,7 @@ void UGA_Evade_Juhe::PollJuheLandCheck()
 
 void UGA_Evade_Juhe::EnterLandPhase()
 {
-	// 落地委托与轮询可能同时触达，只处理第一次
+	// 落地委托与轮询可能同时触达，只处理一次
 	if (bInLanding)
 	{
 		return;
@@ -459,8 +459,7 @@ void UGA_Evade_Juhe::RestartJuheForwardWindow()
 
 void UGA_Evade_Juhe::OnJuhePhaseEnd(FGameplayEventData EventData)
 {
-	// 前冲段的分界：只在「接不了下一段前冲」时才放行普攻 GA，因为实际设计中，前冲段很短，而窗口长于前冲段，需要提前判断分界要不要结束居合
-	// 能量够就继续挡住，让普攻被本 GA 接管去接续前冲；否则放行给 Combo。
+	// 前冲段的分界
 	if (bPlayingForwardSegment)
 	{
 		if (!CanChainJuheForward())
@@ -475,9 +474,8 @@ void UGA_Evade_Juhe::OnJuhePhaseEnd(FGameplayEventData EventData)
 	RemoveJuheState();
 }
 
-void UGA_Evade_Juhe::OnJuheDodgeInput(float TimeWaited)
+void UGA_Evade_Juhe::OnJuheDodgeInput()
 {
-
 	// 空中居合走空中后撤动画，地面走地面后撤动画
 	UAnimMontage* DodgeMontage = bAirJuhe ? BackwardAirEvadeMontage : BackwardEvadeMontage;
 	if (bJuheDodgeUsed || !DodgeMontage)
@@ -488,8 +486,7 @@ void UGA_Evade_Juhe::OnJuheDodgeInput(float TimeWaited)
 	bJuheDodgeUsed = true;
 
 	// 退出居合：先关闭普攻接前冲的通道与剩余接续窗口。
-	// 后撤段是异步播完才结束本 GA 的，期间按普攻若不拦住仍会走 OnJuheAttackInput 接出前冲
-	// （空中架势段的分界事件比地面晚，所以只有空中能稳定复现）
+
 	bJuhePhaseEnded = true;
 	bJuheForwardWindowOpen = false;
 	bJuheForwarding = false;
@@ -504,10 +501,8 @@ void UGA_Evade_Juhe::OnJuheDodgeInput(float TimeWaited)
 	Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo())->GetWeaponComponent()->HideAllWeapon();
 
 	PlayJuheMontage(DodgeMontage, false, true);
-
-	// 重置重力必须放在切段之后：PlayJuheMontage 会停掉前冲段，而挂在它上面的 ANS_GravityScale
-	// 在那一刻仍会按曲线把重力写回滞空值（NotifyEnd 未勾 RestoreOnEnd 时不会恢复），
-	// 放在切段之前就会被这次写入覆盖，后撤段便一直保持前冲段的滞空重力
+	
+	//重置重力值
 	Cast<ACharacter>(GetAvatarActorFromActorInfo())->GetCharacterMovement()->GravityScale = DefaultGravityScale;
 }
 

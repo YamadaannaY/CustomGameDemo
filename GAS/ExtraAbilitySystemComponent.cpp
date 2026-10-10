@@ -56,6 +56,16 @@ void UExtraAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& In
 		return;
 	}
 
+	// 先广播：让「已激活」的 GA 有机会接管这次输入。此时本次输入对应的GA还没有开始激，不会收到触发自己的那一下输入委托。
+	OnAbilityInputTagPressed.Broadcast(InputTag);
+
+	// 客户端：把输入同步给服务端，服务端的 GA 实例也收到同一输入
+	// （与 WaitInputPress 里 ServerSetReplicatedEvent 的作用相同）；服务端 / 单机自己即权威，不重复回发
+	if (!IsOwnerActorAuthoritative())
+	{
+		ServerNotifyInputTagPressed(InputTag);
+	}
+
 	for (const FGameplayAbilitySpec& Spec : ActivatableAbilities.Items)
 	{
 		if (Spec.Ability && Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
@@ -64,6 +74,11 @@ void UExtraAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& In
 			InputHeldSpecHandles.AddUnique(Spec.Handle);
 		}
 	}
+}
+
+void UExtraAbilitySystemComponent::ServerNotifyInputTagPressed_Implementation(const FGameplayTag& InputTag)
+{
+	OnAbilityInputTagPressed.Broadcast(InputTag);
 }
 
 void UExtraAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& InputTag)

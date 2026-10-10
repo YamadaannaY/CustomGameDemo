@@ -63,17 +63,20 @@ protected:
 	// 是否进入居合分支：二阶段普攻开启的居合窗口未过期，且能量 >= 阈值（地面 / 空中同一套条件）
 	bool ShouldEnterJuhe() const;
 
-	// 居合期间的普攻输入：架势段接第一段前冲，前冲中/窗口内接下一段，分界后不再响应
+	// 输入层广播的输入 Tag：架势段按普攻接前冲，按 Dodge 走后撤退出；分界后不再响应
+	// （参数不能叫 InputTag：会遮蔽基类同名成员，UHT 直接报错）
 	UFUNCTION()
-	void OnJuheAttackInput(float TimeWaited);
+	void OnAbilityInputTagPressed(const FGameplayTag& PressedInputTag);
+
+	// 普攻输入：架势段接第一段前冲，前冲中/窗口内接下一段，分界后不再响应
+	void OnJuheAttackInput();
 
 	// 居合 Montage 内 AN 发的分界事件：此后普攻回归正常 Combo
 	UFUNCTION()
 	void OnJuhePhaseEnd(FGameplayEventData EventData);
 
 	// 居合期间唯一一次 Dodge 输入：走基类正常后撤 Evade 动画
-	UFUNCTION()
-	void OnJuheDodgeInput(float TimeWaited);
+	void OnJuheDodgeInput();
 
 	// 本 GA 播放的 Montage 收尾：前冲段进入接续窗口，其余段照常结束
 	UFUNCTION()
@@ -108,12 +111,6 @@ protected:
 	virtual bool ShouldApplyDodgeCooldown() const override { return false; }
 
 private:
-	// 循环监听普攻输入（与 GA_Combo::SetupWaitComboInputPress 同款模式）
-	void SetupWaitJuheAttackInput();
-
-	// 延迟一帧再挂 Dodge 输入监听，避免触发本次激活的那个输入被新任务立即接收
-	void SetupWaitJuheDodgeInput();
-
 	// 移除居合进行中标记，放行普攻 GA（仅在确实进入过居合分支时执行）
 	void RemoveJuheState();
 

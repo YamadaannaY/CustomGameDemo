@@ -12,6 +12,11 @@ class UGameplayEffect;
 class UExtraGameAttributeSet;
 struct FActiveGameplayEffectHandle;
 
+// 输入 Tag 按下的全局广播。
+// 用于「已激活的 GA 想接管另一个输入」的场景（如居合架势期间接普攻）：
+// WaitInputPress 只会收到「本 GA 自己 InputTag」的输入事件，跨 GA 的输入接不到。
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAbilityInputTagPressedDelegate, const FGameplayTag&, InputTag);
+
 UCLASS(ClassGroup = (GAS), meta = (BlueprintSpawnableComponent))
 class EXTRACTGAMECHARACTER_API UExtraAbilitySystemComponent : public UAbilitySystemComponent
 {
@@ -54,7 +59,12 @@ public:
 
 	// ── 输入通道─────────────────────────────────
 	// 输入只负责收集Tag对应的GASpecHandle，统一在 ProcessAbilityInput 里处理
-	
+
+	// Tag 按下时的全局广播：已激活的 GA 可据此接管「不是自己 InputTag」的输入。
+	// 客户端按下会同步到服务端，保证两端都收到（各端各自推进本端表现）。
+	UPROPERTY(BlueprintAssignable, Category = "GAS|Input")
+	FAbilityInputTagPressedDelegate OnAbilityInputTagPressed;
+
 	//将Tag对应GA加入Pressed数组
 	void AbilityInputTagPressed(const FGameplayTag& InputTag);
 	//将Tag对应GA加入Released数组
@@ -80,6 +90,10 @@ public:
 	class UDataTable* AttributeDataTable;
 
 private:
+
+	// 客户端把输入 Tag 同步到服务端，让服务端的 GA 实例也收到同一输入
+	UFUNCTION(Server, Reliable)
+	void ServerNotifyInputTagPressed(const FGameplayTag& InputTag);
 
 	// Skill_02 充能调试：挂 cooldown tag 变化回调并刷一次显示（仅本地玩家角色）
 	void SetupSkill02ChargeDebug();
