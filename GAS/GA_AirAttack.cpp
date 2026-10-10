@@ -158,7 +158,7 @@ void UGA_AirAttack::PlayLoopMontage()
 	}
 
 	CurrentPhase = EAirAttackPhase::Loop;
-	AnimInst->Montage_PlayWithBlendIn(AirAttackLoopMontage, FAlphaBlend(StartToLoopBlendInTime), 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
+	AnimInst->Montage_PlayWithBlendIn(AirAttackLoopMontage, AirAttackLoopMontage->BlendOut, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
 
 	//section 自循环：不依赖资产 bLoop 是否勾选，确保下砸循环动画播完会跳回自身，
 	if (const FName LoopSection = AnimInst->Montage_GetCurrentSection(AirAttackLoopMontage); LoopSection != NAME_None)
@@ -250,10 +250,10 @@ void UGA_AirAttack::PlayLandMontage()
 	// Start 阶段就落地时，Start montage 可能仍在播放，直接停掉
 	if (AirAttackStartMontage && AnimInst->Montage_IsPlaying(AirAttackStartMontage))
 	{
-		AnimInst->Montage_Stop(LoopToLandBlendInTime, AirAttackStartMontage);
+		AnimInst->Montage_StopWithBlendOut(AirAttackStartMontage->BlendOut, AirAttackStartMontage);
 	}
 
-	AnimInst->Montage_PlayWithBlendIn(AirAttackLandMontage, FAlphaBlend(LoopToLandBlendInTime), 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
+	AnimInst->Montage_PlayWithBlendIn(AirAttackLandMontage, AirAttackLandMontage->BlendIn, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
 
 	FOnMontageEnded EndDelegate;
 	EndDelegate.BindUObject(this, &UGA_AirAttack::OnLandMontageEnded);
@@ -265,7 +265,7 @@ void UGA_AirAttack::StopLoopMontage()
 	UAnimInstance* AnimInst = GetOwnerAnimInstance();
 	if (AnimInst && AirAttackLoopMontage && AnimInst->Montage_IsPlaying(AirAttackLoopMontage))
 	{
-		AnimInst->Montage_Stop(LoopToLandBlendInTime, AirAttackLoopMontage);
+		AnimInst->Montage_StopWithBlendOut(AirAttackLoopMontage->BlendOut, AirAttackLoopMontage);
 	}
 }
 

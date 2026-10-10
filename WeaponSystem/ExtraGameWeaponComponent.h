@@ -43,7 +43,7 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// 武器组复制到达：本端按新组生成 / 显示 Mesh
+	// 武器组复制到达：本端按新组生成 / 显示 Mesh，并在非权威端补齐该组的 AdditionalTags
 	UFUNCTION()
 	void OnRep_CurrentGroupTag();
 
@@ -274,6 +274,10 @@ private:
 
 	// 更新 ASC 上的 Loose GameplayTags
 	void UpdateCharacterTags(const FExtraGameWeaponGroup* OldGroup, const FExtraGameWeaponGroup* NewGroup);
+
+	// 非权威端补齐武器组 tag：AdditionalTags 是 loose tag、不参与复制，
+	// 但它承载「形态」语义，客户端本地预测与输入分派都要读到
+	void SyncGroupTagsToLocalASC();
 
 	// ── 内部辅助 ────────────────────────────────────────────
 	void CacheOwnerASC();

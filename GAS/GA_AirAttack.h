@@ -33,17 +33,7 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
 	UAnimMontage* AirAttackLandMontage;
-
-	// Loop 落地瞬间，Loop → Land 的 blend 时间
-	UPROPERTY(EditDefaultsOnly, Category = "Animation")
-	float LoopToLandBlendInTime = 0.15f;
-
-	// Start → Loop 的交叉淡化时间
-	// 关键：让 Start 的 blend out 与 Loop 的 blend in 重叠，消除「真空帧」，
-	// 否则真空帧会被状态机 idle/falling 抢占导致瞬变。
-	UPROPERTY(EditDefaultsOnly, Category = "Animation")
-	float StartToLoopBlendInTime = 0.034f;
-
+	
 	// 起手动画开始淡出（OnBlendOut）→ 立即进入循环下砸，与 Start 淡出重叠
 	UFUNCTION()
 	void OnStartMontageBlendOut();

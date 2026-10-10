@@ -41,6 +41,8 @@ void UExtraGameWeaponComponent::GetLifetimeReplicatedProps(TArray<class FLifetim
 void UExtraGameWeaponComponent::OnRep_CurrentGroupTag()
 {
 	UpdateGroupMeshPresentation(CurrentGroupTag);
+
+	SyncGroupTagsToLocalASC();
 }
 
 void UExtraGameWeaponComponent::OnRep_WeaponVisibilitySerial()
@@ -857,6 +859,34 @@ void UExtraGameWeaponComponent::UpdateCharacterTags(const FExtraGameWeaponGroup*
 	if (NewGroup && NewGroup->AdditionalTags.Num() > 0)
 	{
 		OwnerASC->AddLooseGameplayTags(NewGroup->AdditionalTags);
+	}
+}
+
+void UExtraGameWeaponComponent::SyncGroupTagsToLocalASC()
+{
+	// 权威端由 UpdateCharacterTags 负责，这里只补非权威端
+	if (IsAuthorityOwner() || !WeaponDataAsset)
+	{
+		return;
+	}
+
+	CacheOwnerASC();
+	if (!OwnerASC)
+	{
+		return;
+	}
+
+	// 客户端只知道「当前组」、不知道上一组，先把所有组的 tag 清一遍再按当前组补回
+	FGameplayTagContainer AllGroupTags;
+	for (const TPair<FGameplayTag, FExtraGameWeaponGroup>& Pair : WeaponDataAsset->WeaponGroups)
+	{
+		AllGroupTags.AppendTags(Pair.Value.AdditionalTags);
+	}
+	OwnerASC->RemoveLooseGameplayTags(AllGroupTags);
+
+	if (const FExtraGameWeaponGroup* Group = WeaponDataAsset->FindGroup(CurrentGroupTag))
+	{
+		OwnerASC->AddLooseGameplayTags(Group->AdditionalTags);
 	}
 }
 
