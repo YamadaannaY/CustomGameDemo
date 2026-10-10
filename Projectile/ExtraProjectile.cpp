@@ -12,6 +12,12 @@
 AExtraProjectile::AExtraProjectile()
 {
 	PrimaryActorTick.bCanEverTick = false;
+
+	// 投射物只在权威端生成（由 GA 侧判断），各端靠 Actor 复制看到它。
+	// 移动也必须复制：否则客户端只拿到生成时的位置，投射物在客户端是静止的
+	// （ProjectileMovementComponent 不复制 Velocity，模拟端不会自行往前飞）。
+	bReplicates = true;
+	SetReplicateMovement(true);
 }
 
 void AExtraProjectile::SetupProjectileCollision(UPrimitiveComponent* InCollision, UProjectileMovementComponent* InMovement)

@@ -324,7 +324,7 @@ void UGA_AirAttack_Phase2::HandleSwordQiRequest(FGameplayEventData EventData)
 
 void UGA_AirAttack_Phase2::SpawnSwordQi(float RollOffset)
 {
-	// 权威端生成：AN 的事件两端都会触发，不加判断联机下会双端各生成一道
+	// 权威端生成,依赖复制同步到客户端
 	if (!K2_HasAuthority() || !SwordQiActorClass)
 	{
 		return;
