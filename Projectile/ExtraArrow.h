@@ -19,10 +19,25 @@ class EXTRACTGAMECHARACTER_API AExtraArrow : public AExtraProjectile
 public:
 	AExtraArrow();
 
-	// 公开API供 GA 侧指定Mesh（未指定时使用蓝图配置的 mesh）
+	virtual void BeginPlay() override;
+
+	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
+
+	// 公开API供 GA 侧指定Mesh
 	void SetArrowMesh(UStaticMesh* InMesh);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Arrow")
 	TObjectPtr<UStaticMeshComponent> ArrowMeshComponent;
+
+	// 箭身网格：由 GA 在权威端注入（SetArrowMesh）后复制给客户端。
+	UPROPERTY(ReplicatedUsing = OnRep_ArrowMesh)
+	TObjectPtr<UStaticMesh> ArrowMesh;
+
+	UFUNCTION()
+	void OnRep_ArrowMesh();
+
+private:
+	// 把 ArrowMesh 应用到组件
+	void ApplyArrowMesh();
 };

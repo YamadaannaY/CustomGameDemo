@@ -4,6 +4,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "Net/UnrealNetwork.h"
 
 AExtraArrow::AExtraArrow()
 {
@@ -33,8 +34,39 @@ AExtraArrow::AExtraArrow()
 
 void AExtraArrow::SetArrowMesh(UStaticMesh* InMesh)
 {
-	if (ArrowMeshComponent && InMesh)
+	if (!InMesh)
 	{
-		ArrowMeshComponent->SetStaticMesh(InMesh);
+		return;
+	}
+
+	ArrowMesh = InMesh;
+	ApplyArrowMesh();
+}
+
+void AExtraArrow::BeginPlay()
+{
+	Super::BeginPlay();
+
+	/*// 客户端：网格随初始复制一起到达（初始 bunch 不保证触发 OnRep），这里兜一次
+	ApplyArrowMesh();*/
+}
+
+void AExtraArrow::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AExtraArrow, ArrowMesh);
+}
+
+void AExtraArrow::OnRep_ArrowMesh()
+{
+	ApplyArrowMesh();
+}
+
+void AExtraArrow::ApplyArrowMesh()
+{
+	if (ArrowMeshComponent && ArrowMesh)
+	{
+		ArrowMeshComponent->SetStaticMesh(ArrowMesh);
 	}
 }

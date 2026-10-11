@@ -109,7 +109,6 @@ void UGA_HeavyAttack::SetupShootListener()
 
 void UGA_HeavyAttack::HandleShootRequest(FGameplayEventData EventData)
 {
-	UE_LOG(LogTemp,Warning,TEXT("Shoot Request Happen"));
 	SpawnArrowAtSocket();
 }
 
@@ -192,7 +191,7 @@ void UGA_HeavyAttack::UpdateAimSnapshot()
 
 void UGA_HeavyAttack::SpawnArrowAtSocket()
 {
-	// 服务端权威生成（单机验证阶段权威端即本地；纯客户端联机的本地表现后续补）
+	// 服务端权威生成
 	if (!K2_HasAuthority())
 	{
 		return;
@@ -256,5 +255,5 @@ void UGA_HeavyAttack::SpawnArrowAtSocket()
 		}
 	}
 
-	Arrow->InitProjectile(Char, ArrowDamageEffect, static_cast<int32>(GetAbilityLevel()), FireDir, ArrowSpeed, ArrowLifeTime);
+	Arrow->InitProjectile(Char, ArrowDamageEffect,(GetAbilityLevel()), FireDir, ArrowSpeed, ArrowLifeTime);
 }
