@@ -126,6 +126,10 @@ public:
 	// 客户端决定「因移动取消 GA」时，把标记回送服务端，让服务端本端也走相同收尾（停蒙太奇）
 	UFUNCTION(Server, Reliable)
 	void Server_NotifyAbilityEndedByMovement(FGameplayAbilitySpecHandle AbilityHandle);
+
+	// 持续按住攻击键的标记RPC发送
+	UFUNCTION(Server, Reliable)
+	void Server_SetHoldingAttack(bool bHolding);
 	
 	// 停步 Montage 正在播放时，收到移动输入即打断
 	void CancelStopMontageIfPlaying();
@@ -335,7 +339,8 @@ private:
 	// 移动输入锁定标志（空中攻击期间为 true，忽略移动输入）
 	bool bMovementInputLocked = false;
 
-	// 攻击键按住状态（按住时连续轻击连段，直到满足重击条件）
+	// 攻击键按住状态（按住时连续轻击连段，直到满足重击条件）。
+	// 客户端输入回调置位，并经 Server_SetHoldingAttack 上行，两端都据此判定自动续段
 	bool bHoldingAttack = false;
 
 	// 本次按下是否已长按达到重击阈值（区分「长按重击」与「高频点按轻击」）

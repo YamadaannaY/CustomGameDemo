@@ -26,7 +26,7 @@ protected:
 	// 覆写基类虚钩子：权威端播放连段蒙太奇后，注册末段累计 / 重击切入帧监听
 	virtual void SetupComboMontageListeners() override;
 
-	// 覆写：进入下一段 Section（NextComboName 已记录），仍按住攻击键则自动续段
+	//按住重击时自动连段
 	virtual void OnComboSectionChanged() override;
 
 private:

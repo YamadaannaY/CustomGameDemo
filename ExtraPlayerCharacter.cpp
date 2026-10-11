@@ -178,6 +178,12 @@ void AExtraPlayerCharacter::Server_NotifyAbilityEndedByMovement_Implementation(F
 	}
 }
 
+void AExtraPlayerCharacter::Server_SetHoldingAttack_Implementation(bool bHolding)
+{
+	// 服务端据此判定「仍按住」，在自己的段变更帧续段（判定点见 UGA_ComboHeavy::OnComboSectionChanged）
+	bHoldingAttack = bHolding;
+}
+
 void AExtraPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -787,6 +793,8 @@ void AExtraPlayerCharacter::OnNormalAttackStarted(const FInputActionValue& Input
 	}
 
 	bHoldingAttack = true;
+	Server_SetHoldingAttack(true);
+	
 	bLongPressed = false;
 
 	// 启动重击长按阈值定时器：按住达到 HeavyAttackHoldTime 才进入「长按重击」判定
@@ -813,6 +821,9 @@ void AExtraPlayerCharacter::OnNormalAttackCompleted(const FInputActionValue& Inp
 {
 	bHoldingAttack = false;
 	bLongPressed = false;
+
+	// 与按下时对称：松开同样要上行，否则服务端会一直以为按着，自动续段停不下来
+	Server_SetHoldingAttack(false);
 	
 	if (GetWorldTimerManager().IsTimerActive(HeavyAttackHoldTimerHandle))
 	{
