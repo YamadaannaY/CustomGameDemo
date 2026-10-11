@@ -388,40 +388,26 @@ void UGA_Evade::PollMoveInputForSprint()
 void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
-	//地面使用了连续Evade时应用一个冷却GE
-	if (MaxDodgeTriggerCooldownEffect && DodgeCount>=MaxDodgeCount && !bAirborneEvade && ShouldApplyDodgeCooldown())
+	//权威端只做GE这一部分
+	if (MaxDodgeTriggerCooldownEffect && DodgeCount>=MaxDodgeCount && !bAirborneEvade
+		&& ShouldApplyDodgeCooldown() && K2_HasAuthority())
 	{
-		if (!K2_HasAuthority())
-		{
-			return;
-		}
-		
 		UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
-		if (!SourceASC)
-		{
-			return;
-		}
-
 		AActor* Avatar = GetAvatarActorFromActorInfo();
-		if (!Avatar)
+		if (SourceASC && Avatar)
 		{
-			return;
-		}
+			FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+			Context.AddInstigator(Avatar, Avatar);
+			Context.AddSourceObject(Avatar);
+			FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(MaxDodgeTriggerCooldownEffect, GetAbilityLevel(), Context);
 
-		const TSubclassOf<UGameplayEffect> CooldownGE = MaxDodgeTriggerCooldownEffect;
-		if (!CooldownGE)
-		{
-			return;
+			if (SpecHandle.IsValid())
+			{
+				SourceASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+			}
 		}
-
-		FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
-		Context.AddInstigator(Avatar, Avatar);
-		Context.AddSourceObject(Avatar);
-		FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(CooldownGE, GetAbilityLevel(), Context);
-		
-		SourceASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 	}
-		
+
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(InputPollTimer);
