@@ -75,8 +75,7 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	bHandingOff = false;
 	CurrentPlayingMontage = nullptr;
 
-	// 段数存在 ASC 的 tag count 上，而不是激活内存：腾空中被别的 GA（后撤居合等）打断，
-	// 进度也要留住，下次触发接着下一段打；落地时清零。
+	// 段数存在 ASC 的 tag count 上，落地时清零。
 	// 0 = 尚未打出，1 = 段1 已打出，2 = 段1+段2 都已打出，3 = 三段打满。
 	int32 PlayedStageCount = 0;
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
@@ -88,10 +87,10 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	if (PlayedStageCount >= MaxAirAttackStages)
 	{
 		K2_EndAbility();
-		return;
+		return ;
 	}
 
-	// 前两段都已打出：这次按下的就是第三段，直接交接给下砸，不重播前两段
+	// 前两段都已打出：这次按下的就是第三段，结束自身GA并且触发AirAttackGA
 	if (PlayedStageCount >= MaxAirAttackStages - 1)
 	{
 		HandoffToDiveAttack();
@@ -103,10 +102,10 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
-		// 轻击输入：是否生效由窗口与段数决定（窗口外直接丢弃）
 		SetupLightAttackInputListener();
 
-		// 可衔接窗口开 / 关（Montage 上的 AN_AttackComboWindow 发送）
+		// 可衔接窗口开 / 关
+		
 		UAbilityTask_WaitGameplayEvent* WindowBeginTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 			this, UUExtraAbilitySystemStatic::GetAirAttackComboBeginTag(), nullptr, false, true);
 		WindowBeginTask->EventReceived.AddDynamic(this, &ThisClass::OnComboWindowBegin);
@@ -124,7 +123,7 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		PlayStage(PlayedStageCount);
 	}
 
-	// 落地即结束：委托监听为主，轮询兜底（激活瞬间已贴地等边界情况）
+	// 落地即结束：委托监听为主，轮询兜底
 	if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
 	{
 		AvatarChar->LandedDelegate.AddDynamic(this, &ThisClass::OnLanded);
@@ -208,7 +207,6 @@ void UGA_AirAttack_Phase2::ClearJuheReady()
 
 void UGA_AirAttack_Phase2::OnStageMontageCompleted()
 {
-	// 正在主动切段 / 进落地段时，不结束GA
 	if (bTransitioning)
 	{
 		return;
@@ -220,7 +218,6 @@ void UGA_AirAttack_Phase2::OnStageMontageCompleted()
 
 void UGA_AirAttack_Phase2::OnStageMontageInterrupted()
 {
-	// 主动切段触发的停止不算作打断：
 	if (bTransitioning)
 	{
 		return;
@@ -250,15 +247,14 @@ void UGA_AirAttack_Phase2::SetupLightAttackInputListener()
 
 void UGA_AirAttack_Phase2::OnLightAttackInput(float TimeWaited)
 {
-	// 先续上下一次监听：下面每个分支都可能提前返回
 	SetupLightAttackInputListener();
 
 	if (bTransitioning)
 	{
 		return;
 	}
-
-	// 不缓存：窗口之外的输入一律丢弃，不会攒到本段结束时补出下一段
+	
+	//必须在窗口内
 	if (!bComboWindowOpen)
 	{
 		return;
@@ -266,7 +262,7 @@ void UGA_AirAttack_Phase2::OnLightAttackInput(float TimeWaited)
 
 	if (StageIndex >= HandoffStageIndex)
 	{
-		// 第 2 段的窗口内再按一次 → 第三段交给 GA_AirAttack 的下砸，本 GA 结束
+		//第三段，此时触发AirAttack_GA
 		HandoffToDiveAttack();
 		return;
 	}
@@ -281,8 +277,7 @@ void UGA_AirAttack_Phase2::HandoffToDiveAttack()
 		return;
 	}
 	bHandingOff = true;
-
-	// 第三段（下砸）交给 GA_AirAttack 打出，进度直接记满：本次腾空的空中普攻到此为止
+	
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetAirAttackStageTag(), MaxAirAttackStages);
@@ -391,10 +386,12 @@ void UGA_AirAttack_Phase2::AdvanceToNextStage()
 void UGA_AirAttack_Phase2::StopCurrentPlayingMontage()
 {
 	UAnimInstance* AnimInst = GetOwnerAnimInstance();
-	if (AnimInst && CurrentPlayingMontage && AnimInst->Montage_IsPlaying(CurrentPlayingMontage))
+	if (!AnimInst || !CurrentPlayingMontage || !AnimInst->Montage_IsPlaying(CurrentPlayingMontage))
 	{
-		AnimInst->Montage_StopWithBlendOut(CurrentPlayingMontage->BlendOut, CurrentPlayingMontage);
+		return;
 	}
+	
+	AnimInst->Montage_StopWithBlendOut(CurrentPlayingMontage->BlendOut, CurrentPlayingMontage);
 }
 
 void UGA_AirAttack_Phase2::EnterLandPhase()
@@ -475,7 +472,7 @@ void UGA_AirAttack_Phase2::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 {
 	ClearLandDetection();
 
-	// 兜底停掉仍在播的段（落地段结束 / 被打断路径）；先置 bTransitioning 防止回调重复结束GA
+	// 兜底停掉仍在播的段；先置 bTransitioning 防止回调重复结束GA
 	bTransitioning = true;
 	StopCurrentPlayingMontage();
 

@@ -125,7 +125,7 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 	
 	// 服务器上本地控制的角色朝向由客户端主导：
 	// 客户端拥有即时的输入与相机数据，服务器只有经过网络延迟的副本，所以直接用客户端RPC发来的值。
-	// 这里只需拦住服务器自己的转向逻辑，避免它用本地 Acceleration 再算一遍。
+	// 这里拦住服务器自己的转向逻辑
 	if (CharacterOwner->GetLocalRole() == ROLE_Authority
 		&& CharacterOwner->GetRemoteRole() == ROLE_AutonomousProxy
 		&& bHasClientAuthoritativeYaw)
