@@ -7,6 +7,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/ExtraGameAnimInstance.h"
+#include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -55,6 +56,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	bTransitionedToSprint = false;
 	bIsPollingForInput = false;
 	bEvadeToSprintTriggered = false;
+	bInLanding = false;
 	bAirborne == true ? DodgeCount = 2 : DodgeCount = 1;
 	CurrentEvadeFacingOffset = 0.f;
 
@@ -73,12 +75,9 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		PlayerChar->ConsumeAirEvade();
 	}
 
-	// 空中 Evade：绑定落地委托，落地立即结束 GA。地面 Evade 不绑。
+	// 空中 Evade：挂落地检测，落地后转入落地段再结束 GA。地面 Evade 不挂。
 	bAirborneEvade = bAirborne;
-	if (bAirborneEvade)
-	{
-		AvatarChar->LandedDelegate.AddDynamic(this, &ThisClass::OnAirEvadeLandDetected);
-	}
+	SetupAirLandDetection();
 
 	//播放Montage
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
@@ -181,10 +180,24 @@ void UGA_Evade::HandlePlayMontageTaskDelegates(UAbilityTask_PlayMontageAndWait* 
 	}
 	PlayEvadeMontageTask = Task;
 
-	Task->OnCompleted.AddDynamic(this, &ThisClass::K2_EndAbility);
-	Task->OnBlendOut.AddDynamic(this, &ThisClass::K2_EndAbility);
+	// 播完 / 自然淡出：空中 Evade 可能还要等落地，交收尾函数判断
+	Task->OnCompleted.AddDynamic(this, &ThisClass::OnEvadeMontageFinished);
+	Task->OnBlendOut.AddDynamic(this, &ThisClass::OnEvadeMontageFinished);
+
+	// 被强行打断 / 取消：此时不该再挂起等落地，直接结束
 	Task->OnInterrupted.AddDynamic(this, &ThisClass::K2_EndAbility);
 	Task->OnCancelled.AddDynamic(this, &ThisClass::K2_EndAbility);
+}
+
+void UGA_Evade::OnEvadeMontageFinished()
+{
+	// 空中 Evade：动画播完但人还在空中 → 先不结束 GA，落地时由 EnterLandPhase 接落地段
+	if (TryHoldForAirLanding())
+	{
+		return;
+	}
+
+	K2_EndAbility();
 }
 
 void UGA_Evade::SetupWaitDodgeInputPress()
@@ -336,8 +349,130 @@ void UGA_Evade::OnEvadeToSprint(FGameplayEventData EventData)
 
 void UGA_Evade::OnAirEvadeLandDetected(const FHitResult& Hit)
 {
-	// 落地立即结束 GA；montage 停止由 EndAbility 统一用 MontageCancelBlendOutTime 处理
-	K2_EndAbility();
+	EnterLandPhase();
+}
+
+void UGA_Evade::SetupAirLandDetection()
+{
+	if (!bAirborneEvade)
+	{
+		return;
+	}
+
+	ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!AvatarChar)
+	{
+		return;
+	}
+
+	AvatarChar->LandedDelegate.AddDynamic(this, &ThisClass::OnAirEvadeLandDetected);
+
+	// 委托在「激活瞬间已经贴地」这类边界情况下不会触发，靠轮询兜底
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(AirLandCheckTimer, this, &UGA_Evade::PollAirLandCheck, LandCheckInterval, true);
+	}
+}
+
+void UGA_Evade::ClearAirLandDetection()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(AirLandCheckTimer);
+	}
+
+	if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		AvatarChar->LandedDelegate.RemoveDynamic(this, &ThisClass::OnAirEvadeLandDetected);
+	}
+}
+
+void UGA_Evade::PollAirLandCheck()
+{
+	const ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!AvatarChar)
+	{
+		return;
+	}
+
+	const UCharacterMovementComponent* MoveComp = AvatarChar->GetCharacterMovement();
+	if (MoveComp && !MoveComp->IsFalling())
+	{
+		EnterLandPhase();
+	}
+}
+
+void UGA_Evade::StopCurrentEvadeMontage()
+{
+	// 先摘掉旧任务回调，避免其Completed回调打断落地段
+	if (PlayEvadeMontageTask && PlayEvadeMontageTask->IsActive())
+	{
+		PlayEvadeMontageTask->EndTask();
+	}
+	PlayEvadeMontageTask = nullptr;
+
+	// 经 ASC 通道停：只有走这条路才会把这个停止复制给模拟端（直接动 AnimInstance 不会）
+	if (UExtraAbilitySystemComponent* ExtraASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+	{
+		ExtraASC->CurrentMontageStop();
+	}
+
+	CurrentPlayingMontage = nullptr;
+}
+
+void UGA_Evade::EnterLandPhase()
+{
+	// 落地委托与轮询可能同时触达，只处理一次
+	if (bInLanding)
+	{
+		return;
+	}
+	bInLanding = true;
+
+	ClearAirLandDetection();
+
+	// 落地即结束Evade：不再响应二次闪避、移动打断与朝向微调
+	bEvadeToSprintTriggered = true;
+	bPlayingForwardEvade = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(EvadeFacingTimer);
+		World->GetTimerManager().ClearTimer(InputPollTimer);
+	}
+
+	// 重置相关变量
+	OnEnterLandPhase();
+
+	// 闪避段让位给落地段（同 GA_AirAttack_Phase2：先停当前段，再起播落地段）
+	StopCurrentEvadeMontage();
+
+	if (!AirLandMontage)
+	{
+		K2_EndAbility();
+		return;
+	}
+
+	CurrentPlayingMontage = AirLandMontage;
+	PlayEvadeMontage();
+}
+
+bool UGA_Evade::TryHoldForAirLanding()
+{
+	if (!bAirborneEvade || bInLanding)
+	{
+		return false;
+	}
+
+	const ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (AvatarChar && AvatarChar->GetCharacterMovement()->IsFalling())
+	{
+		// 还在空中：不结束 GA，等落地
+		return true;
+	}
+
+	// 已贴地但落地检测还没轮到：直接进落地段（落地段播完会再回到这里，此时 bInLanding 已为 true）
+	EnterLandPhase();
+	return true;
 }
 
 void UGA_Evade::PollMoveInputForSprint()
@@ -414,25 +549,22 @@ void UGA_Evade::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGamep
 		GetWorld()->GetTimerManager().ClearTimer(EvadeFacingTimer);
 	}
 
-	// 空中 Evade：解绑落地委托，避免悬空绑定
+	// 空中 Evade：清掉落地检测（委托 + 兜底轮询），避免悬空绑定
 	if (bAirborneEvade)
 	{
-		if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
-		{
-			AvatarChar->LandedDelegate.RemoveDynamic(this, &ThisClass::OnAirEvadeLandDetected);
-		}
+		ClearAirLandDetection();
 		bAirborneEvade = false;
 	}
+	bInLanding = false;
 
 	if (CurrentPlayingMontage)
 	{
-		ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-		if (AvatarChar)
+		if (UExtraAbilitySystemComponent* ExtraASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
 		{
-			UAnimInstance* AnimInst = AvatarChar->GetMesh()->GetAnimInstance();
-			if (AnimInst && AnimInst->Montage_IsPlaying(CurrentPlayingMontage))
+			// 只停本 GA 自己这一段，避免误停 ASC 记录里的其它蒙太奇
+			if (ExtraASC->GetCurrentMontage() == CurrentPlayingMontage)
 			{
-				AnimInst->Montage_StopWithBlendOut(CurrentPlayingMontage->BlendOut, CurrentPlayingMontage);
+				ExtraASC->CurrentMontageStop();
 			}
 		}
 		CurrentPlayingMontage = nullptr;
