@@ -6,11 +6,9 @@
 #include "ExtraAICharacter.generated.h"
 
 /**
- * AI 怪物基类（当前承担训练木桩职责）
+ * AI 怪物基类
  *
- * 复用 AExtraCharacter 的 GAS(ASC + AttributeSet) / Team 分配 / 头顶血条：
- * - 与玩家唯一差异是「无 Controller Possess」，因此在 BeginPlay 里主动 ServerSideInit()。
- * - 胶囊显式 Block 武器扫描通道，使玩家攻击的轨迹扫描能命中本 Actor。
+ * 胶囊显式 Block 武器扫描通道，使玩家攻击的轨迹扫描能命中本 Actor。
  * 后续真实怪物（会移动/攻击）直接继承本类即可。
  */
 UCLASS()

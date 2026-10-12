@@ -240,13 +240,13 @@ void UANS_IgnoreCharacterCollision::OnWindowWatchdog(TWeakObjectPtr<AExtraCharac
 	UAnimInstance* AnimInst = Mesh ? Mesh->GetAnimInstance() : nullptr;
 
 	// 承载区间的蒙太奇已不在播 → NotifyEnd 丢了，主动收窗。
-	// Source 为空（非蒙太奇承载）时不参与判定，只靠 NotifyEnd。
 	if (Source && (!AnimInst || !AnimInst->Montage_IsPlaying(Source)))
 	{
 		CloseWindow(Char);
 		return;
 	}
 
+	//续期
 	ScheduleWatchdog(Char);
 }
 
@@ -263,6 +263,7 @@ void UANS_IgnoreCharacterCollision::PruneInvalidEntries()
 			continue;
 		}
 
+		//源对象已经被销毁，则清除对应的没有被销毁的Peer
 		for (const TWeakObjectPtr<AExtraCharacter>& Peer : It.Value().PulledPeers)
 		{
 			if (Peer.IsValid())

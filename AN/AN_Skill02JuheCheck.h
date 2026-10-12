@@ -21,7 +21,6 @@ class EXTRACTGAMECHARACTER_API UAN_Skill02JuheCheck : public UAN_SendGameplayEve
 	GENERATED_BODY()
 
 public:
-	// 固定发送 ability.skill02.juhecheck（硬编码，面板不暴露 EventTag）
 	virtual FGameplayTag GetEventTag() const override;
 
 	virtual FString GetNotifyName_Implementation() const override;

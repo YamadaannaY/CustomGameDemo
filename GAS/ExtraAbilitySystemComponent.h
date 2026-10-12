@@ -13,7 +13,7 @@ class UExtraGameAttributeSet;
 struct FActiveGameplayEffectHandle;
 
 // 输入 Tag 按下的全局广播。
-// 用于「已激活的 GA 想接管另一个输入」的场景（如居合架势期间接普攻）：
+// 用于「已激活的 GA 想接管另一个输入」的场景：
 // WaitInputPress 只会收到「本 GA 自己 InputTag」的输入事件，跨 GA 的输入接不到。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAbilityInputTagPressedDelegate, const FGameplayTag&, InputTag);
 

@@ -26,17 +26,12 @@ void AExtraAICharacter::ServerSideInit()
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 		AbilitySystemComponent->ServerSideInit();
 	}
-
-	// 木桩不装备武器：跳过基类里 WeaponComponent->OnASCInitialized()
-	//（无 WeaponDataAsset 时基类实现会刷报错）
+	
 	bGASInitialized = true;
 }
 
 void AExtraAICharacter::BeginPlay()
 {
-	// 无 Controller Possess，主动初始化 GAS。
-	// 必须在 Super::BeginPlay() 之前：基类在 BeginPlay 里配置头顶血条
-	//（ConfigureOverHeadStatusWidget 需 ASC 已注册属性才能读到初始值）。
 	if (HasAuthority())
 	{
 		ServerSideInit();
