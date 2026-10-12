@@ -45,7 +45,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
                                        const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
                                        bool bReplicateEndAbility, bool bWasCancelled)
 {
-	//因为移动CancelGA时，手动停Montage
+	/*//因为移动CancelGA时，手动停Montage
 	if (bEndingFromMovement)
 	{
 		if (UAnimMontage* ActiveMontage = GetActiveMontageForCancel())
@@ -53,11 +53,10 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 			UAnimInstance* AnimInst = GetOwnerAnimInstance();
 			if (AnimInst && AnimInst->Montage_IsPlaying(ActiveMontage))
 			{ 
-				//采用默认BlendOut,这也是使用惯性化的重要原因，惯性化直接停当前Montage并缓存姿势
 				AnimInst->Montage_StopWithBlendOut(ActiveMontage->BlendOut, ActiveMontage);
 			}
 		}
-	}
+	}*/
 
 	AExtraPlayerCharacter* Char = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
 	if (Char && Char->GetWeaponComponent() && ClearWeaponShowOnAbilityEnd)
@@ -670,7 +669,7 @@ void UExtraGameplayAbility::OnMovementCancelNotifyReceived(FGameplayEventData Pa
 
 	OnMovementCancelTriggered();
 
-	K2_EndAbility();
+	K2_CancelAbility();
 }
 
 void UExtraGameplayAbility::SetupCancelWindowListener()

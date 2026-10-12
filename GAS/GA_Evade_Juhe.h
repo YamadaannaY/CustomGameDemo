@@ -89,23 +89,8 @@ protected:
 	// 开启（重置）前冲接续窗口计时
 	void RestartJuheForwardWindow();
 
-	// ── 空中居合：落地段（参考 GA_AirAttack_Phase2 的落地处理）──
-	// 落地事件回调
-	UFUNCTION()
-	void OnJuheLanded(const FHitResult& Hit);
-
-	// 落地检测兜底轮询（激活瞬间已贴地等边界情况，委托不会触发）
-	void PollJuheLandCheck();
-
-	// 进入落地段：放弃剩余接续窗口、停掉空中段，改播落地动画（播完结束 GA）
-	void EnterLandPhase();
-
-	// 空中居合收尾前的等待：仍在空中则不结束 GA（返回 true，继续等普攻或落地）；
-	// 已贴地则转入落地段（同样返回 true）。非空中居合或已在落地段返回 false，由调用方正常结束。
-	bool TryHoldForAirLanding();
-
-	// 清掉落地检测（LandedDelegate + 轮询 Timer）
-	void ClearJuheLandDetection();
+	// ── 空中居合：落地段，处理自身状态，落地动画基类Evade触发 ──
+	virtual void OnEnterLandPhase() override;
 
 	// 居合不参与连续闪避冷却
 	virtual bool ShouldApplyDodgeCooldown() const override { return false; }
@@ -128,7 +113,7 @@ private:
 	// 剩余能量是否够再打一段前冲
 	bool HasEnoughEnergyForJuheForward() const;
 
-	// 本次激活使用的动画组（按 bAirJuhe 选地面 / 空中那一套）
+	// 本次激活使用的动画组（按 bAirborneEvade 选地面 / 空中那一套）
 	const FJuheMontageSet& GetActiveJuheMontages() const;
 
 	// 取本次要播的前冲动画：每段在 前冲1 / 前冲2 间轮切，首段固定为 前冲1
@@ -141,11 +126,7 @@ private:
 	// 空中居合：架势 + 两段前冲
 	UPROPERTY(EditDefaultsOnly, Category="Montage|Juhe")
 	FJuheMontageSet AirMontages;
-
-	// 空中居合落地时播放的落地动画（播完结束 GA）
-	UPROPERTY(EditDefaultsOnly, Category="Montage|Juhe")
-	UAnimMontage* AirLandMontage;
-
+	
 	// 进入居合所需的能量下限（>= 即可触发）
 	UPROPERTY(EditDefaultsOnly, Category="Juhe")
 	float JuheEnergyThreshold = 100.f;
@@ -158,25 +139,14 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Juhe")
 	float JuheForwardWindow = 3.f;
 
-	// 空中居合落地检测的兜底轮询间隔
-	UPROPERTY(EditDefaultsOnly, Category="Juhe|Air")
-	float LandCheckInterval = 0.08f;
-
 	// 本 GA 的 Montage 任务（自管理，前冲段播完不结束 GA）
 	UPROPERTY()
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> JuheMontageTask;
 
 	FTimerHandle JuheForwardWindowTimer;
-	FTimerHandle JuheLandCheckTimer;
 
 	// 本次激活是否进入了居合分支（EndAbility 兜底移除 State.Juhe 用）
 	bool bEnterJuheBranch = false;
-
-	// 本次激活是空中居合
-	bool bAirJuhe = false;
-
-	// 已进入落地段（落地只处理一次，落地动画播完才结束 GA）
-	bool bInLanding = false;
 
 	// 普攻接前冲的通道已关闭：分界事件到达 / 已退出居合（Dodge）/ 已进落地段，普攻一律交还正常 GA
 	bool bJuhePhaseEnded = false;
