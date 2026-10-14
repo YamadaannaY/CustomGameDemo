@@ -385,13 +385,14 @@ void UGA_AirAttack_Phase2::AdvanceToNextStage()
 
 void UGA_AirAttack_Phase2::StopCurrentPlayingMontage()
 {
-	UAnimInstance* AnimInst = GetOwnerAnimInstance();
-	if (!AnimInst || !CurrentPlayingMontage || !AnimInst->Montage_IsPlaying(CurrentPlayingMontage))
+	if (!CurrentPlayingMontage)
 	{
 		return;
 	}
-	
-	AnimInst->Montage_StopWithBlendOut(CurrentPlayingMontage->BlendOut, CurrentPlayingMontage);
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->StopMontageIfCurrent(*CurrentPlayingMontage);
+	}
 }
 
 void UGA_AirAttack_Phase2::EnterLandPhase()

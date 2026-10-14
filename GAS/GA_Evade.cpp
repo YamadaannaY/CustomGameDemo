@@ -61,8 +61,8 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	CurrentEvadeFacingOffset = 0.f;
 
 	// 每次闪避动作（首次激活 / 二次闪避）都基于当前输入重新选择 montage：
-	// 无输入 → 原地后闪；任意方向输入 → 前冲并 MW 快速扭转到输入方向。
-	// 置于空中消耗预算之前，保证 montage 缺失时提前结束、不吞空中预算。
+	// 无输入 → 原地后闪；任意方向输入 →  MW 快速扭转到输入方向。
+	// 置于空中消耗预算之前，保证 montage 缺失时提前结束
 	if (!ReselectEvade(bAirborne))
 	{
 		K2_EndAbility();
@@ -89,7 +89,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		WaitToSprintTask->ReadyForActivation();
 
 		// 监听第二次 Dodge 输入：第0帧~EvadeToSprint 期间可再闪避一次。
-		// 空中 Evade 一次只闪一次：空中闪避次数由本次浮空的预算管理（见 AExtraPlayerCharacter），
+		// 空中 Evade 一次只闪一次：空中闪避次数由本次浮空的预算管理
 		// 想再次闪避应通过空中攻击恢复预算后重新激活 GA，故空中不挂此监听。
 		// 延迟到下一帧再挂载监听，否则输入直接触发此InputTask导致一次函数调用
 		if (!bAirborne)
@@ -97,7 +97,7 @@ void UGA_Evade::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 			GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ThisClass::SetupWaitDodgeInputPress);
 		}
 
-		// 播放期间每帧按当前输入在基准 ±EvadeMaxRotationAngle 内插值微调朝向（初始 target 已在 Montage 开播前写入）
+		// 播放期间每帧按当前输入在基准 ±EvadeMaxRotationAngle 内插值微调朝向
 		if (bPlayingForwardEvade)
 		{
 			GetWorld()->GetTimerManager().SetTimer(EvadeFacingTimer, this, &UGA_Evade::UpdateEvadeFacing, GetWorld()->GetDeltaSeconds(), true);
@@ -209,7 +209,7 @@ void UGA_Evade::SetupWaitDodgeInputPress()
 
 void UGA_Evade::HandleDodgeInputPress(float TimeWaited)
 {
-	// 与 GA_Combo 逻辑一致：先重新监听下一次输入，形成循环，再由次数守卫决定是否响应
+	//先重新监听下一次输入，形成循环
 	SetupWaitDodgeInputPress();
 
 	// 仅在第0帧~EvadeToSprint 通知期间响应，且次数未用尽

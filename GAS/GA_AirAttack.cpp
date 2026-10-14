@@ -158,7 +158,11 @@ void UGA_AirAttack::PlayLoopMontage()
 	}
 
 	CurrentPhase = EAirAttackPhase::Loop;
-	AnimInst->Montage_PlayWithBlendIn(AirAttackLoopMontage, AirAttackLoopMontage->BlendOut, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
+
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->PlayMontage(this, GetCurrentActivationInfo(), AirAttackLoopMontage, 1.0f);
+	}
 
 	//section 自循环：不依赖资产 bLoop 是否勾选，确保下砸循环动画播完会跳回自身，
 	if (const FName LoopSection = AnimInst->Montage_GetCurrentSection(AirAttackLoopMontage); LoopSection != NAME_None)
@@ -247,13 +251,17 @@ void UGA_AirAttack::PlayLandMontage()
 		return;
 	}
 
-	// Start 阶段就落地时，Start montage 可能仍在播放，直接停掉
+
 	if (AirAttackStartMontage && AnimInst->Montage_IsPlaying(AirAttackStartMontage))
 	{
 		AnimInst->Montage_StopWithBlendOut(AirAttackStartMontage->BlendOut, AirAttackStartMontage);
 	}
 
-	AnimInst->Montage_PlayWithBlendIn(AirAttackLandMontage, AirAttackLandMontage->BlendIn, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
+
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->PlayMontage(this, GetCurrentActivationInfo(), AirAttackLandMontage, 1.0f);
+	}
 
 	FOnMontageEnded EndDelegate;
 	EndDelegate.BindUObject(this, &UGA_AirAttack::OnLandMontageEnded);
@@ -262,10 +270,13 @@ void UGA_AirAttack::PlayLandMontage()
 
 void UGA_AirAttack::StopLoopMontage()
 {
-	UAnimInstance* AnimInst = GetOwnerAnimInstance();
-	if (AnimInst && AirAttackLoopMontage && AnimInst->Montage_IsPlaying(AirAttackLoopMontage))
+	if (!AirAttackLoopMontage)
 	{
-		AnimInst->Montage_StopWithBlendOut(AirAttackLoopMontage->BlendOut, AirAttackLoopMontage);
+		return;
+	}
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->StopMontageIfCurrent(*AirAttackLoopMontage);
 	}
 }
 
@@ -306,6 +317,13 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		PlayerChar->SetMovementInputLocked(false);
 	}
 
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		if (AirAttackLandMontage) { ASC->StopMontageIfCurrent(*AirAttackLandMontage); }
+		if (AirAttackLoopMontage) { ASC->StopMontageIfCurrent(*AirAttackLoopMontage); }
+		if (AirAttackStartMontage) { ASC->StopMontageIfCurrent(*AirAttackStartMontage); }
+	}
+
 	if (UAnimInstance* AnimInst = GetOwnerAnimInstance())
 	{
 		if (AirAttackLoopMontage && AnimInst->Montage_IsPlaying(AirAttackLoopMontage))
@@ -315,7 +333,7 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		if (AirAttackStartMontage && AnimInst->Montage_IsPlaying(AirAttackStartMontage))
 		{
 			AnimInst->Montage_StopWithBlendOut(AirAttackLandMontage->BlendOut, AirAttackStartMontage);
-			
+
 		}
 		if (AirAttackLandMontage && AnimInst->Montage_IsPlaying(AirAttackLandMontage))
 		{
