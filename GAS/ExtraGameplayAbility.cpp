@@ -14,7 +14,6 @@
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameWeaponComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
-#include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
 #include "ExtractGameCharacter/Camera/UCombatCameraComponent.h"
 
@@ -23,10 +22,6 @@ UExtraGameplayAbility::UExtraGameplayAbility()
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ClientOrServer;
-
-	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetUninterruptibleTag());
-	
-	UninterruptibleTag = UUExtraAbilitySystemStatic::GetUninterruptibleTag();
 
 	ForwardOvershootStateTag = UUExtraAbilitySystemStatic::GetForwardOvershootStateTag();
 }
@@ -91,17 +86,7 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		}
 	}
 
-	// 兜底清理霸体 tag
-	if (bEnableUninterruptible)
-	{
-		ReleaseUninterruptible();
-	}
-
-	// 兜底清理 CancelWindow：恢复封锁并解除登记
-	if (bEnableCancelWindow)
-	{
-		ExitCancelWindow();
-	}
+	// 兜底清理霸体 / CancelWindow 由 UExtraAbilityBase::EndAbility 统一处理
 
 	// 解绑 MW 每帧回调并移除已注册的 warp target，避免 GA 结束后残留
 	if (Char && Char->GetMotionWarpingComponent())
@@ -117,30 +102,6 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	SetForwardOvershootStateTag(false);
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
-}
-
-bool UExtraGameplayAbility::CommitAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayAbilityActivationInfo ActivationInfo, FGameplayTagContainer* OptionalRelevantTags)
-{
-	if (!Super::CommitAbility(Handle, ActorInfo, ActivationInfo, OptionalRelevantTags))
-	{
-		return false;
-	}
-
-	// CancelWindow 入站取消：窗口内的GA已「视为结束」，任何 GA 提交成功即打断它。
-	if (bCanInterruptCancelWindow)
-	{
-		if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
-		{
-			const FGameplayAbilitySpecHandle Holder = ASC->GetCancelWindowHolder();
-			if (Holder.IsValid() && Holder != Handle)
-			{
-				ASC->CancelAbilityHandle(Holder);
-			}
-		}
-	}
-
-	return true;
 }
 
 void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
@@ -160,21 +121,7 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 		SetupMovementCancel();
 	}
 
-	// 后摇可打断窗口：监听 ANS_CancelWindow 的开/关窗事件
-	if (bEnableCancelWindow)
-	{
-		SetupCancelWindowListener();
-	}
-
-	// 推力 任何 GA 激活期间统一监听 Push_Self 事件，由 AN_ApplyPush 在动画帧发送。
-	SetupPushSelfListener();
-
-	// 霸体窗口：激活即挂载 State.Uninterruptible，后摇段由 AN_EndUninterruptible 发送事件放开。
-	if (bEnableUninterruptible)
-	{
-		ApplyUninterruptibleTag();
-		SetupUninterruptibleReleaseListener();
-	}
+	// CancelWindow / 霸体窗口 / 推力监听的挂载由 UExtraAbilityBase::PreActivate 统一处理
 
 	// 通用武器碰撞伤害：攻击 GA 开启WeaponDamage选项后，服务端监听Trace命中事件并应用DamageGE。
 	if (bEnableWeaponDamage && K2_HasAuthority())
@@ -245,55 +192,6 @@ void UExtraGameplayAbility::OnMovementCancelTriggered()
 		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Yellow,
 			FString::Printf(TEXT("%s GA 被取消"), *GAName));
 	}
-}
-
-void UExtraGameplayAbility::SetupPushSelfListener()
-{
-	UAbilityTask_WaitGameplayEvent* WaitPushTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, UUExtraAbilitySystemStatic::GetPushSelfTag(), nullptr, false, false);
-	WaitPushTask->EventReceived.AddDynamic(this, &ThisClass::OnPushSelfNotifyReceived);
-	WaitPushTask->ReadyForActivation();
-}
-
-void UExtraGameplayAbility::ApplyUninterruptibleTag()
-{
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!ASC)
-	{
-		return;
-	}
-
-	ASC->AddLooseGameplayTag(UninterruptibleTag);
-	bUninterruptibleActive = true;
-}
-
-void UExtraGameplayAbility::ReleaseUninterruptible()
-{
-	if (!bUninterruptibleActive)
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!ASC)
-	{
-		return;
-	}
-
-	ASC->RemoveLooseGameplayTag(UninterruptibleTag);
-	bUninterruptibleActive = false;
-}
-
-void UExtraGameplayAbility::SetupUninterruptibleReleaseListener()
-{
-	UAbilityTask_WaitGameplayEvent* WaitUninterruptibleTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetUninterruptibleEndTag(), nullptr, false, true );
-	WaitUninterruptibleTask->EventReceived.AddDynamic(this, &ThisClass::OnUninterruptibleReleaseReceived);
-	WaitUninterruptibleTask->ReadyForActivation();
-}
-
-void UExtraGameplayAbility::OnUninterruptibleReleaseReceived(FGameplayEventData Payload)
-{
-	ReleaseUninterruptible();
 }
 
 void UExtraGameplayAbility::SetupDamageListener()
@@ -558,95 +456,6 @@ void UExtraGameplayAbility::DrawAreaDamageDebug(const FVector& Center, float Rad
 	}
 }
 
-void UExtraGameplayAbility::OnPushSelfNotifyReceived(FGameplayEventData Payload)
-{
-	FVector PushVelocity = FVector::ZeroVector;
-	bool bOverrideXY = false;
-	bool bOverrideZ = true;
-
-	const FGameplayAbilityTargetDataHandle& Handle = Payload.TargetData;
-	for (int32 i = 0; i < Handle.Num(); ++i)
-	{
-		const FGameplayAbilityTargetData* Data = Handle.Get(i);
-		if (Data && Data->GetScriptStruct() == FPushTargetData::StaticStruct())
-		{
-			const FPushTargetData* PushData = static_cast<const FPushTargetData*>(Data);
-			PushVelocity = PushData->PushVelocity;
-			bOverrideXY = PushData->bOverrideXY;
-			bOverrideZ = PushData->bOverrideZ;
-			break;
-		}
-	}
-
-	PushSelf(PushVelocity, bOverrideXY, bOverrideZ);
-}
-
-void UExtraGameplayAbility::PushSelf(const FVector& PushVel, bool bOverrideXY, bool bOverrideZ)
-{
-	if (ACharacter* OwningAvatarCharacter=GetOwningAvatarCharacter())
-	{
-		OwningAvatarCharacter->LaunchCharacter(PushVel,bOverrideXY,bOverrideZ);
-	}
-}
-
-void UExtraGameplayAbility::PushTarget(AActor* Target, const FVector& PushVel)
-{
-	if (!Target) return;
-	
-	FGameplayEventData EventData;
-
-	FGameplayAbilityTargetData_SingleTargetHit* HitData=new FGameplayAbilityTargetData_SingleTargetHit;
-	FHitResult HitResult;
-	HitResult.ImpactNormal=PushVel;
-	
-	HitData->HitResult=HitResult;
-	EventData.TargetData.Add(HitData);
-
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Target,UUExtraAbilitySystemStatic::GetLaunchedAbilityActivationTag(),EventData);
-}
-
-void UExtraGameplayAbility::PushTargets(const TArray<AActor*>& Targets, const FVector PushVel)
-{
-	for (AActor* Target : Targets)
-	{
-		PushTarget(Target,PushVel);
-	}
-}
-
-void UExtraGameplayAbility::PushTargets(const FGameplayAbilityTargetDataHandle& TargetDataHandle,const FVector& PushVel)
-{
-	TArray<AActor*> Targets=UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(TargetDataHandle);
-	PushTargets(Targets,PushVel);
-}
-
-void UExtraGameplayAbility::PushTargetsFromLocation(const FGameplayAbilityTargetDataHandle& TargetDataHandle,const FVector& FromLocation, float PushSpeed)
-{
-	const TArray<AActor*> Targets=UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(TargetDataHandle);
-
-	PushTargetsFromLocation(Targets,FromLocation,PushSpeed);
-}
-
-void UExtraGameplayAbility::PushTargetsFromOwnerLocation(const TArray<AActor*>& Targets, float PushSpeed)
-{
-	AActor* OwnerAvatarActor = GetAvatarActorFromActorInfo();
-	if (!OwnerAvatarActor)	return;
-
-	FVector OwnerAvatarActorLocation = OwnerAvatarActor->GetActorLocation();
-	PushTargetsFromLocation(Targets, OwnerAvatarActorLocation, PushSpeed);
-}
-
-void UExtraGameplayAbility::PushTargetsFromLocation(const TArray<AActor*>& Targets, const FVector& FromLocation,float PushSpeed)
-{
-	for (AActor* Target : Targets)
-	{
-		FVector PushDir = Target->GetActorLocation() - FromLocation;
-		PushDir.Z = 0;
-		PushDir.Normalize();
-
-		PushTarget(Target , PushDir*PushSpeed);
-	}
-}
-
 FGameplayTag UExtraGameplayAbility::GetMovementCancelTag() const
 {
 	return UUExtraAbilitySystemStatic::GetAbilityCancelTag();
@@ -670,69 +479,6 @@ void UExtraGameplayAbility::OnMovementCancelNotifyReceived(FGameplayEventData Pa
 	OnMovementCancelTriggered();
 
 	K2_CancelAbility();
-}
-
-void UExtraGameplayAbility::SetupCancelWindowListener()
-{
-	bInCancelWindow = false;
-
-	// OnlyMatchExact=true：只接住 AN 发的这两个精确 tag
-	UAbilityTask_WaitGameplayEvent* WaitBeginTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetCancelWindowBeginTag(), nullptr, false, true);
-	WaitBeginTask->EventReceived.AddDynamic(this, &ThisClass::OnCancelWindowBeginReceived);
-	WaitBeginTask->ReadyForActivation();
-
-	UAbilityTask_WaitGameplayEvent* WaitEndTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, UUExtraAbilitySystemStatic::GetCancelWindowEndTag(), nullptr, false, true);
-	WaitEndTask->EventReceived.AddDynamic(this, &ThisClass::OnCancelWindowEndReceived);
-	WaitEndTask->ReadyForActivation();
-}
-
-void UExtraGameplayAbility::OnCancelWindowBeginReceived(FGameplayEventData Payload)
-{
-	EnterCancelWindow();
-}
-
-void UExtraGameplayAbility::OnCancelWindowEndReceived(FGameplayEventData Payload)
-{
-	ExitCancelWindow();
-}
-
-void UExtraGameplayAbility::EnterCancelWindow()
-{
-	if (bInCancelWindow)
-	{
-		return;
-	}
-	bInCancelWindow = true;
-
-	// 「视为已取消」第一步：撤销表现段的封锁。
-	SetShouldBlockOtherAbilities(false);
-
-	// 「视为已取消」第二步：登记自己为可被任意 GA 取消的持有者，其他GA进行Commit时会Cancel窗口内（即持有WindowState）的GA
-	if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
-	{
-		ASC->SetCancelWindowHolder(GetCurrentAbilitySpecHandle());
-		ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetCancelWindowStateTag());
-	}
-}
-
-void UExtraGameplayAbility::ExitCancelWindow()
-{
-	if (!bInCancelWindow)
-	{
-		return;
-	}
-	bInCancelWindow = false;
-
-	// 恢复封锁（窗口结束但 GA 仍在播后续段时必须恢复，否则之后永远挡不住同类 GA）
-	SetShouldBlockOtherAbilities(true);
-
-	if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
-	{
-		ASC->ClearCancelWindowHolder(GetCurrentAbilitySpecHandle());
-		ASC->RemoveLooseGameplayTag(UUExtraAbilitySystemStatic::GetCancelWindowStateTag());
-	}
 }
 
 void UExtraGameplayAbility::UpdateLockOnWarpTarget()

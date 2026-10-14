@@ -406,4 +406,15 @@ void UExtraAbilitySystemComponent::GiveInitialAbilities()
 		FGameplayAbilitySpecHandle Handle = GiveAbility(Spec);
 		InnateAbilityHandles.Add(Handle);
 	}
+
+	// 被动能力不占输入通道
+	for (const TSubclassOf<UGameplayAbility>& AbilityClass : PassiveAbilities)
+	{
+		if (!AbilityClass)
+		{
+			continue;
+		}
+		FGameplayAbilitySpec Spec(AbilityClass, 1, INDEX_NONE, this);
+		InnateAbilityHandles.Add(GiveAbility(Spec));
+	}
 }

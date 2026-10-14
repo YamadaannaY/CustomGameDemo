@@ -81,6 +81,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Innate")
 	TArray<TSubclassOf<UExtraGameplayAbility>> InnateAbilities;
 
+	// 被动能力：不占输入通道
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Innate")
+	TArray<TSubclassOf<UGameplayAbility>> PassiveAbilities;
+
 	// 初始化GE：ServerSideInit 时应用到自身
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Innate")
 	TArray<TSubclassOf<UGameplayEffect>> InitEffects;
