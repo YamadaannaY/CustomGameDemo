@@ -65,6 +65,10 @@ UE_DEFINE_GAMEPLAY_TAG(CancelWindow_End, "ability.cancelwindow.end");
 UE_DEFINE_GAMEPLAY_TAG(AirAttack_Combo_Begin, "ability.airattack.combo.begin");
 UE_DEFINE_GAMEPLAY_TAG(AirAttack_Combo_End, "ability.airattack.combo.end");
 
+UE_DEFINE_GAMEPLAY_TAG(Ability_HitReact, "ability.hitreact");
+UE_DEFINE_GAMEPLAY_TAG(State_HitReactCooldown, "State.HitReact.Cooldown");
+UE_DEFINE_GAMEPLAY_TAG(Ability_KnockDown, "ability.knockdown");
+
 FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 {
 	return Ability_BasicAttack_Light;
@@ -328,4 +332,19 @@ FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackComboBeginTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetAirAttackComboEndTag()
 {
 	return AirAttack_Combo_End;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHitReactEventTag()
+{
+	return Ability_HitReact;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHitReactCooldownTag()
+{
+	return State_HitReactCooldown;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetKnockDownEventTag()
+{
+	return Ability_KnockDown;
 }

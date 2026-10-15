@@ -70,6 +70,16 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(CancelWindow_End);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(AirAttack_Combo_Begin);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(AirAttack_Combo_End);
 
+// 受击：属性层（ExtraGameAttributeSet）检测到掉血后发给自身的事件，
+// GA_HitReact 以 AbilityTriggers 接收。与 "ability.damage" 不是同一件事：
+// 后者是「武器扫到人」发给攻击者的，本 tag 是「我被打掉血了」发给被击者的
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_HitReact);
+// 受击冷却：Cooldown GE 的 GrantedTags 填它，1.5s 内不重复触发受击
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReactCooldown);
+// 倒地：受击窗口内被打够次数后，GA_HitReact 改发这个事件给自身，
+// GA_KnockDown 以 AbilityTriggers 接收（与 ability.hitreact 同前缀不同分支，不会互相误触发）
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_KnockDown);
+
 /**
  * 
  */
@@ -182,6 +192,16 @@ public:
 	// 攻击连段可衔接窗口（AN_AttackComboWindow 的 NotifyBegin / NotifyEnd）
 	static FGameplayTag GetAirAttackComboBeginTag();    // "ability.airattack.combo.begin"
 	static FGameplayTag GetAirAttackComboEndTag();      // "ability.airattack.combo.end"
+
+	// ── 受击（HitReact）──
+	// 属性层掉血后发给被击者自己的事件 Tag；GA_HitReact 的 AbilityTriggers 声明响应它
+	static FGameplayTag GetHitReactEventTag();          // "ability.hitreact"
+	// 受击冷却 Tag：填在 Cooldown GE 的 GrantedTags 上（1.5s），
+	// GA_HitReact 的 CooldownGameplayEffectClass 指向该 GE，冷却期内 ASC 直接拒绝激活
+	static FGameplayTag GetHitReactCooldownTag();       // "State.HitReact.Cooldown"
+
+	// 倒地事件 Tag：GA_HitReact 判定到连续受击达阈值时发给自身，GA_KnockDown 接收
+	static FGameplayTag GetKnockDownEventTag();         // "ability.knockdown"
 
 	static FGameplayTag GetLaunchedAbilityActivationTag();
 };
