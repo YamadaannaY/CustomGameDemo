@@ -185,6 +185,47 @@ protected:
 	// 子类如需追加独有逻辑（击飞/附加效果），先调用 Super::DoDamage(Data)。
 	virtual void DoDamage(const FGameplayEventData& Data);
 
+	// 开启后，同一段攻击命中目标时按 ResolveEnergyGainPerHit() 值累积一次能量
+	UPROPERTY(EditDefaultsOnly, Category = "Energy")
+	bool bEnableEnergyGain = false;
+
+	// 兜底值
+	UPROPERTY(EditDefaultsOnly, Category = "Energy", meta = (EditCondition = "bEnableEnergyGain"))
+	float EnergyGainPerHit = 0.f;
+
+	// 按 Section 名配置：一个 Montage 多段各给不同值
+	UPROPERTY(EditDefaultsOnly, Category = "Energy", meta = (EditCondition = "bEnableEnergyGain"))
+	TMap<FName, float> EnergyGainPerSection;
+
+	// 按 Montage 配置：一次攻击由多个 Montage 组成时各给不同值
+	UPROPERTY(EditDefaultsOnly, Category = "Energy", meta = (EditCondition = "bEnableEnergyGain"))
+	TMap<TObjectPtr<UAnimMontage>, float> EnergyGainPerMontage;
+
+	// 获取能量的资格 Tag（留空 = 不限）。
+	UPROPERTY(EditDefaultsOnly, Category = "Energy", meta = (EditCondition = "bEnableEnergyGain"))
+	FGameplayTagContainer EnergyGainRequiredTags;
+
+	// 命中一次累积具体能量，需要GA子类覆写当前激活的Montage段
+	virtual float ResolveEnergyGainPerHit() const; 
+
+	virtual UAnimMontage* GetEnergyGainMontage() const;
+	virtual FName GetEnergyGainSection() const;
+
+	// 权威端给自身累积能量（封顶由属性集按 EnergyMaxValue 处理）
+	void AddEnergyValue(float Delta);
+
+	// 为「当前这一段攻击」认领能量：同一 Montage/Section 只有第一次调用返回非 0，多段伤害只结算一次能量
+	float ClaimEnergyForCurrentAttack();
+
+	// 能量去重：本次结算对应的是哪一段攻击（Montage + Section）。
+	// 同一段内武器轨迹 / 范围伤害多次进入 DoDamage 时只结算一次；换段即视为新的一次攻击。
+	UPROPERTY()
+	TObjectPtr<UAnimMontage> LastEnergyGainMontage = nullptr;
+
+	FName LastEnergyGainSection = NAME_None;
+
+	bool bEnergyGainedForCurrentAttack = false;
+
 	// ── 角色中心范围伤害（事件帧驱动）─────────────────────
 	// 是否启用范围伤害：开启后服务端监听 GetAreaDamageTriggerTag() 的 GameplayEvent，
 	// Montage 伤害帧放一个 AN_AreaCheck 触发一次范围判定（一个 AN = 一次）。
@@ -230,6 +271,7 @@ protected:
 
 	//获得AvatarCharacter，即Push对象
 	AExtraPlayerCharacter* GetOwningAvatarCharacter();
+
 private:
 	// 武器伤害事件回调（动态委托目标，转发到 virtual DoDamage 供子类覆写）
 	UFUNCTION()

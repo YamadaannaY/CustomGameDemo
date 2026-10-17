@@ -34,6 +34,9 @@ UGA_AirAttack::UGA_AirAttack()
 	// 启用通用武器碰撞伤害（基类机制）：服务端监听命中事件并应用 DefaultDamageEffect
 	bEnableWeaponDamage = true;
 
+	bEnableEnergyGain = true;
+	EnergyGainRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetPhase2StateTag());
+
 	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
 	bRotateToLockTarget = true;
 
@@ -345,3 +348,14 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
+
+UAnimMontage* UGA_AirAttack::GetEnergyGainMontage() const
+{
+	switch (CurrentPhase)
+	{
+	case EAirAttackPhase::Start: return AirAttackStartMontage;
+	case EAirAttackPhase::Loop:  return AirAttackLoopMontage;
+	case EAirAttackPhase::Land:  return AirAttackLandMontage;
+	default:                     return nullptr;
+	}
+}	

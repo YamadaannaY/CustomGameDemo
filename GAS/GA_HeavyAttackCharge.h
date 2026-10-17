@@ -31,6 +31,9 @@ protected:
 	// 覆写：蓄力段/循环段在播时均可被移动打断，所以End
 	virtual UAnimMontage* GetActiveMontageForCancel() const override { return CurrentPlayingMontage; }
 
+	// 覆写：命中累积能量按当前在播的段取值
+	virtual UAnimMontage* GetEnergyGainMontage() const override { return CurrentPlayingMontage; }
+
 private:
 	// ── 三段动画（段间衔接由各 Montage 自身 Blend 配置控制）──
 	UPROPERTY(EditDefaultsOnly, Category = "Montage")

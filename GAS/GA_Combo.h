@@ -47,6 +47,13 @@ protected:
 	// 覆写：按当前 Section 选择伤害 GE（未命中 map 时 fallback 到基类 DefaultDamageEffect）
 	virtual TSubclassOf<UGameplayEffect> GetDamageEffect() const override;
 
+	// 覆写：命中累积能量按 Section 取值
+	virtual UAnimMontage* GetEnergyGainMontage() const override;
+	virtual FName GetEnergyGainSection() const override;
+
+	// 当前在播的 Section 名
+	FName GetCurrentComboSectionName() const;
+
 	// 基类在权威端播放连段蒙太奇后调用一次，默认空实现。
 	virtual void SetupComboMontageListeners();
 

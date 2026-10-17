@@ -28,6 +28,9 @@ UGA_Skill_02::UGA_Skill_02()
 
 	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
 	bRotateToLockTarget = true;
+	
+	bEnableEnergyGain=true ;
+	EnergyGainRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetPhase2StateTag());
 
 	// 落地斩属于空中下落类攻击：落点必须拉出目标胶囊，否则会先被水平拖到目标正上方、
 	LockOnWarpStandoff = 100.f;
@@ -74,25 +77,6 @@ bool UGA_Skill_02::CheckCooldown(const FGameplayAbilitySpecHandle Handle, const 
 		OptionalRelevantTags->AppendMatchingTags(ASC->GetOwnedGameplayTags(), *CooldownTags);
 	}
 	return false;
-}
-
-void UGA_Skill_02::DoDamage(const FGameplayEventData& Data)
-{
-	Super::DoDamage(Data);
-
-	if (!K2_HasAuthority())
-	{
-		return;
-	}
-	
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!ASC)
-	{
-		return;
-	}
-	
-	const float CurrentEnergyValue = ASC->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
-	ASC->SetNumericAttributeBase(UExtraGameAttributeSet::GetEnergyValueAttribute(), CurrentEnergyValue + EnergyValuePerHit);
 }
 
 void UGA_Skill_02::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -545,6 +529,19 @@ void UGA_Skill_02::StopLandAttackLoopMontage()
 	if (AnimInst && LandAttackLoopMontage && AnimInst->Montage_IsPlaying(LandAttackLoopMontage))
 	{
 		AnimInst->Montage_StopWithBlendOut(LandAttackLoopMontage->BlendOut, LandAttackLoopMontage);
+	}
+}
+
+UAnimMontage* UGA_Skill_02::GetEnergyGainMontage() const
+{
+	switch (CurrentPhase)
+	{
+	case ESkill02Phase::Rise:
+		return RiseMontage;
+	case ESkill02Phase::LandLoop:
+		return LandAttackLoopMontage;
+	default:
+		return nullptr;
 	}
 }
 

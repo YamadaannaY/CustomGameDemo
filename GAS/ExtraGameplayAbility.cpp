@@ -2,6 +2,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Animation/AnimMontage.h"
 #include "EngineUtils.h"
 #include "DrawDebugHelpers.h"
 #include "Components/CapsuleComponent.h"
@@ -109,6 +110,11 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 	FOnGameplayAbilityEnded::FDelegate* OnGameplayAbilityEndedDelegate, const FGameplayEventData* TriggerEventData)
 {
 	Super::PreActivate(Handle, ActorInfo, ActivationInfo, OnGameplayAbilityEndedDelegate, TriggerEventData);
+
+	// 新一次激活 = 新的一次攻击：能量去重标记复位
+	LastEnergyGainMontage = nullptr;
+	LastEnergyGainSection = NAME_None;
+	bEnergyGainedForCurrentAttack = false;
 	
 	if (AExtraPlayerCharacter* PlayerChar = GetOwningAvatarCharacter())
 	{
@@ -248,7 +254,7 @@ void UExtraGameplayAbility::DoDamage(const FGameplayEventData& Data)
 	{
 		return;
 	}
-
+	
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddInstigator(Avatar, Avatar);
 	Context.AddSourceObject(Avatar);
@@ -258,7 +264,109 @@ void UExtraGameplayAbility::DoDamage(const FGameplayEventData& Data)
 	{
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
 		SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+		
+		UUExtraAbilitySystemStatic::SendHitReactEvent(HitActor, Avatar);
 	}
+
+	// 确实打到目标后才累积能量。同一段 Montage/Section 内，武器轨迹与范围伤害可能
+	// 分多次进入本函数，但「打中过」只算一次
+	AddEnergyValue(ClaimEnergyForCurrentAttack());
+}
+
+float UExtraGameplayAbility::ClaimEnergyForCurrentAttack()
+{
+	if (!bEnableEnergyGain)
+	{
+		return 0.f;
+	}
+
+	UAnimMontage* CurrentPlayMontage = GetEnergyGainMontage();
+	const FName CurrentSection = GetEnergyGainSection();
+
+	// 换段
+	if (CurrentPlayMontage != LastEnergyGainMontage || CurrentSection != LastEnergyGainSection)
+	{
+		LastEnergyGainMontage = CurrentPlayMontage;
+		LastEnergyGainSection = CurrentSection;
+		bEnergyGainedForCurrentAttack = false;
+	}
+
+	if (bEnergyGainedForCurrentAttack)
+	{
+		return 0.f;
+	}
+
+	//一个Montage只结算一次
+	bEnergyGainedForCurrentAttack = true;
+	return ResolveEnergyGainPerHit();
+}
+
+float UExtraGameplayAbility::ResolveEnergyGainPerHit() const
+{
+	if (!bEnableEnergyGain)
+	{
+		return 0.f;
+	}
+	
+	if (!EnergyGainRequiredTags.IsEmpty())
+	{
+		const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+		if (!ASC || !ASC->HasAllMatchingGameplayTags(EnergyGainRequiredTags))
+		{
+			return 0.f;
+		}
+	}
+
+	if (UAnimMontage* Montage = GetEnergyGainMontage())
+	{
+		if (const float* Found = EnergyGainPerMontage.Find(Montage))
+		{
+			return *Found;
+		}
+	}
+
+	const FName SectionName = GetEnergyGainSection();
+	if (SectionName != NAME_None)
+	{
+		if (const float* Found = EnergyGainPerSection.Find(SectionName))
+		{
+			return *Found;
+		}
+	}
+
+	return EnergyGainPerHit;
+}
+
+UAnimMontage* UExtraGameplayAbility::GetEnergyGainMontage() const
+{
+	return nullptr;
+}
+
+FName UExtraGameplayAbility::GetEnergyGainSection() const
+{
+	return NAME_None;
+}
+
+void UExtraGameplayAbility::AddEnergyValue(float Delta)
+{
+	if (Delta == 0.f)
+	{
+		return;
+	}
+
+	if (!K2_HasAuthority())
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC)
+	{
+		return;
+	}
+
+	const FGameplayAttribute EnergyAttribute = UExtraGameAttributeSet::GetEnergyValueAttribute();
+	ASC->SetNumericAttributeBase(EnergyAttribute, ASC->GetNumericAttribute(EnergyAttribute) + Delta);
 }
 
 FGameplayTag UExtraGameplayAbility::GetAreaDamageTriggerTag() const

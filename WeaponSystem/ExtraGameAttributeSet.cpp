@@ -99,6 +99,7 @@ void UExtraGameAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModC
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
 		SetHealth(FMath::Clamp(GetHealth(), 0.f, GetMaxHealth()));
+
 		if (GetHealth() == 0.f)
 		{
 			// AI 不死开关：血量归零瞬间按所属 AI 角色的蓝图配置回满

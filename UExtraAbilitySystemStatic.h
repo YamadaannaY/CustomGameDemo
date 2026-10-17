@@ -6,6 +6,8 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "UExtraAbilitySystemStatic.generated.h"
 
+class AActor;
+
 // ── Native GameplayTag 声明（静态初始化，早于 CDO 构造，无需手动注册）──
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_BasicAttack);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Dodge);
@@ -202,6 +204,11 @@ public:
 
 	// 倒地事件 Tag：GA_HitReact 判定到连续受击达阈值时发给自身，GA_KnockDown 接收
 	static FGameplayTag GetKnockDownEventTag();         // "ability.knockdown"
+
+	// 通知目标进入受击：目标侧的 GA_HitReact 以 AbilityTriggers 接收 ability.hitreact。
+	// 只有「攻击造成的伤害」才该调它 —— 血量因别的原因变化（回血、消耗、无来源的 DOT）不在此列。
+	// Instigator 传攻击者，受击 GA 靠它决定左右受击动画与击飞方向；传 nullptr 则退化为随机
+	static void SendHitReactEvent(AActor* Target, AActor* Instigator);
 
 	static FGameplayTag GetLaunchedAbilityActivationTag();
 };

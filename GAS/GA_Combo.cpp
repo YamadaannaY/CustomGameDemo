@@ -124,18 +124,34 @@ void UGA_Combo::TryCommitCombo()
 	NextComboName=NAME_None;
 }
 
+FName UGA_Combo::GetCurrentComboSectionName() const
+{
+	if (UAnimInstance* OwnerAnimInst = GetOwnerAnimInstance())
+	{
+		return OwnerAnimInst->Montage_GetCurrentSection(ComboMontage);
+	}
+	return NAME_None;
+}
+
 TSubclassOf<UGameplayEffect> UGA_Combo::GetDamageEffect() const
 {
-	if (UAnimInstance* OwnerAnimInst=GetOwnerAnimInstance())
+	const FName CurrentSectionName = GetCurrentComboSectionName();
+	const TSubclassOf<UGameplayEffect>* FoundEffectPtr = DamageEffectMap.Find(CurrentSectionName);
+	if (FoundEffectPtr)
 	{
-		const FName CurrentSectionName=OwnerAnimInst->Montage_GetCurrentSection(ComboMontage);
-		const TSubclassOf<UGameplayEffect>* FoundEffectPtr=DamageEffectMap.Find(CurrentSectionName);
-		if (FoundEffectPtr)
-		{
-			return *FoundEffectPtr;
-		}
+		return *FoundEffectPtr;
 	}
 	return DefaultWeaponDamageEffect;
+}
+
+UAnimMontage* UGA_Combo::GetEnergyGainMontage() const
+{
+	return ComboMontage;
+}
+
+FName UGA_Combo::GetEnergyGainSection() const
+{
+	return GetCurrentComboSectionName();
 }
 
 void UGA_Combo::ComboChangedEventReceived(FGameplayEventData InPayLoad)

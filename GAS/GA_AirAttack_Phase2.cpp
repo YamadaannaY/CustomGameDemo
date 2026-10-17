@@ -38,6 +38,9 @@ UGA_AirAttack_Phase2::UGA_AirAttack_Phase2()
 	// 启用通用武器碰撞伤害（基类机制）：Montage 上的轨迹 AN 命中即按 DefaultDamageEffect 结算
 	bEnableWeaponDamage = true;
 
+	// 命中累积寒意
+	bEnableEnergyGain = true;
+
 	// 启用基类重力机制：连段各段的 ANS_GravityScale 覆写
 	bEnableGravityScale = true;
 
@@ -368,8 +371,11 @@ void UGA_AirAttack_Phase2::SpawnSwordQi(float RollOffset)
 	{
 		return;
 	}
-
+	
 	SwordQi->InitProjectile(Char, SwordQiDamageEffect, (GetAbilityLevel()), FireDir, SwordQiSpeed, SwordQiLifeTime, RollOffset);
+
+	// 能量按当前段认领，命中时才到账；穿透连穿多个目标也只结算一次
+	SwordQi->SetEnergyOnHit(ClaimEnergyForCurrentAttack());
 }
 
 void UGA_AirAttack_Phase2::AdvanceToNextStage()

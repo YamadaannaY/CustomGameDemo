@@ -40,6 +40,9 @@ public:
 	void InitProjectile(AActor* InSource, TSubclassOf<UGameplayEffect> InDamageEffect, int32 InAbilityLevel,
 	                    const FVector& InDir, float InSpeed, float InLifeTime, float InRollOffset = 0.f);
 
+	// 命中时给来源加的能量
+	void SetEnergyOnHit(float InEnergyOnHit) { EnergyOnHit = InEnergyOnHit; }
+
 protected:
 	//并按 HitMode 配好碰撞通道与命中回调
 	void SetupProjectileCollision(UPrimitiveComponent* InCollision, UProjectileMovementComponent* InMovement);
@@ -53,9 +56,9 @@ protected:
 	//应用伤害
 	void ApplyProjectileDamage(AActor* Victim) const;
 
-	// 命中确认后给来源角色加能量（SourceEnergyPerHit <= 0 时什么都不做）
-	void ApplySourceEnergyGain() const;
-	
+	// 命中时按 EnergyOnHit 给来源累积能量（封顶由属性集处理）
+	void ApplySourceEnergy(float Amount) const;
+
 	void DestroyProjectile();
 
 	// 撞击停止：撞到墙，或非穿透模式下命中目标
@@ -81,10 +84,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Projectile|Damage")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
-	// 按「每个被命中的目标」各加一次,即一次攻击可根据结算对象数量多次叠加
-	UPROPERTY(EditDefaultsOnly, Category = "Projectile|Damage", meta = (ClampMin = "0.0"))
-	float SourceEnergyPerHit = 0.f;
-
 private:
 	// 伤害源，弱引用：源死亡/销毁后已射出的投射物仍安全飞行
 	TWeakObjectPtr<AActor> SourceActor;
@@ -93,6 +92,12 @@ private:
 	TSet<TWeakObjectPtr<AActor>> HitActors;
 
 	int32 AbilityLevel = 1;
+
+	// 命中时给来源加的能量（由发射 GA 认领后注入）
+	float EnergyOnHit = 0.f;
+
+	// 本投射物是否已结算过能量：穿透型剑气命中多个目标时只加一次
+	bool bEnergyGranted = false;
 
 	// 超时销毁定时器
 	FTimerHandle LifeTimerHandle;

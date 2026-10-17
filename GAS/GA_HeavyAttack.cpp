@@ -256,4 +256,6 @@ void UGA_HeavyAttack::SpawnArrowAtSocket()
 	}
 
 	Arrow->InitProjectile(Char, ArrowDamageEffect,(GetAbilityLevel()), FireDir, ArrowSpeed, ArrowLifeTime);
+	//为Arrow配置GA的Energy值
+	Arrow->SetEnergyOnHit(ClaimEnergyForCurrentAttack());
 }

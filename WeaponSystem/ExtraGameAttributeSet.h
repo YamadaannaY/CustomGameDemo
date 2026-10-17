@@ -106,7 +106,7 @@ protected:
 	
 	
 	bool bProcessingShieldAbsorption=false;
-	
+
 	UPROPERTY(EditDefaultsOnly,Category="Attributes|Regen")
 	TSubclassOf<UGameplayEffect> HealthReFillEffect;
 };

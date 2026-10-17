@@ -27,11 +27,7 @@ public:
 	// 把原生「cooldown GE 的 tag 在 ASC 上就封锁」逻辑重构为「充能层数用满才封锁」
 	virtual bool CheckCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
-	virtual void DoDamage(const FGameplayEventData& Data) override;
 private:
-	UPROPERTY(EditDefaultsOnly,Category= "Energy")
-	float EnergyValuePerHit = 10.f;
-	
 	// 段1：上斩击
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
 	UAnimMontage* RiseMontage;
@@ -132,6 +128,8 @@ private:
 	void PlayLandAttackLandMontage();
 
 	void StopLandAttackLoopMontage();
+	
+	virtual UAnimMontage* GetEnergyGainMontage() const override;
 
 	UFUNCTION()
 	void OnLandAttackLandMontageEnded(UAnimMontage* Montage, bool bInterrupted);

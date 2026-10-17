@@ -1,4 +1,6 @@
 #include "UExtraAbilitySystemStatic.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "Abilities/GameplayAbilityTypes.h"
 
 // ── Native GameplayTag 定义（静态注册，早于 CDO 构造）──
 UE_DEFINE_GAMEPLAY_TAG(Ability, "ability");
@@ -347,4 +349,17 @@ FGameplayTag UUExtraAbilitySystemStatic::GetHitReactCooldownTag()
 FGameplayTag UUExtraAbilitySystemStatic::GetKnockDownEventTag()
 {
 	return Ability_KnockDown;
+}
+
+void UUExtraAbilitySystemStatic::SendHitReactEvent(AActor* Target, AActor* Instigator)
+{
+	if (!IsValid(Target))
+	{
+		return;
+	}
+
+	FGameplayEventData EventData;
+	EventData.Instigator = Instigator;
+	EventData.Target = Target;
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Target, GetHitReactEventTag(), EventData);
 }

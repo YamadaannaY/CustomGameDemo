@@ -73,7 +73,8 @@ private:
 	// 覆写：移动打断时淡出的 Montage（落地动画带 cancel AN）
 	virtual UAnimMontage* GetActiveMontageForCancel() const override { return AirAttackLandMontage; }
 
-	// 命中移动打断瞬间：立即清掉 AnimBP 让位标记，让状态机在 montage 停止的同一帧接管
+	virtual UAnimMontage* GetEnergyGainMontage() const override;
+
 	virtual void OnMovementCancelTriggered() override;
 
 	// 记录当前处于哪个阶段，用于 EndAbility 清理

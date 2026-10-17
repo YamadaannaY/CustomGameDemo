@@ -20,8 +20,11 @@ UGA_HeavyAttackCharge::UGA_HeavyAttackCharge()
 	CancelAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 	
 	bEnableUninterruptible = true;
-	
+
 	bEnableWeaponDamage = true;
+
+	// 命中累积寒意
+	bEnableEnergyGain = true;
 
 	bRotateToLockTarget = true;
 
