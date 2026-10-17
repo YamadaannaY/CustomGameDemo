@@ -4,6 +4,7 @@
 #include "AbilitySystemInterface.h"
 #include "Components/PrimitiveComponent.h"
 #include "ExtractGameCharacter/ExtraCharacter.h"
+#include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GenericTeamAgentInterface.h"
@@ -139,8 +140,15 @@ void AExtraProjectile::ProcessHit(AActor* HitActor)
 	if (bHasAuthorityNow && bIsEnemy)
 	{
 		ApplyProjectileDamage(HitActor);
-		
-		ApplySourceEnergyGain();
+
+		UUExtraAbilitySystemStatic::SendHitReactEvent(HitActor, SourceActor.Get());
+
+		// 能量：本投射物只结算一次，穿透剑气连穿多个目标时不重复加
+		if (!bEnergyGranted && EnergyOnHit > 0.f)
+		{
+			bEnergyGranted = true;
+			ApplySourceEnergy(EnergyOnHit);
+		}
 	}
 }
 
@@ -206,31 +214,28 @@ void AExtraProjectile::ApplyProjectileDamage(AActor* Victim) const
 	}
 }
 
-void AExtraProjectile::ApplySourceEnergyGain() const
+void AExtraProjectile::ApplySourceEnergy(float Amount) const
 {
-	if (SourceEnergyPerHit <= 0.f)
-	{
-		return;
-	}
-
 	AActor* Source = SourceActor.Get();
-	if (!Source)
+	if (!Source || Amount <= 0.f)
 	{
 		return;
 	}
 
-	UAbilitySystemComponent* SourceASC = nullptr;
-	if (const IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Source))
+	const IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Source);
+	if (!ASI)
 	{
-		SourceASC = ASI->GetAbilitySystemComponent();
+		return;
 	}
+
+	UAbilitySystemComponent* SourceASC = ASI->GetAbilitySystemComponent();
 	if (!SourceASC)
 	{
 		return;
 	}
-	 
+
 	const FGameplayAttribute EnergyAttribute = UExtraGameAttributeSet::GetEnergyValueAttribute();
-	SourceASC->SetNumericAttributeBase(EnergyAttribute, SourceASC->GetNumericAttribute(EnergyAttribute) + SourceEnergyPerHit);
+	SourceASC->SetNumericAttributeBase(EnergyAttribute, SourceASC->GetNumericAttribute(EnergyAttribute) + Amount);
 }
 
 void AExtraProjectile::DestroyProjectile()
