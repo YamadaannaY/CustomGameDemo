@@ -134,25 +134,14 @@ void UGA_Skill_02::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 		PlayerChar->SetMovementInputLocked(false);
 	}
 
-	// 兜底停掉仍在播的段（异常结束 / 被打断路径），各段用自己 Montage 上配的 BlendOut
-	if (UAnimInstance* AnimInst = GetOwnerAnimInstance())
+	// 兜底停掉仍在播的段（异常结束 / 被打断路径）。
+	// 必须走 ASC：模拟端只认 ASC 的 RepAnimMontageInfo，直连 AnimInstance 停不会同步过去。
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		if (RiseMontage && AnimInst->Montage_IsPlaying(RiseMontage))
-		{
-			AnimInst->Montage_StopWithBlendOut(RiseMontage->BlendOut, RiseMontage);
-		}
-		if (LandAttackStartMontage && AnimInst->Montage_IsPlaying(LandAttackStartMontage))
-		{
-			AnimInst->Montage_StopWithBlendOut(LandAttackStartMontage->BlendOut, LandAttackStartMontage);
-		}
-		if (LandAttackLoopMontage && AnimInst->Montage_IsPlaying(LandAttackLoopMontage))
-		{
-			AnimInst->Montage_StopWithBlendOut(LandAttackLoopMontage->BlendOut, LandAttackLoopMontage);
-		}
-		if (LandAttackLandMontage && AnimInst->Montage_IsPlaying(LandAttackLandMontage))
-		{
-			AnimInst->Montage_StopWithBlendOut(LandAttackLandMontage->BlendOut, LandAttackLandMontage);
-		}
+		if (RiseMontage) { ASC->StopMontageIfCurrent(*RiseMontage); }
+		if (LandAttackStartMontage) { ASC->StopMontageIfCurrent(*LandAttackStartMontage); }
+		if (LandAttackLoopMontage) { ASC->StopMontageIfCurrent(*LandAttackLoopMontage); }
+		if (LandAttackLandMontage) { ASC->StopMontageIfCurrent(*LandAttackLandMontage); }
 	}
 
 	CurrentPhase = ESkill02Phase::None;
@@ -345,13 +334,10 @@ void UGA_Skill_02::EnterLandAttack()
 	// 那时 CurrentPhase 已不是 Rise，回调会直接 return。
 	CurrentPhase = ESkill02Phase::LandStart;
 
-	//停Montage
-	if (UAnimInstance* AnimInst = GetOwnerAnimInstance())
+	//停Montage（走 ASC，停止状态才会复制给模拟端）
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		if (RiseMontage && AnimInst->Montage_IsPlaying(RiseMontage))
-		{
-			AnimInst->Montage_StopWithBlendOut(RiseMontage->BlendOut, RiseMontage);
-		}
+		if (RiseMontage) { ASC->StopMontageIfCurrent(*RiseMontage); }
 	}
 
 	//Land
@@ -423,8 +409,14 @@ void UGA_Skill_02::PlayLandAttackLoopMontage()
 
 	CurrentPhase = ESkill02Phase::LandLoop;
 	
-	//Montage LoopSection
-	AnimInst->Montage_Play(LandAttackLoopMontage, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
+	// 必须走 ASC 播放：模拟端只认 RepAnimMontageInfo，直连 AnimInstance 播的不会复制过去
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->PlayMontage(this, GetCurrentActivationInfo(), LandAttackLoopMontage, 1.0f);
+	}
+
+	//section 自循环：不依赖资产 bLoop 是否勾选，确保下砸循环动画播完会跳回自身，
+	//服务器上设置的 NextSection 会随 RepAnimMontageInfo.NextSectionID 同步到模拟端
 	if (const FName LoopSection = AnimInst->Montage_GetCurrentSection(LandAttackLoopMontage); LoopSection != NAME_None)
 	{
 		AnimInst->Montage_SetNextSection(LoopSection, LoopSection, LandAttackLoopMontage);
@@ -508,12 +500,20 @@ void UGA_Skill_02::PlayLandAttackLandMontage()
 	}
 
 	// 起手段可能仍在播（低空触发），直接停掉
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		if (LandAttackStartMontage) { ASC->StopMontageIfCurrent(*LandAttackStartMontage); }
+	}
 	if (LandAttackStartMontage && AnimInst->Montage_IsPlaying(LandAttackStartMontage))
 	{
 		AnimInst->Montage_StopWithBlendOut(LandAttackStartMontage->BlendOut, LandAttackStartMontage);
 	}
 
-	AnimInst->Montage_Play(LandAttackLandMontage, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, false);
+	// 落地段必须走 ASC：模拟端靠 RepAnimMontageInfo 接收，直连播不会复制过去
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->PlayMontage(this, GetCurrentActivationInfo(), LandAttackLandMontage, 1.0f);
+	}
 
 	FOnMontageEnded LandEndDelegate;
 	LandEndDelegate.BindUObject(this, &UGA_Skill_02::OnLandAttackLandMontageEnded);
@@ -525,10 +525,10 @@ void UGA_Skill_02::PlayLandAttackLandMontage()
 
 void UGA_Skill_02::StopLandAttackLoopMontage()
 {
-	UAnimInstance* AnimInst = GetOwnerAnimInstance();
-	if (AnimInst && LandAttackLoopMontage && AnimInst->Montage_IsPlaying(LandAttackLoopMontage))
+	// 走 ASC 停止，模拟端才会同步；直连 AnimInstance 停不会复制
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		AnimInst->Montage_StopWithBlendOut(LandAttackLoopMontage->BlendOut, LandAttackLoopMontage);
+		if (LandAttackLoopMontage) { ASC->StopMontageIfCurrent(*LandAttackLoopMontage); }
 	}
 }
 
