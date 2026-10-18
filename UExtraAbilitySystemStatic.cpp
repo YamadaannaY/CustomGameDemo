@@ -1,5 +1,9 @@
 #include "UExtraAbilitySystemStatic.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
+#include "GameplayCueManager.h"
+#include "GameplayEffectTypes.h"
 #include "Abilities/GameplayAbilityTypes.h"
 
 // ── Native GameplayTag 定义（静态注册，早于 CDO 构造）──
@@ -70,6 +74,9 @@ UE_DEFINE_GAMEPLAY_TAG(AirAttack_Combo_End, "ability.airattack.combo.end");
 UE_DEFINE_GAMEPLAY_TAG(Ability_HitReact, "ability.hitreact");
 UE_DEFINE_GAMEPLAY_TAG(State_HitReactCooldown, "State.HitReact.Cooldown");
 UE_DEFINE_GAMEPLAY_TAG(Ability_KnockDown, "ability.knockdown");
+
+// 伤害飘字 Cue。必须以 GameplayCue. 开头，否则 GameplayCueManager 不会认
+UE_DEFINE_GAMEPLAY_TAG(DamageNumber_Cue, "GameplayCue.Damage.Number");
 
 FGameplayTag UUExtraAbilitySystemStatic::GetBasicAttackAbilityTag()
 {
@@ -362,4 +369,36 @@ void UUExtraAbilitySystemStatic::SendHitReactEvent(AActor* Target, AActor* Insti
 	EventData.Instigator = Instigator;
 	EventData.Target = Target;
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Target, GetHitReactEventTag(), EventData);
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetDamageNumberCueTag()
+{
+	return DamageNumber_Cue;
+}
+
+void UUExtraAbilitySystemStatic::SendDamageNumberCue(AActor* Target, float Damage)
+{
+	if (!IsValid(Target) || Damage <= 0.f)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
+	if (!TargetASC)
+	{
+		return;
+	}
+
+	FGameplayCueParameters Params;
+	Params.RawMagnitude = Damage;
+	Params.EffectCauser = Target;
+	// 命中位置由 Cue 侧决定（Bone Socket）
+	Params.Location = Target->GetActorLocation();
+
+	// 权威端内部走 NetMulticast，由各端本地执行 Cue；模拟端直接本地执行
+	if (UGameplayCueManager* CueManager = UAbilitySystemGlobals::Get().GetGameplayCueManager())
+	{
+		CueManager->InvokeGameplayCueExecuted_WithParams(
+			TargetASC, GetDamageNumberCueTag(), FPredictionKey(), Params);
+	}
 }

@@ -263,8 +263,25 @@ void UExtraGameplayAbility::DoDamage(const FGameplayEventData& Data)
 	for (AActor* HitActor : HitActors)
 	{
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
+		if (!TargetASC)
+		{
+			continue;
+		}
+
+		// 飘字数值
+		const float HealthBefore = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetHealthAttribute());
+		const float ShieldBefore = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetShieldAttribute());
+
 		SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
-		
+
+		const float HealthAfter = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetHealthAttribute());
+		const float ShieldAfter = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetShieldAttribute());
+
+		// AI 血量归零会立刻回满（bRefillHealthOnZero），特别考虑此情况
+		const float HealthLoss = HealthAfter > HealthBefore ? HealthBefore : HealthBefore - HealthAfter;
+		const float ShieldLoss = FMath::Max(0.f, ShieldBefore - ShieldAfter);
+		UUExtraAbilitySystemStatic::SendDamageNumberCue(HitActor, HealthLoss + ShieldLoss);
+
 		UUExtraAbilitySystemStatic::SendHitReactEvent(HitActor, Avatar);
 	}
 

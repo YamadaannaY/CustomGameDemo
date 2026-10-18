@@ -210,7 +210,20 @@ void AExtraProjectile::ApplyProjectileDamage(AActor* Victim) const
 	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffectClass, AbilityLevel, Context);
 	if (SpecHandle.Data.Get())
 	{
+		// 飘字数值读结算前后的 Health/Shield 差值：护盾吸收、clamp 后的实际结果才准确
+		const float HealthBefore = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetHealthAttribute());
+		const float ShieldBefore = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetShieldAttribute());
+
 		SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+
+		const float HealthAfter = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetHealthAttribute());
+		const float ShieldAfter = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetShieldAttribute());
+
+		// AI 血量归零会立刻回满（bRefillHealthOnZero），此时 HealthAfter 反而更大，
+		// 按「打空当前血量」计算，避免显示负数或 0
+		const float HealthLoss = HealthAfter > HealthBefore ? HealthBefore : HealthBefore - HealthAfter;
+		const float ShieldLoss = FMath::Max(0.f, ShieldBefore - ShieldAfter);
+		UUExtraAbilitySystemStatic::SendDamageNumberCue(Victim, HealthLoss + ShieldLoss);
 	}
 }
 

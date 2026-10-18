@@ -82,6 +82,9 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReactCooldown);
 // GA_KnockDown 以 AbilityTriggers 接收（与 ability.hitreact 同前缀不同分支，不会互相误触发）
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_KnockDown);
 
+// 伤害飘字：Executed 型 GameplayCue
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(DamageNumber_Cue);
+
 /**
  * 
  */
@@ -209,6 +212,13 @@ public:
 	// 只有「攻击造成的伤害」才该调它 —— 血量因别的原因变化（回血、消耗、无来源的 DOT）不在此列。
 	// Instigator 传攻击者，受击 GA 靠它决定左右受击动画与击飞方向；传 nullptr 则退化为随机
 	static void SendHitReactEvent(AActor* Target, AActor* Instigator);
+
+	// ── 伤害飘字（GameplayCue）──
+	static FGameplayTag GetDamageNumberCueTag();  // "GameplayCue.Damage.Number"
+
+	// 广播一次伤害飘字：只在服务端伤害结算完成后调用。
+	// 经 GameplayCueManager 走 NetMulticast，各端本地执行 Cue 生成飘字。
+	static void SendDamageNumberCue(AActor* Target, float Damage);
 
 	static FGameplayTag GetLaunchedAbilityActivationTag();
 };
