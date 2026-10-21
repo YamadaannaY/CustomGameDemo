@@ -1,5 +1,3 @@
-// Copyright Yu. All Rights Reserved.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -95,11 +93,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Group")
 	bool SwitchWeaponGroup(FGameplayTag NewGroupTag);
 	
-	/** 显示当前武器组所有 Mesh，不包括手动隐藏的对象，用于特定情况后恢复原本显示配置（如果要显示所有武器，调用ShowAllWeapons）*/
+	/** 显示当前武器组所有 Mesh，不包括手动隐藏的对象，用于特定情况后恢复原本显示配置（如果要显示所有武器，调用ShowAllWeapons）。
+	 *  同时把所有武器还原到默认挂点（额外挂点操作设计为一次性的） */
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
 	void ShowWeapon();
 
-	/** 强制显示当前武器组所有 Mesh，同时清空逐条目隐藏状态 */
+	/** 强制显示当前武器组所有 Mesh，同时清空逐条目隐藏状态；并把所有武器还原到默认挂点 */
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
 	void ShowAllWeapons();
 
@@ -109,13 +108,15 @@ public:
 
 	// ── 逐武器显隐（组内单个 Mesh） ─────────────────────────
 
-	/** 显示当前武器组中的指定武器 Mesh */
+	/** 显示当前武器组中的指定武器 Mesh。
+	 *  会先把该武器还原到默认挂点——额外挂点只对 ShowWeaponEntryOnSocket 的当次展示有效 */
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
 	void ShowWeaponEntry(FGameplayTag WeaponTag);
 
 	/** 显示指定武器 Mesh，但显示前先把 Mesh 重挂到指定 SocketName。
 	 *  SocketName 为空 / None / 默认挂点 → 复位到默认 AttachSocketName；
-	 *  否则必须属于该武器 AltAttachSockets。失败（无 Mesh / Socket 无效）时返回 false 且不显示。 */
+	 *  否则必须属于该武器 AltAttachSockets。失败（无 Mesh / Socket 无效）时返回 false 且不显示。
+	 *  额外挂点是**一次性**的：之后任何显示入口（本函数除外）都会回到默认挂点。 */
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Visibility")
 	bool ShowWeaponEntryOnSocket(FGameplayTag WeaponTag, FName SocketName);
 
@@ -138,14 +139,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Weapon|Query")
 	bool IsWeaponInCurrentGroup(FGameplayTag WeaponTag) const;
 
-	/** 蓝图：获取当前武器组数据，返回是否有效 */
-	UFUNCTION(BlueprintPure, Category = "Weapon|Query")
-	bool GetCurrentWeaponGroupBP(FExtraGameWeaponGroup& OutGroup) const;
-
-	/** 蓝图：通过 GroupTag 获取武器组数据，返回是否找到 */
-	UFUNCTION(BlueprintPure, Category = "Weapon|Query")
-	bool GetWeaponGroupByTagBP(FGameplayTag GroupTag, FExtraGameWeaponGroup& OutGroup) const;
-
 	/** 通过 WeaponTag 获取对应的 Mesh 组件 */
 	UFUNCTION(BlueprintPure, Category = "Weapon|Query")
 	UStaticMeshComponent* GetWeaponMeshByTag(FGameplayTag WeaponTag) const;
@@ -160,7 +153,7 @@ public:
 	UFUNCTION()
 	void WeaponGroupChangeDebug(FGameplayTag OldGroupTag , FGameplayTag NewGroupTag);
 
-	// 在 ASC 初始化后调用（由 Character::ServerSideInit 触发）
+	// 在 ASC 初始化后调用
 	void OnASCInitialized();
 
 	// ── 轨迹伤害扫描（由 ANS_WeaponTrace 驱动） ─────────────────
@@ -181,7 +174,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
 	TEnumAsByte<ECollisionChannel> WeaponTraceChannel = ECC_GameTraceChannel1;
 
-	// 命中事件 Tag（窗口结束时发送给 Owner；默认走连段伤害事件，见构造函数）
+	// 命中事件 Tag（窗口结束时发送给 Owner；默认走连段伤害事件）
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
 	FGameplayTag TraceEventTag;
 
@@ -204,6 +197,9 @@ private:
 	// ShowWeaponEntry 从中移除，HideWeaponEntry 添加到此集合
 	UPROPERTY()
 	TSet<FGameplayTag> HiddenWeaponEntries;
+
+	// 额外挂点覆盖（本端）：记录当前挂在 AltSocket 上的武器，下一次普通显示时还原默认
+	TMap<FGameplayTag, FName> AttachSocketOverrides;
 
 	// 生成武器 Mesh
 	UStaticMeshComponent* SpawnWeaponMesh(const FExtraGameWeaponEntry& Entry);
@@ -284,14 +280,23 @@ private:
 
 	// 权威端判定：GAS（GA/GE/Tags）与轨迹伤害结算只在服务端执行，客户端只做武器显隐表现
 	bool IsAuthorityOwner() const;
-
-	// ── 多挂点重挂（ShowWeaponEntryOnSocket 用）─────────────
+	
 	// 解析 WeaponTag 对应武器数据：优先当前组，其次全局表（跨组保留的 Mesh）
 	const FExtraGameWeaponEntry* ResolveWeaponEntry(FGameplayTag WeaponTag) const;
 
 	// 把指定武器 Mesh 重挂到 SocketName（空 / None / 默认挂点 → 复位默认）。
 	// 校验 Mesh 存在与骨骼 Socket 有效；失败返回 false 不改动。
 	bool SetWeaponAttachSocket(FGameplayTag WeaponTag, FName SocketName);
+
+	// 把武器 Mesh 还原到该条目默认挂点（不做当前组校验：切组后的还原也要生效）
+	void ResetWeaponAttachSocket(FGameplayTag WeaponTag);
+
+	// 权威端：把所有武器的额外挂点还原成默认挂点
+	void ResetAllWeaponAttachSockets();
+
+	// 显示单个武器。bResetAttachSocket=false 用于「本次指定挂点」的展示——
+	// 额外挂点只对当次有效，之后的普通显示一律回默认挂点
+	void ShowWeaponEntryInternal(FGameplayTag WeaponTag, bool bResetAttachSocket);
 
 	// ── 轨迹扫描状态 ────────────────────────────────────────
 	bool bTraceActive = false;

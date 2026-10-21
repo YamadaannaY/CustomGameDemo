@@ -41,27 +41,28 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
                                        const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
                                        bool bReplicateEndAbility, bool bWasCancelled)
 {
-	/*//因为移动CancelGA时，手动停Montage
-	if (bEndingFromMovement)
+	// 基类对「重复 EndAbility」（预测结束 + 服务端确认、取消等）的拦截在 Super::EndAbility 内部，
+	// 而本函数在调 Super 之前就做了副作用（隐藏武器、清相机请求等）。不先挡一次的话，
+	// 第二次 end 会把下一段 GA 刚显示出来的武器又整体隐藏掉，也就是EndGA之外的清理逻辑只做一次
+	if (!IsEndAbilityValid(Handle, ActorInfo))
 	{
-		if (UAnimMontage* ActiveMontage = GetActiveMontageForCancel())
-		{
-			UAnimInstance* AnimInst = GetOwnerAnimInstance();
-			if (AnimInst && AnimInst->Montage_IsPlaying(ActiveMontage))
-			{ 
-				AnimInst->Montage_StopWithBlendOut(ActiveMontage->BlendOut, ActiveMontage);
-			}
-		}
-	}*/
+		return;
+	}
 
+	//这一部分武器显隐逻辑一般情况下不应触发，因为这意味着两个具有武器操作能力的GA被同时激活
 	AExtraPlayerCharacter* Char = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
 	if (Char && Char->GetWeaponComponent() && ClearWeaponShowOnAbilityEnd)
 	{
-		// 临时诊断：GA 结束触发的整体隐藏
-		UE_LOG(LogTemp, Warning, TEXT("[WeaponVis] GA_EndHide Owner=%s Role=%d NetMode=%d | Ability=%s"),
-			*GetNameSafe(Char), int32(Char->GetLocalRole()), int32(Char->GetNetMode()), *GetNameSafe(this));
+		// 只在本 GA 仍是「当前动画持有者」时隐藏武器。
+		// 落地段/后摇还没结束、玩家已经按出下一段 GA 时，新 GA 已通过 ASC 接管动画并显示武器；
+		// 这里的整体隐藏会把新 GA 刚显示的武器抹掉（两端时序不同 → 自主端不显示、模拟端正常）。
+		UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+		const UGameplayAbility* AnimatingAbility = ASC ? ASC->GetAnimatingAbility() : nullptr;
 
-		Char->GetWeaponComponent()->HideAllWeapon();
+		if (!AnimatingAbility || AnimatingAbility == this)
+		{
+			Char->GetWeaponComponent()->HideAllWeapon();
+		}
 	}
 
 	// 兜底：异常终止未触发 ANS 的 NotifyEnd，进行一次强制关闭轨迹扫描窗口
