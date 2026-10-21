@@ -1,5 +1,4 @@
 #include "AudioEventCooldownSubsystem.h"
-
 #include "Engine/World.h"
 
 bool UAudioEventCooldownSubsystem::IsOnCooldown(const UObject* Owner, const UObject* Source, FGameplayTag Key, float CooldownSeconds) const
@@ -35,7 +34,8 @@ void UAudioEventCooldownSubsystem::MarkPlayed(const UObject* Owner, const UObjec
 
 	const UWorld* World = GetWorld();
 	const double Now = World ? World->GetTimeSeconds() : 0.0;
-	Records.FindOrAdd(FAudioEventCooldownKey{ FObjectKey(Owner), FObjectKey(Source), Key }).LastPlayTime = Now;
+	Records.FindOrAdd(FAudioEventCooldownKey{ FObjectKey(Owner), FObjectKey(Source), Key }).
+	LastPlayTime = Now;
 }
 
 void UAudioEventCooldownSubsystem::PruneInvalidOwners()

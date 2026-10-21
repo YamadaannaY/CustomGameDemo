@@ -18,7 +18,7 @@ struct EXTRACTGAMECHARACTER_API FExtraGameWeaponTraceConfig
 {
 	GENERATED_BODY()
 
-	// 单个 Socket 的扫描球半径（近似剑刃有效宽度的一半）
+	// 单个 Socket 的扫描球半径
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Trace")
 	float TraceRadius = 4.f;
 

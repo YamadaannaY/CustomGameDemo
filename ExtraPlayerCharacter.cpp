@@ -17,8 +17,7 @@
 #include "Net/UnrealNetwork.h"
 
 
-AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectInitializer)
-	: Super(ObjectInitializer)
+AExtraPlayerCharacter::AExtraPlayerCharacter(const FObjectInitializer& ObjectInitializer): Super(ObjectInitializer)
 {
 	CamBoom=CreateDefaultSubobject<USpringArmComponent>("Cam Boom");
 	CamBoom->SetupAttachment(GetRootComponent());
@@ -223,6 +222,7 @@ void AExtraPlayerCharacter::Tick(float DeltaTime)
 		{
 			bRepActionConsumed = false;
 		}
+		//这个逻辑只进入一次
 		else if (!bRepActionConsumed)
 		{
 			bRepActionConsumed = true;
@@ -400,7 +400,7 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 		//以摄像机旋转为前方向
 		const FRotator YawRot(0.f, Controller->GetControlRotation().Yaw, 0.f);
 
-		//Vector2D中X为前后，Y为右左，是平面坐标系
+		//Vector2D中Y为前后，X为右左，是平面坐标系
 		ForwardDirectionInput = InputVal.Y;
 		RightDirectionInput = InputVal.X;
 
@@ -478,7 +478,7 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 		const float AbsTargetDelta = FMath::Abs(TargetDelta);
 
 		// 左右方向由本端判定后一并上传：服务器朝向虽已同步但仍有微差，重算可能选反
-		EMoveReleaseAction Action = EMoveReleaseAction::None;
+		EMoveReleaseAction Action ;
 		if (AbsTargetDelta < TurnSharpAngel)
 		{
 			// 急停
@@ -637,6 +637,7 @@ void AExtraPlayerCharacter::TickArmLengthLerp(float Goal)
 		return;
 	}
 
+	//递归核心
 	const float LerpAlpha=FMath::Clamp(GetWorld()->GetDeltaSeconds() * ZoomLerpSpeed, 0.f, 1.f);
 	const float NewArmLength=FMath::Lerp(CurrentArmLength, Goal, LerpAlpha);
 
@@ -742,8 +743,7 @@ void AExtraPlayerCharacter::OnStopMontageEnded(UAnimMontage* Montage, bool bInte
 		AI->ClearStopRequest();
 
 		// 只在正常播完时清零残留速度。
-		// 被打断时（玩家重新操作）两端 Montage 的结束时刻本就差着网络延迟，
-		// 若一端清零、另一端没清，速度突变会被 CMC 当成预测误差反复纠正，表现为停步收尾处的抖动。
+		// 重新移动时保持当前残余速度并叠加新输入的速度
 		if (!bInterrupted)
 		{
 			if (UCharacterMovementComponent* CMC = GetCharacterMovement())

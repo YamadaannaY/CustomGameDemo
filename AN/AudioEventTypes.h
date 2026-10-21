@@ -7,8 +7,7 @@
 class AActor;
 
 /**
- * 一个ProbabilityInfo包含一个Tag和它对应的播放概率、触发间隔
- * 触发一个Audio时会先判断ASC中是否持有此Tag，如果有对这个Audio应用对应参数
+ * 一个ProbabilityInfo包含一个Tag和持有这个Tag时Audio播放对应的播放概率、触发间隔
  */
 USTRUCT(BlueprintType)
 struct FAudioEventProbabilityInfo
@@ -49,6 +48,6 @@ struct FAudioEventProbabilityCooldownInfo
 
 namespace ExtraAudioEvent
 {
-	// 解析生效的概率/冷却：Owner 拥有的首个 Tag 覆盖默认值
+	// 解析生效的概率/冷却，取出第一个匹配Tag对应的参数
 	void ResolveProbability(const FAudioEventProbabilityCooldownInfo& Info,AActor* Owner, FGameplayTag& OutTag, float& OutProbability, float& OutCooldown);
 }

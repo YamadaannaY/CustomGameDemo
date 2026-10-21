@@ -69,6 +69,18 @@ UAbilitySystemComponent* AExtraCharacter::GetAbilitySystemComponent() const
 	return AbilitySystemComponent;
 }
 
+void AExtraCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	
+	// 服务端给每个角色分配唯一团队 ID，使所有角色互为敌对（任意两个角色 TeamID 都不同）
+	if (HasAuthority())
+	{
+		static uint8 NextTeamID = 0;
+		SetGenericTeamId(FGenericTeamId(NextTeamID++));
+	}
+}
+
 void AExtraCharacter::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -90,14 +102,7 @@ void AExtraCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 服务端给每个角色分配唯一团队 ID，使所有角色互为敌对（任意两个角色 TeamID 都不同）
-	if (HasAuthority())
-	{
-		static uint8 NextTeamID = 0;
-		SetGenericTeamId(FGenericTeamId(NextTeamID++));
-	}
-
-	// 把目标跳跃高度换算成起跳初速度：v = sqrt(2 * g * h)（g 取绝对值，单位均为 cm）
+	// 把目标跳跃高度换算成起跳初速度：v = sqrt(2 * g * h)
 	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
 	{
 		const float Gravity = FMath::Abs(Movement->GetGravityZ());
@@ -171,10 +176,9 @@ void AExtraCharacter::UpdateHeadGaugeRotation() const
 	const FVector GaugeLocation = OverHeadWidgetComponent->GetComponentLocation();
 	FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(GaugeLocation, CameraManager->GetCameraLocation());
 
-	//只清 Roll（FindLookAtRotation 出来的 Roll 本就≈0）；Pitch 保留，否则血条只是水平朝向相机，俯视时会被严重压扁
 	LookAtRot.Roll = 0.f;
 
-	//组件是绝对旋转（构造里 SetUsingAbsoluteRotation），这里设的就是世界朝向而非Relative
+	//组件是绝对旋转这里设的就是世界朝向而非Relative
 	OverHeadWidgetComponent->SetWorldRotation(LookAtRot);
 }
 

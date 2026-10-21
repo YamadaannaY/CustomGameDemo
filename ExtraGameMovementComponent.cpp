@@ -35,7 +35,7 @@ void UExtraGameMovementComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 缓存角色朝向和摄像机朝向初值，否则第一帧会从零朝向跳变
+	// 缓存角色朝向和摄像机朝向初值
 	
 	if (CharacterOwner)
 	{
@@ -180,19 +180,7 @@ void UExtraGameMovementComponent::CustomPhysicsRotation(float DeltaTime)
 	const bool bShouldRotate = (bIsMoving && bHasMovementInput) || Speed > FallbackRotationSpeed;
 
 	const float GroundedRate = CalculateGroundedRotationRate();
-
-	if (bDebugRotation && CharacterOwner && GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			static_cast<int32>(CharacterOwner->GetUniqueID()), 0.f, FColor::Yellow,
-			FString::Printf(
-				TEXT("[Rot] Spd=%.0f Accel=%.0f Rotate=%d Rate=%.1f CurveVal=%.1f Mapped=%.2f TargetYaw=%.1f ActorYaw=%.1f LastInputYaw=%.1f"),
-				Speed, Acceleration.Size(), bShouldRotate ? 1 : 0, GroundedRate,
-				RotationRateCurve ? RotationRateCurve->GetFloatValue(GetMappedSpeed()) : -1.f,
-				GetMappedSpeed(), TargetRotation.Yaw, CharacterOwner->GetActorRotation().Yaw,
-				LastRotationTarget.Yaw));
-	}
-
+	
 	//  要有速度且仍有输入才转向；已松手但速度还快时也允许回正
 	if (!bShouldRotate)
 	{

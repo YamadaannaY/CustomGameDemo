@@ -13,18 +13,24 @@
  */
 struct FAudioEventCooldownKey
 {
+	//这种类型能够在TMap和Set中提供高效安全的Key能力，因为裸指针可能重指向一个新的对象，此时可能导致键冲突，而ObjectKey则依赖唯一的引擎序列号，不会导致冲突。
+	
+	//播放的Mesh
 	FObjectKey Owner;
+	
+	//调用的AN/ANS
 	FObjectKey Source;
 	
 	//同一个AN/ANS下根据不同Tag采用不同的CooldownTime
 	FGameplayTag Tag;
 
+	//重载等号
 	bool operator==(const FAudioEventCooldownKey& Other) const
 	{
 		return Owner == Other.Owner && Source == Other.Source && Tag == Other.Tag;
 	}
 
-	//哈希函数，提供哈希对比能力
+	//哈希函数，提供作为Key的功能
 	friend uint32 GetTypeHash(const FAudioEventCooldownKey& Key)
 	{
 		return HashCombine(HashCombine(GetTypeHash(Key.Owner), GetTypeHash(Key.Source)), GetTypeHash(Key.Tag));
@@ -47,7 +53,7 @@ public:
 	// 距上次成功播放是否仍未满冷却；无记录时视为可用
 	bool IsOnCooldown(const UObject* Owner, const UObject* Source, FGameplayTag Key, float CooldownSeconds) const;
 
-	// 记录一次成功播放
+	// 记录一次成功播放，根据当前参数制作一个CooldownKey,与播放时间映射加入到Records
 	void MarkPlayed(const UObject* Owner, const UObject* Source, FGameplayTag Key);
 
 private:
@@ -57,7 +63,9 @@ private:
 		double LastPlayTime = -MAX_dbl;
 	};
 
+	//当记录Map超过64个时，清理一次非法的数据
 	void PruneInvalidOwners();
 
+	//Key和播放时间的映射集合。
 	TMap<FAudioEventCooldownKey, FCooldownRecord> Records;
 };

@@ -21,6 +21,8 @@ public:
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	
+	virtual void PossessedBy(AController* NewController) override;
+	
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
 	// ── GAS 初始化（由 Controller OnPossess 调用）─────────────

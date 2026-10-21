@@ -47,10 +47,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="1.0"))
 	float MaxCameraYawRateMultiplier = 3.f;
 	
-	// 排查用：每帧在屏幕上打印转向判定的关键数值。
-	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)")
-	bool bDebugRotation = false;
-
 	// ── 移动曲线（MovementCurve）────────────────────────
 	// 横轴 = 映射速度（0..3），根据Mapped后的速度区间值读其纵轴，其中：X = 加速度，Y = 减速度，Z = 地面摩擦
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Movement Curve)")
@@ -86,7 +82,11 @@ private:
 	//地面转向主体核心
 	void CustomPhysicsRotation(float DeltaTime);
 	
-	// 双层插值：TargetRotation 匀速逼近目标，角色再指数逼近 TargetRotation
+	/* 双层插值：TargetRotation 匀速逼近目标，角色再指数逼近 TargetRotation
+	 * 原生PhysicsRot目标朝向为加速度方向，用RotationRate单层插值逼近，这导致切换输入时方向跳变，插值会在旋转最开始速度很快，然后指数衰减
+	 * 而且只有一个Rate参数，同时决定了起手跳变速度和收敛速度
+	 * 双层插值将输入跳变这个过程也进行常数插值，用一个专门的输入方向插值速度，获得这个过程中的加速度方向值，而角色CompRot指数逼近此方向值
+	 */
 	void SmoothCharacterRotation(const FRotator& Target, float TargetInterpSpeed, float ActorInterpSpeed, float DeltaTime);
 
 	// 本帧第二层插值速率（deg/s）= 速率曲线(映射速度) × 相机转速放大

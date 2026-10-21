@@ -19,7 +19,7 @@ enum class EMoveReleaseAction : uint8
 	QuickStopRight, // 轻触 + 小角差：右急停 Montage
 	TurnLeft,       // 轻触 + 大角差：左转身 Montage
 	TurnRight,      // 轻触 + 大角差：右转身 Montage
-	StopLeft,       // 长按停步（左脚）：由服务器接受一下两个值，不要服务器自己算了（导致抖动，直接客户端一个RPC传过来）
+	StopLeft,       // 长按停步（左脚）：由服务器接受两个值
 	StopRight,      // 长按停步（右脚）
 };
 
@@ -77,7 +77,7 @@ public:
 	// Skill01 释放后置位：下一次普攻连段直接从最后一段起（该段额外充能）
 	void MarkSkill01ComboBoost() { bSkill01ComboBoost = true; }
 
-	// 读取并清位（由 UGA_Combo 激活时调用，保证只有「下一次」普攻受用）
+	// 读取并清位E技能后的强化攻击
 	bool ConsumeSkill01ComboBoost();
 
 	// 从DT中获取重击所需的能量值
@@ -356,17 +356,17 @@ private:
 	FTimerHandle HeavyAttackHoldTimerHandle;
 
 	// ── 空中闪避次数 ──
-	// 每次浮空初始可用的空中闪避次数（落地重置为初始值）
+	// 每次浮空初始可用的空中闪避次数
 	UPROPERTY(EditDefaultsOnly, Category = "Evade|Air", meta = (ClampMin = "1"))
 	int32 InitialAirEvadeCharges = 1;
 
-	// 每浮空允许的空中闪避次数上限（空中攻击的恢复不会超过此值）
+	// 每浮空允许的空中闪避次数上限
 	UPROPERTY(EditDefaultsOnly, Category = "Evade|Air", meta = (ClampMin = "1"))
 	int32 MaxAirEvadeCharges = 2;
 
 	// 本次浮空剩余的空中闪避次数
 	int32 AirEvadeCharges = 1;
 
-	// 本次浮空是否已用过空中攻击的恢复机会（限制总空中闪避不超过 MaxAirEvadeCharges）
+	// 本次浮空是否已用过空中攻击的恢复机会
 	bool bAirEvadeBonusGranted = false;
 };

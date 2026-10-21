@@ -3,6 +3,7 @@
 #include "DamageNumberWidget.h"
 #include "Components/WidgetComponent.h"
 
+
 ADamageNumberActor::ADamageNumberActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -29,7 +30,7 @@ void ADamageNumberActor::InitDamageNumber(float Damage)
 {
 	PendingDamage = FMath::Max(0.f, Damage);
 	
-	//位置偏移避免多次伤害重叠
+	//起始位置做一个随机偏移，尽量使每个数字升起的起始位置把不同，避免多次伤害数字重叠
 	const float OffsetX = FMath::FRandRange(-HorizontalRandomOffset, HorizontalRandomOffset);
 	SetActorLocation(GetActorLocation() + FVector(OffsetX, 0.f, 0.f));
 	StartLocation = GetActorLocation();

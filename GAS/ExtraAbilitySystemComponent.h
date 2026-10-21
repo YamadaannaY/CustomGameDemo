@@ -62,7 +62,6 @@ public:
 
 	// Tag 按下时的全局广播：已激活的 GA 可据此接管「不是自己 InputTag」的输入。
 	// 客户端按下会同步到服务端，保证两端都收到（各端各自推进本端表现）。
-	UPROPERTY(BlueprintAssignable, Category = "GAS|Input")
 	FAbilityInputTagPressedDelegate OnAbilityInputTagPressed;
 
 	//将Tag对应GA加入Pressed数组

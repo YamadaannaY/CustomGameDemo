@@ -1,5 +1,6 @@
 #include "ExtraPlayerController.h"
 #include "ExtraCharacter.h"
+#include "UI/GameplayWidget.h"
 #include "GAS/ExtraAbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "ExtraPlayerCharacter.h"
@@ -9,10 +10,10 @@
 {
 	Super::OnPossess(InPawn);
 
-	AExtraCharacter* PC = Cast<AExtraCharacter>(InPawn);
-	if (PC)
+	AExtraCharacter* Own = Cast<AExtraCharacter>(InPawn);
+	if (Own)
 	{
-		PC->ServerSideInit();
+		Own->ServerSideInit();
 	}
 }
 
@@ -20,9 +21,6 @@ void AExtraPlayerController::PostProcessInput(const float DeltaTime, const bool 
 {
 	Super::PostProcessInput(DeltaTime, bGamePaused);
 
-	// 本帧收集到的输入在这里统一处理：未激活的能力尝试激活（LocalPredicted 下会连带
-	// ServerTryActivateAbility 让服务端也激活），已激活的把输入事件喂给它——后者走 GAS 自带的
-	// 输入复制通道，服务端已激活的 GA 用 WaitInputPress 就能收到同一次输入
 	if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(GetPawn()))
 	{
 		if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(ASI->GetAbilitySystemComponent()))

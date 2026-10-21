@@ -57,6 +57,10 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	AExtraPlayerCharacter* Char = Cast<AExtraPlayerCharacter>(GetAvatarActorFromActorInfo());
 	if (Char && Char->GetWeaponComponent() && ClearWeaponShowOnAbilityEnd)
 	{
+		// 临时诊断：GA 结束触发的整体隐藏
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponVis] GA_EndHide Owner=%s Role=%d NetMode=%d | Ability=%s"),
+			*GetNameSafe(Char), int32(Char->GetLocalRole()), int32(Char->GetNetMode()), *GetNameSafe(this));
+
 		Char->GetWeaponComponent()->HideAllWeapon();
 	}
 
@@ -280,8 +284,8 @@ void UExtraGameplayAbility::DoDamage(const FGameplayEventData& Data)
 		// AI 血量归零会立刻回满（bRefillHealthOnZero），特别考虑此情况
 		const float HealthLoss = HealthAfter > HealthBefore ? HealthBefore : HealthBefore - HealthAfter;
 		const float ShieldLoss = FMath::Max(0.f, ShieldBefore - ShieldAfter);
+		
 		UUExtraAbilitySystemStatic::SendDamageNumberCue(HitActor, HealthLoss + ShieldLoss);
-
 		UUExtraAbilitySystemStatic::SendHitReactEvent(HitActor, Avatar);
 	}
 

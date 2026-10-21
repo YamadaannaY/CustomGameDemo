@@ -79,8 +79,7 @@ private:
 	// 清理已失效的弱引用条目
 	void PruneStaleEntries();
 
-	// 按 mesh 分桶：UAnimNotifyState 是共享实例，同一动画被多个 mesh 播放时
-	// 单一成员会被互相覆盖
+	// 按 mesh 分桶：UAnimNotifyState 是共享实例，同一动画被多个 mesh 播放时，单一成员会被互相覆盖
 	TMap<TWeakObjectPtr<USkeletalMeshComponent>, TWeakObjectPtr<UAudioComponent>> ActiveAudioComponents;
 
 	// 本次区间是否真正通过概率/冷却并开始播放（决定 End 是否播尾音）
