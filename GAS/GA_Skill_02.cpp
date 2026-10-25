@@ -227,12 +227,13 @@ void UGA_Skill_02::OnJuheCheckFrame(FGameplayEventData Payload)
 	}
 
 	// 走 GA_Evade_Juhe 原本的进居合路径：它要求 State.JuheReady + 能量够，
-	// 这里补挂 JuheReady 放行（居合激活后会自己把它清零消费掉）
-	ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 1);
-
-	// 先按下闪避输入把居合激活起来、再结束自己——避免在「结束自己」的调用栈里激活别人。
+	// 这里补挂 JuheReady 放行（居合激活后会自己把它清零消费掉）。
+	// 用短窗口兜底：这次闪避若没能激活居合，tag 也会自动过期，不会残留成永久窗口。
 	if (UExtraAbilitySystemComponent* ExtraASC = Cast<UExtraAbilitySystemComponent>(ASC))
 	{
+		ExtraASC->OpenJuheReadyWindow(0.5f);
+
+		// 先按下闪避输入把居合激活起来、再结束自己——避免在「结束自己」的调用栈里激活别人。
 		ExtraASC->AbilityInputTagPressed(UUExtraAbilitySystemStatic::GetDodgeInputTag());
 		ExtraASC->ProcessAbilityInput();
 	}

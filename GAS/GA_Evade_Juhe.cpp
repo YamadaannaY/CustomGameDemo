@@ -79,8 +79,12 @@ void UGA_Evade_Juhe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	// 居合进行中：挡住普攻 GA，直到分界事件、前冲链结束或Cancel窗口放行
 	ASC->AddLooseGameplayTag(UUExtraAbilitySystemStatic::GetJuheStateTag());
 
-	// 消费普攻开启的居合窗口（地面 / 空中一致）
-	ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
+	// 消费普攻开启的居合窗口（地面 / 空中一致）：清 tag 同时停掉到期计时，
+	// 否则旧计时会在之后把新开的窗口提前清掉
+	if (UExtraAbilitySystemComponent* ExtraASC = Cast<UExtraAbilitySystemComponent>(ASC))
+	{
+		ExtraASC->CloseJuheReadyWindow();
+	}
 
 	if (!HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{

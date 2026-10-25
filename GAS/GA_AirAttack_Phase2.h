@@ -183,18 +183,10 @@ private:
 	// ── 居合窗口 ──────────────────────────────────────────
 	// 每段出手时开启：给 ASC 挂 State.JuheReady，JuheReadyWindowSeconds 秒后清除，
 	// 表示「刚打完普攻，此刻闪避可进居合」。与地面普攻（GA_Combo_Phase_2）同理。
-	// 窗口跨本 GA 结束继续计时，因此 EndAbility 不清理。
+	// 窗口跨本 GA 结束继续计时，EndAbility 不清理。
 	void OpenJuheReadyWindow();
 
 	// 每段出手后允许触发居合的窗口时长（秒）
 	UPROPERTY(EditDefaultsOnly, Category = "Juhe")
 	float JuheReadyWindowSeconds = 3.f;
-
-	UFUNCTION()
-	void ClearJuheReady();
-
-	FTimerHandle JuheReadyTimer;
-
-	// 窗口要跨本 GA 结束继续计时，缓存 ASC 以免到期时拿不到 ActorInfo
-	TWeakObjectPtr<UAbilitySystemComponent> JuheReadyASC;
 };

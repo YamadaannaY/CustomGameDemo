@@ -47,6 +47,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Debug")
 	bool bShowSkill02ChargeDebug = true;
 
+	// ── 居合窗口（二阶段普攻开窗）───────────────────────────────
+	// 置 State.JuheReady：Seconds 秒内不进居合就自动清除，重复调用刷新同一个计时。
+	// 计时挂在 ASC 上而不是普攻 GA 上——窗口要跨 GA 结束继续计时，
+	// 且不能随 GA 实例存亡失效（放在 GA 上时窗口曾出现永不清除）。
+	void OpenJuheReadyWindow(float Seconds);
+
+	// 消费窗口：清 tag 并停掉计时（进入居合时调用）
+	void CloseJuheReadyWindow();
+
 	// ── CancelWindow 持有者登记 ──────────────────────────────────
 	// 【后摇可打断窗口】开启期间，持有者把自己登记在这里；任何 GA 在 CommitAbility 时
 	// 查询此句柄，命中且非自身即在激活GA前取消这个CancelGA
@@ -108,8 +117,12 @@ private:
 	// （tag 计数在 GE 存在期间恒为 1，所以要靠计时器兜住 1→2 层这种计数不变的变化）
 	void OnSkill02ChargeTagChanged(FGameplayTag Tag, int32 NewCount);
 
+	// 居合窗口到期：清 State.JuheReady
+	void ClearJuheReadyWindow();
+
 	FDelegateHandle Skill02ChargeTagEventHandle;
 	FTimerHandle Skill02ChargeRefreshTimer;
+	FTimerHandle JuheReadyWindowTimer;
 
 	//将属性集添加到ASC中
 	void InitializeBaseAttribute();

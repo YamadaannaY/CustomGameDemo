@@ -31,7 +31,7 @@ namespace
 	{
 		const TArray<UGameplayAbility*> Instances = Spec.GetAbilityInstances();
 		return Instances.IsEmpty()
-			? Spec.ActivationInfo.GetActivationPredictionKey()
+			? Spec.Ability->GetCurrentActivationInfo().GetActivationPredictionKey()
 			: Instances.Last()->GetCurrentActivationInfoRef().GetActivationPredictionKey();
 	}
 }
@@ -209,6 +209,36 @@ void UExtraAbilitySystemComponent::SetupSkill02ChargeDebug()
 		UUExtraAbilitySystemStatic::GetSkill02CooldownTag(),
 		FOnGameplayEffectTagCountChanged::FDelegate::CreateUObject(this, &UExtraAbilitySystemComponent::OnSkill02ChargeTagChanged),
 		EGameplayTagEventType::AnyCountChange);
+}
+
+void UExtraAbilitySystemComponent::OpenJuheReadyWindow(float Seconds)
+{
+	SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 1);
+
+	UWorld* World = GetWorld();
+	if (!World || Seconds <= 0.f)
+	{
+		return;
+	}
+
+	// 同一 handle 再次 SetTimer 即刷新计时；到期未被居合消费就自动清 tag
+	World->GetTimerManager().SetTimer(JuheReadyWindowTimer, this,
+		&UExtraAbilitySystemComponent::ClearJuheReadyWindow, Seconds, false);
+}
+
+void UExtraAbilitySystemComponent::CloseJuheReadyWindow()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(JuheReadyWindowTimer);
+	}
+
+	SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
+}
+
+void UExtraAbilitySystemComponent::ClearJuheReadyWindow()
+{
+	SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
 }
 
 void UExtraAbilitySystemComponent::OnSkill02ChargeTagChanged(FGameplayTag Tag, int32 NewCount)

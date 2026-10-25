@@ -27,14 +27,6 @@ protected:
 	float JuheReadyWindow = 3.f;
 
 private:
-	// 开启（刷新）居合窗口：置 State.JuheReady 计数为 1 并重置计时
+	// 开启（刷新）居合窗口：置 State.JuheReady 并按 JuheReadyWindow 计时，超时自动清除
 	void OpenJuheReadyWindow();
-
-	UFUNCTION()
-	void ClearJuheReady();
-
-	FTimerHandle JuheReadyTimer;
-
-	// 窗口要跨本 GA 结束继续计时，缓存 ASC 以免 GA 结束后拿不到 ActorInfo
-	TWeakObjectPtr<UAbilitySystemComponent> JuheReadyASC;
 };

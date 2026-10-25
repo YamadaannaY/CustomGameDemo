@@ -1,9 +1,8 @@
 #include "GA_Combo_Phase_2.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
-#include "Engine/World.h"
-#include "TimerManager.h"
 
 UGA_Combo_Phase_2::UGA_Combo_Phase_2()
 {
@@ -36,27 +35,9 @@ void UGA_Combo_Phase_2::OnComboSectionChanged()
 
 void UGA_Combo_Phase_2::OpenJuheReadyWindow()
 {
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!ASC)
+	// 窗口计时与 tag 都交给 ASC：普攻 GA 结束（实例可能被回收）后仍要按时清除
+	if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
 	{
-		return;
-	}
-
-	JuheReadyASC = ASC;
-
-	// 用 SetLooseGameplayTagCount 置 1 而非 AddLooseGameplayTag：后者是计数累加语义，
-	ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 1);
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(JuheReadyTimer, this, &ThisClass::ClearJuheReady, JuheReadyWindow, false);
-	}
-}
-
-void UGA_Combo_Phase_2::ClearJuheReady()
-{
-	if (UAbilitySystemComponent* ASC = JuheReadyASC.Get())
-	{
-		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
+		ASC->OpenJuheReadyWindow(JuheReadyWindow);
 	}
 }

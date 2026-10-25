@@ -182,29 +182,10 @@ void UGA_AirAttack_Phase2::PlayStage(int32 InIndex)
 
 void UGA_AirAttack_Phase2::OpenJuheReadyWindow()
 {
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!ASC)
+	// 窗口计时与 tag 都交给 ASC：本 GA 结束后仍要按时清除
+	if (UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
 	{
-		return;
-	}
-
-	JuheReadyASC = ASC;
-
-	// 用 SetLooseGameplayTagCount 置 1 而非 AddLooseGameplayTag：后者是计数累加语义，
-	// 连续进段会把计数堆到 N，到期只减 1 会残留 tag，导致窗口永不关闭。
-	ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 1);
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(JuheReadyTimer, this, &ThisClass::ClearJuheReady, JuheReadyWindowSeconds, false);
-	}
-}
-
-void UGA_AirAttack_Phase2::ClearJuheReady()
-{
-	if (UAbilitySystemComponent* ASC = JuheReadyASC.Get())
-	{
-		ASC->SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
+		ASC->OpenJuheReadyWindow(JuheReadyWindowSeconds);
 	}
 }
 
