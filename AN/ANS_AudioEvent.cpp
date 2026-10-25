@@ -134,6 +134,7 @@ void UANS_AudioEvent::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenc
 	ActiveAudioComponents.Add(MeshComp, AudioComp);
 	StartedMeshComps.Add(MeshComp);
 
+	//有冷却时间则加入CooldownSystem
 	if (CooldownSubsystem && Settings.CooldownTime > 0.f)
 	{
 		CooldownSubsystem->MarkPlayed(MeshComp->GetOwner(), this, Settings.Tag);

@@ -54,8 +54,6 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	if (Char && Char->GetWeaponComponent() && ClearWeaponShowOnAbilityEnd)
 	{
 		// 只在本 GA 仍是「当前动画持有者」时隐藏武器。
-		// 落地段/后摇还没结束、玩家已经按出下一段 GA 时，新 GA 已通过 ASC 接管动画并显示武器；
-		// 这里的整体隐藏会把新 GA 刚显示的武器抹掉（两端时序不同 → 自主端不显示、模拟端正常）。
 		UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 		const UGameplayAbility* AnimatingAbility = ASC ? ASC->GetAnimatingAbility() : nullptr;
 
@@ -169,7 +167,7 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 		}
 	}
 
-	// MW每帧回调持续同步
+	// MW每次激活前判定好要应用的Rot和Loc
 	if (bRotateToLockTarget || bEnableForwardOvershoot)
 	{
 		if (AExtraPlayerCharacter* PlayerChar = GetOwningAvatarCharacter())

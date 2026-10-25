@@ -21,7 +21,7 @@ void ULockOnComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(ULockOnComponent, CurrentLockTarget);
+	DOREPLIFETIME(ULockOnComponent,CurrentLockTarget);
 }
 
 void ULockOnComponent::BeginPlay()
@@ -141,6 +141,7 @@ void ULockOnComponent::UpdateLockTarget()
 		}
 	}
 
+	//需要重新扫描
 	if (bRescan)
 	{
 		const FVector Origin = GetOwner()->GetActorLocation();

@@ -67,7 +67,7 @@ private:
 		float CooldownTime = 0.f;
 	};
 
-	// 用 Owner 当前拥有的 Tag 覆盖默认概率 / 冷却
+	// 用 Owner 当前拥有的 Tag 覆盖默认概率 / 冷却，就是读出TagProbabilityInfo的数值
 	FResolvedSettings ResolveSettings(const USkeletalMeshComponent* MeshComp) const;
 
 	// 按 Follow 选择 Attach 或位置播放，并处理淡入

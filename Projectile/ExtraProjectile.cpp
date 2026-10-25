@@ -25,7 +25,6 @@ void AExtraProjectile::BeginPlay()
 	// 移动也必须复制：否则客户端只拿到生成时的位置，投射物在客户端是静止的
 	// （ProjectileMovementComponent 不复制 Velocity，模拟端不会自行往前飞）。
 	SetReplicateMovement(true);
-	
 }
 
 void AExtraProjectile::SetupProjectileCollision(UPrimitiveComponent* InCollision, UProjectileMovementComponent* InMovement)
@@ -47,6 +46,7 @@ void AExtraProjectile::SetupProjectileCollision(UPrimitiveComponent* InCollision
 	const ECollisionResponse PawnResponse =
 		(HitMode == EProjectileHitMode::PassThrough) ? ECR_Overlap : ECR_Block;
 
+	//根据HitMode确定打到Pawn是穿透还是碰撞
 	InCollision->SetCollisionResponseToChannel(ECC_Pawn, PawnResponse);
 	
 	//对世界物体响应Block进行销毁

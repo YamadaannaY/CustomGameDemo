@@ -44,7 +44,7 @@ public:
 	void SetEnergyOnHit(float InEnergyOnHit) { EnergyOnHit = InEnergyOnHit; }
 
 protected:
-	//并按 HitMode 配好碰撞通道与命中回调
+	//由各个子类决定碰撞形状和Move配置，并按 HitMode 配好碰撞通道与命中回调
 	void SetupProjectileCollision(UPrimitiveComponent* InCollision, UProjectileMovementComponent* InMovement);
 
 	// 命中一个 Actor：可伤害的敌方且权威端则结算 GE；同一目标只结算一次

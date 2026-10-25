@@ -11,7 +11,7 @@
  * 带上通知对象，避免不同音效共用同一条冷却记录而互相压制。
  * 
  */
-struct FAudioEventCooldownKey
+	struct FAudioEventCooldownKey
 {
 	//这种类型能够在TMap和Set中提供高效安全的Key能力，因为裸指针可能重指向一个新的对象，此时可能导致键冲突，而ObjectKey则依赖唯一的引擎序列号，不会导致冲突。
 	
