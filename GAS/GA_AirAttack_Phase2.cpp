@@ -228,7 +228,7 @@ void UGA_AirAttack_Phase2::SetupLightAttackInputListener()
 	InputTask->OnPress.AddDynamic(this, &ThisClass::OnLightAttackInput);
 	InputTask->ReadyForActivation();
 }
-
+	
 void UGA_AirAttack_Phase2::OnLightAttackInput(float TimeWaited)
 {
 	SetupLightAttackInputListener();

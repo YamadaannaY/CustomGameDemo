@@ -183,6 +183,12 @@ void AExtraPlayerCharacter::Server_SetHoldingAttack_Implementation(bool bHolding
 	bHoldingAttack = bHolding;
 }
 
+void AExtraPlayerCharacter::Server_SetHoldingSkill_Implementation(bool bHolding)
+{
+	// 服务端据此在居合检测帧判断「仍按住」，与客户端走同一条进居合分支
+	bHoldingSkill = bHolding;
+}
+
 void AExtraPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -898,6 +904,7 @@ void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionV
 {
 	// 按住状态：长按到技能 Montage 的居合检测帧有条件进入居合
 	bHoldingSkill = true;
+	Server_SetHoldingSkill(true);
 
 	if (AbilitySystemComponent)
 	{
@@ -908,6 +915,7 @@ void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionV
 void AExtraPlayerCharacter::OnSkillCompleted(const FInputActionValue& InputActionValue)
 {
 	bHoldingSkill = false;
+	Server_SetHoldingSkill(false);
 }
 
 void AExtraPlayerCharacter::OnUltimateStarted(const FInputActionValue& InputActionValue)

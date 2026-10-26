@@ -130,6 +130,9 @@ public:
 	// 持续按住攻击键的标记RPC发送
 	UFUNCTION(Server, Reliable)
 	void Server_SetHoldingAttack(bool bHolding);
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetHoldingSkill(bool bHolding);
 	
 	// 停步 Montage 正在播放时，收到移动输入即打断
 	void CancelStopMontageIfPlaying();
