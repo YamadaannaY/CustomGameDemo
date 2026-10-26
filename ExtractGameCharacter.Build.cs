@@ -8,7 +8,7 @@ public class ExtractGameCharacter : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "MotionWarping", "GameplayAbilities", "GameplayTags", "GameplayTasks", "UMG", "Niagara" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "MotionWarping", "GameplayAbilities", "GameplayTags", "GameplayTasks", "UMG", "Niagara", "EngineCameras" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "GameplayDebugger", "AIModule", "Slate", "SlateCore" });
 
