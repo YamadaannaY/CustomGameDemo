@@ -184,9 +184,6 @@ void UExtraGameplayAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 
 void UExtraGameplayAbility::SetupMovementCancel()
 {
-	//重置标记
-	bEndingFromMovement = false;
-
 	UAbilityTask_WaitGameplayEvent* WaitCancelTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, GetMovementCancelTag());
 	WaitCancelTask->EventReceived.AddDynamic(this, &ThisClass::OnMovementCancelNotifyReceived);
 	WaitCancelTask->ReadyForActivation();
@@ -592,18 +589,6 @@ FGameplayTag UExtraGameplayAbility::GetMovementCancelTag() const
 void UExtraGameplayAbility::OnMovementCancelNotifyReceived(FGameplayEventData Payload)
 {
 	// 事件由 AN_CancelWindow 在区间内、且已检测到移动输入时发送，到达即打断。
-	bEndingFromMovement = true;
-
-	// 客户端决定「因移动取消」，把标记回送服务端（先于本 GA 的结束复制发出，服务端按序先收到），
-	// 让服务端本端也走同一套收尾（停蒙太奇）。服务端本端无需回送。
-	if (!K2_HasAuthority())
-	{
-		if (AExtraPlayerCharacter* PlayerChar = GetOwningAvatarCharacter())
-		{
-			PlayerChar->Server_NotifyAbilityEndedByMovement(GetCurrentAbilitySpecHandle());
-		}
-	}
-
 	OnMovementCancelTriggered();
 
 	K2_CancelAbility();

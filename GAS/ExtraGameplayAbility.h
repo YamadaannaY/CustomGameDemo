@@ -34,9 +34,6 @@ public:
 
 	FORCEINLINE FGameplayTag GetInputTag() const { return InputTag; }
 
-	// 服务端收到「客户端因移动取消本 GA」的 RPC 后调用：让服务端 EndAbility 走与客户端相同的收尾（停 Montage）
-	void SetEndingFromMovement() { bEndingFromMovement = true; }
-
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 	
 	virtual void PreActivate(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, FOnGameplayAbilityEnded::FDelegate* OnGameplayAbilityEndedDelegate, const FGameplayEventData* TriggerEventData = nullptr) override;
@@ -65,9 +62,6 @@ protected:
 	// 如果开启移动Cancel，开始监听取消事件
 	void SetupMovementCancel();
 
-	// 子类覆写，返回当前在播且可被移动打断的 Montage
-	virtual UAnimMontage* GetActiveMontageForCancel() const { return nullptr; }
-
 	// 命中移动打断的瞬间回调
 	virtual void OnMovementCancelTriggered();
 
@@ -77,9 +71,6 @@ protected:
 	// 取消事件回调。事件由 AN_CancelWindow 在区间内检测到移动输入时发送，
 	UFUNCTION()
 	void OnMovementCancelNotifyReceived(FGameplayEventData Payload);
-
-	// 是否因移动输入触发 EndAbility（决定是否停止当前 Montage；停止时使用 Montage 自身 BlendOut 时长）
-	bool bEndingFromMovement = false;
 
 	float DefaultGravityScale = 1.0f;
 

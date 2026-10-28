@@ -41,9 +41,6 @@ protected:
 	// 派生类覆写此处实现自动连段（仍按住攻击键则重发一次轻击输入）
 	virtual void OnComboSectionChanged();
 
-	// 覆写：返回当前可被移动打断的 Montage（即 ComboMontage）
-	virtual UAnimMontage* GetActiveMontageForCancel() const override { return ComboMontage; }
-
 	// 覆写：按当前 Section 选择伤害 GE（未命中 map 时 fallback 到基类 DefaultDamageEffect）
 	virtual TSubclassOf<UGameplayEffect> GetDamageEffect() const override;
 

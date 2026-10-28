@@ -140,9 +140,6 @@ private:
 	// 清掉落地检测（LandedDelegate + 轮询 Timer），进入落地段或结束 GA 时调用
 	void ClearLandDetection();
 
-	// 覆写：空中 / 落地段被移动打断时，停掉当前在播的那一段
-	virtual UAnimMontage* GetActiveMontageForCancel() const override { return CurrentPlayingMontage; }
-
 	// 覆写：命中累积能量按当前在播的段取值
 	virtual UAnimMontage* GetEnergyGainMontage() const override { return CurrentPlayingMontage; }
 

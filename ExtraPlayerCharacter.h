@@ -123,17 +123,10 @@ public:
 	UFUNCTION(Server, Reliable)
 	void Server_NotifyStopMontagePlayed(bool bLeft);
 
-	// 客户端决定「因移动取消 GA」时，把标记回送服务端，让服务端本端也走相同收尾（停蒙太奇）
-	UFUNCTION(Server, Reliable)
-	void Server_NotifyAbilityEndedByMovement(FGameplayAbilitySpecHandle AbilityHandle);
-
 	// 持续按住攻击键的标记RPC发送
 	UFUNCTION(Server, Reliable)
 	void Server_SetHoldingAttack(bool bHolding);
 
-	UFUNCTION(Server, Reliable)
-	void Server_SetHoldingSkill(bool bHolding);
-	
 	// 停步 Montage 正在播放时，收到移动输入即打断
 	void CancelStopMontageIfPlaying();
 private:

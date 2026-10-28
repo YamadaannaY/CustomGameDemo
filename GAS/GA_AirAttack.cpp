@@ -25,19 +25,19 @@ UGA_AirAttack::UGA_AirAttack()
 	// 启用移动打断
 	bEnableMovementCancel = true;
 
-	// 启用后摇可打断窗口（基类机制）：AN_CancelWindow 进窗后视为本 GA 已取消，任何 GA 激活或移动输入都能打断
+	// 启用后摇可打断窗口：AN_CancelWindow 进窗后视为本 GA 已取消，任何 GA 激活或移动输入都能打断
 	bEnableCancelWindow = true;
 
-	// 启用重力缩放（空中攻击期间用 AbilityGravityScale 覆盖 GravityScale）
+	// 启用重力缩放
 	bEnableGravityScale = true;
 
-	// 启用通用武器碰撞伤害（基类机制）：服务端监听命中事件并应用 DefaultDamageEffect
+	// 启用通用武器碰撞伤害
 	bEnableWeaponDamage = true;
 
 	bEnableEnergyGain = true;
 	EnergyGainRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetPhase2StateTag());
 
-	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
+	// 启用锁定目标转向
 	bRotateToLockTarget = true;
 
 	// 空中下落必须把落点拉出目标胶囊（约两胶囊半径之和 + 余量）：
@@ -142,7 +142,8 @@ void UGA_AirAttack::OnStartMontageBlendOut()
 
 void UGA_AirAttack::OnStartMontageInterrupted()
 {
-	// 仅 Start 阶段的中断才是外部打断(即起跳montage期间直接落地的少数情况)；Loop/Land 阶段主动停止 Start 是正常流程。
+	// 仅 Start 阶段的中断才是外部打断(即起跳montage期间直接落地的少数情况)；Loop/Land 阶段主动停止 Start 是正常流程
+	// 于是这里作出区分，进入新阶段前会修改枚举值，引来判断引发interrupt的是内部还是外部
 	if (CurrentPhase != EAirAttackPhase::Start)
 	{
 		return;
@@ -253,11 +254,13 @@ void UGA_AirAttack::PlayLandMontage()
 		K2_EndAbility();
 		return;
 	}
-
-
-	if (AirAttackStartMontage && AnimInst->Montage_IsPlaying(AirAttackStartMontage))
+	
+	if (AirAttackStartMontage)
 	{
-		AnimInst->Montage_StopWithBlendOut(AirAttackStartMontage->BlendOut, AirAttackStartMontage);
+		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+		{
+			ASC->StopMontageIfCurrent(*AirAttackStartMontage, AirAttackStartMontage->BlendOut.GetBlendTime());
+		}
 	}
 
 
@@ -308,7 +311,7 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		AvatarChar->LandedDelegate.RemoveDynamic(this, &UGA_AirAttack::OnLandDetected);
 	}
 
-	// 清除本次浮空的空中攻击标记（落地后允许下次浮空再触发）
+	// 清除本次浮空的空中攻击标记
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->RemoveLooseGameplayTag(UUExtraAbilitySystemStatic::GetAirAttackAbilityTag());
@@ -320,31 +323,16 @@ void UGA_AirAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		PlayerChar->SetMovementInputLocked(false);
 	}
 
+	// 先切阶段再停动画：停蒙太奇会触发 OnStartMontageBlendOut 等回调，
+	// 此时 Phase 已是 None，回调直接 return，不会在收尾途中重播 Loop。
+	CurrentPhase = EAirAttackPhase::None;
+
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		if (AirAttackLandMontage) { ASC->StopMontageIfCurrent(*AirAttackLandMontage); }
 		if (AirAttackLoopMontage) { ASC->StopMontageIfCurrent(*AirAttackLoopMontage); }
 		if (AirAttackStartMontage) { ASC->StopMontageIfCurrent(*AirAttackStartMontage); }
 	}
-
-	if (UAnimInstance* AnimInst = GetOwnerAnimInstance())
-	{
-		if (AirAttackLoopMontage && AnimInst->Montage_IsPlaying(AirAttackLoopMontage))
-		{
-			AnimInst->Montage_StopWithBlendOut(AirAttackLandMontage->BlendOut, AirAttackLoopMontage);
-		}
-		if (AirAttackStartMontage && AnimInst->Montage_IsPlaying(AirAttackStartMontage))
-		{
-			AnimInst->Montage_StopWithBlendOut(AirAttackLandMontage->BlendOut, AirAttackStartMontage);
-
-		}
-		if (AirAttackLandMontage && AnimInst->Montage_IsPlaying(AirAttackLandMontage))
-		{
-			AnimInst->Montage_StopWithBlendOut(AirAttackLandMontage->BlendOut, AirAttackLandMontage);
-		}
-	}
-
-	CurrentPhase = EAirAttackPhase::None;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
@@ -358,4 +346,4 @@ UAnimMontage* UGA_AirAttack::GetEnergyGainMontage() const
 	case EAirAttackPhase::Land:  return AirAttackLandMontage;
 	default:                     return nullptr;
 	}
-}	
+}

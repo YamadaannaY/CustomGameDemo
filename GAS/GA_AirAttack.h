@@ -6,10 +6,10 @@
 #include "GA_AirAttack.generated.h"
 
 /**
- * 空中下落重击：角色在空中（跳跃或下落）按下轻击 → 触发一次空中攻击。
+ * 空中下落攻击：角色在空中（跳跃或下落）按下轻击 → 触发一次空中攻击。
  *
  * 流程（三段动画）：
- *   1. 起手动画 AirAttackStartMontage 播完（OnCompleted）
+ *   1. 起手动画 AirAttackStartMontage 播完（OnBlendOut）
  *   2. 循环下砸动画 AirAttackLoopMontage，直到落地
  *   3. 落地动画 AirAttackLandMontage，播完结束 GA
  */
@@ -43,7 +43,7 @@ private:
 	UFUNCTION()
 	void OnStartMontageInterrupted();
 
-	// 角色落地事件回调（LandedDelegate）
+	// 落地事件回调（LandedDelegate）
 	UFUNCTION()
 	void OnLandDetected(const FHitResult& Hit);
 
@@ -55,12 +55,12 @@ private:
 	UFUNCTION()
 	void OnLandMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
-	// Loop montage 被外部打断（如空中 Evade 抢占同 slot）→ 结束 GA。
+	// Loop montage 被外部打断→ 结束 GA。
 	// 主动停 Loop 进 Land（PlayLandMontage）或 EndAbility 兜底停时 CurrentPhase 已离开 Loop，回调直接 return。
 	UFUNCTION()
 	void OnLoopMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
-	// 共享的落地处理逻辑（无论来自 delegate 还是 timer）
+	// 共享的落地处理逻辑
 	void TryTriggerLand();
 
 	void PlayLoopMontage();
@@ -69,9 +69,6 @@ private:
 
 	// 进入起手阶段（播放起手动画并绑定结束回调）
 	void PlayStartMontage();
-
-	// 覆写：移动打断时淡出的 Montage（落地动画带 cancel AN）
-	virtual UAnimMontage* GetActiveMontageForCancel() const override { return AirAttackLandMontage; }
 
 	virtual UAnimMontage* GetEnergyGainMontage() const override;
 

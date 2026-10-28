@@ -159,34 +159,10 @@ void AExtraPlayerCharacter::Server_NotifyStopMontagePlayed_Implementation(bool b
 	}
 }
 
-void AExtraPlayerCharacter::Server_NotifyAbilityEndedByMovement_Implementation(FGameplayAbilitySpecHandle AbilityHandle)
-{
-	// 让服务端本端那个 GA 实例走与客户端相同的「移动取消」收尾（EndAbility 据此停蒙太奇）
-	UExtraAbilitySystemComponent* ASC = Cast<UExtraAbilitySystemComponent>(GetAbilitySystemComponent());
-	if (!ASC)
-	{
-		return;
-	}
-
-	if (const FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(AbilityHandle))
-	{
-		if (UExtraGameplayAbility* Ability = Cast<UExtraGameplayAbility>(Spec->GetPrimaryInstance()))
-		{
-			Ability->SetEndingFromMovement();
-		}
-	}
-}
-
 void AExtraPlayerCharacter::Server_SetHoldingAttack_Implementation(bool bHolding)
 {
 	// 服务端据此判定「仍按住」，在自己的段变更帧续段（判定点见 UGA_ComboHeavy::OnComboSectionChanged）
 	bHoldingAttack = bHolding;
-}
-
-void AExtraPlayerCharacter::Server_SetHoldingSkill_Implementation(bool bHolding)
-{
-	// 服务端据此在居合检测帧判断「仍按住」，与客户端走同一条进居合分支
-	bHoldingSkill = bHolding;
 }
 
 void AExtraPlayerCharacter::BeginPlay()
@@ -904,7 +880,6 @@ void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionV
 {
 	// 按住状态：长按到技能 Montage 的居合检测帧有条件进入居合
 	bHoldingSkill = true;
-	Server_SetHoldingSkill(true);
 
 	if (AbilitySystemComponent)
 	{
@@ -915,7 +890,6 @@ void AExtraPlayerCharacter::OnSkillStarted(const FInputActionValue& InputActionV
 void AExtraPlayerCharacter::OnSkillCompleted(const FInputActionValue& InputActionValue)
 {
 	bHoldingSkill = false;
-	Server_SetHoldingSkill(false);
 }
 
 void AExtraPlayerCharacter::OnUltimateStarted(const FInputActionValue& InputActionValue)
