@@ -37,12 +37,16 @@ void UExtraCurveCameraShakePattern::SampleCurve(float Time, FCameraShakePatternU
 		}
 		CurveTime = FMath::Clamp(Time / ShakeDuration, 0.f, 1.f);
 	}
+	
+	const TArray<FRichCurveEditInfo> Curves = ShakeCurve->GetCurves();
+	auto EvalChannel = [&Curves, CurveTime](int32 Index) -> float
+	{
+		return Curves.IsValidIndex(Index) && Curves[Index].CurveToEdit
+			? Curves[Index].CurveToEdit->Eval(CurveTime, 0.f)
+			: 0.f;
+	};
 
-	// 逐通道求值并兜底 0：空通道的 GetVectorValue 会返回 FRichCurve::DefaultValue(MAX_flt)
-	const FVector CurveValue(
-		ShakeCurve->FloatCurves[0].Eval(CurveTime, 0.f),
-		ShakeCurve->FloatCurves[1].Eval(CurveTime, 0.f),
-		ShakeCurve->FloatCurves[2].Eval(CurveTime, 0.f));
+	const FVector CurveValue(EvalChannel(0), EvalChannel(1), EvalChannel(2));
 	const FVector Offset = CurveValue * CurveScale;
 
 	if (bApplyToRotation)
