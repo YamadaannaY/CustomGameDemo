@@ -200,6 +200,14 @@ void UGA_Skill_02::SetupWaitJuheCheck()
 
 void UGA_Skill_02::OnJuheCheckFrame(FGameplayEventData Payload)
 {
+	// 只由本地控制端发起：服务器端的动画帧可能滞后、或本 GA 已经结束，
+	// 靠它自己走到这里会让服务器缺 JuheReady 而回退成普通闪避（两端分叉）。
+	// 服务器的窗口与激活改由下面上行的开窗 RPC + 客户端预测激活驱动。
+	if (!GetActorInfo().IsLocallyControlled())
+	{
+		return;
+	}
+
 	// 段1 与落地段挂的是同一个 tag 的两个监听，可能同时活着；
 	// 交接完成后本 GA 已结束，这里做幂等保护，保证只交接一次
 	if (!IsActive())
@@ -231,7 +239,15 @@ void UGA_Skill_02::OnJuheCheckFrame(FGameplayEventData Payload)
 	// 用短窗口兜底：这次闪避若没能激活居合，tag 也会自动过期，不会残留成永久窗口。
 	if (UExtraAbilitySystemComponent* ExtraASC = Cast<UExtraAbilitySystemComponent>(ASC))
 	{
-		ExtraASC->OpenJuheReadyWindow(0.5f);
+		constexpr float JuheReadySeconds = 0.5f;
+
+		ExtraASC->OpenJuheReadyWindow(JuheReadySeconds);
+
+		// 客户端先上行开窗，保证服务器处理紧接着的预测激活时 JuheReady 已就位
+		if (!K2_HasAuthority())
+		{
+			ExtraASC->Server_OpenJuheReadyWindow(JuheReadySeconds);
+		}
 
 		// 先按下闪避输入把居合激活起来、再结束自己——避免在「结束自己」的调用栈里激活别人。
 		ExtraASC->AbilityInputTagPressed(UUExtraAbilitySystemStatic::GetDodgeInputTag());

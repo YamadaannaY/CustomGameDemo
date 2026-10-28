@@ -236,6 +236,11 @@ void UExtraAbilitySystemComponent::CloseJuheReadyWindow()
 	SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);
 }
 
+void UExtraAbilitySystemComponent::Server_OpenJuheReadyWindow_Implementation(float Seconds)
+{
+	OpenJuheReadyWindow(Seconds);
+}
+
 void UExtraAbilitySystemComponent::ClearJuheReadyWindow()
 {
 	SetLooseGameplayTagCount(UUExtraAbilitySystemStatic::GetJuheReadyStateTag(), 0);

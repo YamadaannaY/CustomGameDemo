@@ -56,6 +56,10 @@ public:
 	// 消费窗口：清 tag 并停掉计时（进入居合时调用）
 	void CloseJuheReadyWindow();
 
+	// 服务器必须赶在 ClientTryActivateAbility 之前拿到 JuheReady，否则它会走普通闪避分支。
+	UFUNCTION(Server, Reliable)
+	void Server_OpenJuheReadyWindow(float Seconds);
+
 	// ── CancelWindow 持有者登记 ──────────────────────────────────
 	// 【后摇可打断窗口】开启期间，持有者把自己登记在这里；任何 GA 在 CommitAbility 时
 	// 查询此句柄，命中且非自身即在激活GA前取消这个CancelGA
