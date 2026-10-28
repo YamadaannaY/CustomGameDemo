@@ -29,6 +29,7 @@ void UCountGauge::SetAndBoundToEnergyValue(UAbilitySystemComponent* AbilitySyste
 	{
 		ProgressImage->GetDynamicMaterial()->SetScalarParameterValue(PercentMaterialParamName, InitialValue);
 	}
+	RefreshIcons(InitialValue);
 
 	OwnerASC->GetGameplayAttributeValueChangeDelegate(UExtraGameAttributeSet::GetEnergyValueAttribute())
 		.AddUObject(this, &UCountGauge::UpdateGauge);
@@ -39,5 +40,30 @@ void UCountGauge::UpdateGauge(const FOnAttributeChangeData& Data)
 	if (ProgressImage)
 	{
 		ProgressImage->GetDynamicMaterial()->SetScalarParameterValue(PercentMaterialParamName, Data.NewValue);
+	}
+
+	RefreshIcons(Data.NewValue);
+}
+
+void UCountGauge::RefreshIcons(float Energy)
+{
+	// 满一格亮一个：100 / 200 / 300
+	if (Icon1)
+	{
+		Icon1->SetVisibility(Energy >= IconUnlockStep
+			? ESlateVisibility::HitTestInvisible
+			: ESlateVisibility::Hidden);
+	}
+	if (Icon2)
+	{
+		Icon2->SetVisibility(Energy >= IconUnlockStep * 2.f
+			? ESlateVisibility::HitTestInvisible
+			: ESlateVisibility::Hidden);
+	}
+	if (Icon3)
+	{
+		Icon3->SetVisibility(Energy >= IconUnlockStep * 3.f
+			? ESlateVisibility::HitTestInvisible
+			: ESlateVisibility::Hidden);
 	}
 }

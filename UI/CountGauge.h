@@ -26,9 +26,25 @@ private:
 	UPROPERTY(meta=(BindWidget))
 	class UImage* ProgressImage;
 
+	UPROPERTY(meta=(BindWidgetOptional))
+	UImage* Icon1;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	UImage* Icon2;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	UImage* Icon3;
+
+	// 每格所需的能量值（100 / 200 / 300）
+	UPROPERTY(EditDefaultsOnly, Category="Visual")
+	float IconUnlockStep = 100.f;
+
 	UPROPERTY()
 	UAbilitySystemComponent* OwnerASC;
 
 	//属性变化后更新材质参数（Count）
 	void UpdateGauge(const FOnAttributeChangeData& Data);
+
+	// 按当前能量刷新三个图标的显隐
+	void RefreshIcons(float Energy);
 };
