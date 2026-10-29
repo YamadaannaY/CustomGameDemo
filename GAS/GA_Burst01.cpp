@@ -126,4 +126,9 @@ void UGA_Burst01::SwitchToBurstForm()
 		UE_LOG(LogTemp, Warning, TEXT("[GA_Burst01] SwitchToBurstForm: SwitchWeaponGroup to '%s' failed."),
 			*BurstTargetWeaponGroupTag.ToString());
 	}
+	
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->RemoveLooseGameplayTag(UUExtraAbilitySystemStatic::GetPhase1StateTag());
+	}
 }

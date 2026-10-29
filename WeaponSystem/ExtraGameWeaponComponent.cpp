@@ -872,8 +872,17 @@ void UExtraGameWeaponComponent::ApplyWeaponGroupEffects(const FExtraGameWeaponGr
 
 void UExtraGameWeaponComponent::UpdateCharacterTags(const FExtraGameWeaponGroup* OldGroup, const FExtraGameWeaponGroup* NewGroup)
 {
-	if (!IsAuthorityOwner() || !OwnerASC)
+	if (!OwnerASC)
 	{
+		return;
+	}
+
+	// 非权威端不要等 OnRep：本地预测切组已经改过 CurrentGroupTag（LocalPredicted 的 GA 两端都执行
+	// EquipWeaponGroup），服务端复制的同值到达时属性比较不出差异、不会触发 OnRep_CurrentGroupTag，
+	// 客户端就会缺失新组的 AdditionalTags（如 State.Phase2），按形态分派的输入随之走错分支。
+	if (!IsAuthorityOwner())
+	{
+		SyncGroupTagsToLocalASC();
 		return;
 	}
 
