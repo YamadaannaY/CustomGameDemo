@@ -17,6 +17,10 @@ class EXTRACTGAMECHARACTER_API UANS_WeaponTrace : public UAnimNotifyState
 	GENERATED_BODY()
 
 public:
+	// 伤害窗口标识：与 GA 攻击段表 DamageWindows 里的 WindowId 对应；留空 = 使用保底的整段通用配置
+	UPROPERTY(EditAnywhere, Category = "Weapon Trace")
+	FName DamageWindowId = NAME_None;
+
 	virtual void NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float TotalDuration, const FAnimNotifyEventReference& EventReference) override;
 	virtual void NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float FrameDeltaTime, const FAnimNotifyEventReference& EventReference) override;
 	virtual void NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference) override;

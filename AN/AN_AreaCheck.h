@@ -30,6 +30,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Area Check")
 	float Radius = 0.f;
 
+	// 伤害窗口标识：与 GA 攻击段表 DamageWindows 里的 WindowId 对应，使用对应Id下的伤害Segment，默认为空，即应用保底伤害配置；
+	UPROPERTY(EditAnywhere, Category = "Area Check")
+	FName DamageWindowId = NAME_None;
+
 protected:
 	virtual void BuildEventData(FGameplayEventData& OutEventData, USkeletalMeshComponent* MeshComp) override;
 };

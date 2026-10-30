@@ -15,4 +15,12 @@ void UAN_AreaCheck::BuildEventData(FGameplayEventData& OutEventData, USkeletalMe
 	AreaData->Radius = Radius;
 
 	OutEventData.TargetData.Add(AreaData);
+	
+	if (!DamageWindowId.IsNone())
+	{
+		//伤害窗口
+		FDamageWindowData* WindowData = new FDamageWindowData();
+		WindowData->WindowId = DamageWindowId;
+		OutEventData.TargetData.Add(WindowData);
+	}
 }

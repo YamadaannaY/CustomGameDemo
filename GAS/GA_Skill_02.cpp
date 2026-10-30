@@ -28,8 +28,7 @@ UGA_Skill_02::UGA_Skill_02()
 
 	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
 	bRotateToLockTarget = true;
-	
-	bEnableEnergyGain=true ;
+
 	EnergyGainRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetPhase2StateTag());
 
 	// 落地斩属于空中下落类攻击：落点必须拉出目标胶囊，否则会先被水平拖到目标正上方、

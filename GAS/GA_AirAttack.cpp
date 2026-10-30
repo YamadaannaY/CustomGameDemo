@@ -34,7 +34,6 @@ UGA_AirAttack::UGA_AirAttack()
 	// 启用通用武器碰撞伤害
 	bEnableWeaponDamage = true;
 
-	bEnableEnergyGain = true;
 	EnergyGainRequiredTags.AddTag(UUExtraAbilitySystemStatic::GetPhase2StateTag());
 
 	// 启用锁定目标转向

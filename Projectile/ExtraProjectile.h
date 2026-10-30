@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
 #include "GameFramework/Actor.h"
+#include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
 #include "ExtraProjectile.generated.h"
 
 class UGameplayEffect;
@@ -42,6 +43,9 @@ public:
 
 	// 命中时给来源加的能量
 	void SetEnergyOnHit(float InEnergyOnHit) { EnergyOnHit = InEnergyOnHit; }
+
+	// 命中时使用的伤害段（不同箭矢/剑气可以有不同系数）；空 = 100% 攻击力单段
+	void SetDamageSegments(const TArray<FDamageSegment>& InSegments) { DamageSegments = InSegments; }
 
 protected:
 	//由各个子类决定碰撞形状和Move配置，并按 HitMode 配好碰撞通道与命中回调
@@ -95,6 +99,9 @@ private:
 
 	// 命中时给来源加的能量（由发射 GA 认领后注入）
 	float EnergyOnHit = 0.f;
+
+	// 命中伤害段（由发射 GA 按发射顺序注入）；空 = 100% 攻击力单段
+	TArray<FDamageSegment> DamageSegments;
 
 	// 本投射物是否已结算过能量：穿透型剑气命中多个目标时只加一次
 	bool bEnergyGranted = false;

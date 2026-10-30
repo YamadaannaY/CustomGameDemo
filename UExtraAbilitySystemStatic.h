@@ -4,6 +4,7 @@
 #include "NativeGameplayTags.h"
 #include "GameplayTagContainer.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
 #include "UExtraAbilitySystemStatic.generated.h"
 
 class AActor;
@@ -49,6 +50,17 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(HeavyAttack_Shoot);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Area_Damage);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_AttackPro_Phase2);
 
+// 击飞/击倒参数：作为伤害 GE 的 SetByCaller 参数随伤害到达受击侧，由受击侧决定反应。
+// 向量以攻击者的本地空间为基准（X=前、Y=右、Z=上），受击侧按攻击者朝向转世界向量。
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReaction_Level);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReaction_KnockbackX);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReaction_KnockbackY);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReaction_KnockbackZ);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReaction_OverrideXY);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReaction_OverrideZ);
+// 是否触发受击表现：默认为1，即攻击默认触发受击效果，0=抑制，1=触发
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReaction_Trigger);
+
 // 二阶段攻击强化（AttackPro）进度：ProJuheCount 用 tag count 记「本次二阶段已打出的居合前冲段次数」
 // （居合中左键前冲才算，架势段不计），打满 Required 次后挂上 ProReady；
 // 激活 AttackPro 即消费 ProReady（离开二阶段时整组清零）
@@ -78,8 +90,7 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(AirAttack_Combo_End);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_HitReact);
 // 受击冷却：Cooldown GE 的 GrantedTags 填它，1.5s 内不重复触发受击
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReactCooldown);
-// 倒地：受击窗口内被打够次数后，GA_HitReact 改发这个事件给自身，
-// GA_KnockDown 以 AbilityTriggers 接收（与 ability.hitreact 同前缀不同分支，不会互相误触发）
+// 倒地：攻击 GA 命中目标时发给目标，GA_KnockDown 以 AbilityTriggers 接收，即被动GA
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_KnockDown);
 
 // 伤害飘字：Executed 型 GameplayCue
@@ -205,13 +216,26 @@ public:
 	// GA_HitReact 的 CooldownGameplayEffectClass 指向该 GE，冷却期内 ASC 直接拒绝激活
 	static FGameplayTag GetHitReactCooldownTag();       // "State.HitReact.Cooldown"
 
-	// 倒地事件 Tag：GA_HitReact 判定到连续受击达阈值时发给自身，GA_KnockDown 接收
+	// 倒地事件 Tag：攻击 GA 命中目标后发给目标，GA_KnockDown 接收
 	static FGameplayTag GetKnockDownEventTag();         // "ability.knockdown"
+
+	// ── 击飞/击倒参数（伤害 GE 的 SetByCaller）──
+	static FGameplayTag GetHitReactionLevelTag();       // "Data.HitReaction.Level"
+	static FGameplayTag GetHitReactionKnockbackXTag();  // "Data.HitReaction.KnockbackX"
+	static FGameplayTag GetHitReactionKnockbackYTag();  // "Data.HitReaction.KnockbackY"
+	static FGameplayTag GetHitReactionKnockbackZTag();  // "Data.HitReaction.KnockbackZ"
+	static FGameplayTag GetHitReactionOverrideXYTag();  // "Data.HitReaction.OverrideXY"
+	static FGameplayTag GetHitReactionOverrideZTag();   // "Data.HitReaction.OverrideZ"
+	static FGameplayTag GetHitReactionTriggerTag();     // "Data.HitReaction.Trigger"
 
 	// 通知目标进入受击：目标侧的 GA_HitReact 以 AbilityTriggers 接收 ability.hitreact。
 	// 只有「攻击造成的伤害」才该调它 —— 血量因别的原因变化（回血、消耗、无来源的 DOT）不在此列。
 	// Instigator 传攻击者，受击 GA 靠它决定左右受击动画与击飞方向；传 nullptr 则退化为随机
 	static void SendHitReactEvent(AActor* Target, AActor* Instigator);
+
+	// 通知目标进入倒地：GA_KnockDown 以 AbilityTriggers 接收 ability.knockdown。
+	// PushData 已经是由攻击者本地空间转换好的世界向量
+	static void SendKnockDownEvent(AActor* Target, AActor* Instigator, const FPushTargetData& PushData);
 
 	// ── 伤害飘字（GameplayCue）──
 	static FGameplayTag GetDamageNumberCueTag();  // "GameplayCue.Damage.Number"

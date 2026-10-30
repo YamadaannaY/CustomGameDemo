@@ -62,6 +62,13 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Arrow")
 	TSubclassOf<UGameplayEffect> ArrowDamageEffect;
 
+	// 按发射顺序配置每支箭的伤害段（数量不足时沿用最后一项；空 = 100% 攻击力）
+	UPROPERTY(EditDefaultsOnly, Category = "Arrow")
+	TArray<FDamageSegment> ArrowDamageSegments;
+
+	// 本次激活已发射的箭数，用于取对应的伤害段
+	int32 ShootIndex = 0;
+
 	// ── 时停（GA 激活期间冻结全场敌方）─────────────────────────
 	struct FHeavyTimeFreezeEntry
 	{

@@ -46,6 +46,11 @@ public:
 	/** Retrieve team identifier in form of FGenericTeamId */
 	virtual FGenericTeamId GetGenericTeamId() const override;
 
+	// 击飞推力：各端本地执行 LaunchCharacter。本地控制角色若只在服务端推，
+	// 会被客户端下一次 ServerMove 覆盖，所以必须 Multicast 到各端。
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastLaunchCharacter(const FVector& LaunchVelocity, bool bOverrideXY, bool bOverrideZ);
+
 protected:
 	virtual void BeginPlay() override;
 

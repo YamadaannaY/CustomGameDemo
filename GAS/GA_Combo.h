@@ -41,9 +41,6 @@ protected:
 	// 派生类覆写此处实现自动连段（仍按住攻击键则重发一次轻击输入）
 	virtual void OnComboSectionChanged();
 
-	// 覆写：按当前 Section 选择伤害 GE（未命中 map 时 fallback 到基类 DefaultDamageEffect）
-	virtual TSubclassOf<UGameplayEffect> GetDamageEffect() const override;
-
 	// 覆写：命中累积能量按 Section 取值
 	virtual UAnimMontage* GetEnergyGainMontage() const override;
 	virtual FName GetEnergyGainSection() const override;
@@ -67,11 +64,6 @@ private:
 	void ComboChangedEventReceived(FGameplayEventData InPayLoad);
 
 	// 进入最后一段 section / 重击切入帧 Notify 的累计与判定：见派生类 UGA_ComboHeavy
-
-	//对不同Section对应的Montage触发的DamageGE进行不同的设置
-	//（Fallback到基类DefaultDamageEffect，见 GetDamageEffect 覆写）
-	UPROPERTY(EditDefaultsOnly,Category="Gameplay Effect")
-	TMap<FName,TSubclassOf<UGameplayEffect>> DamageEffectMap;
 
 	//包含所有ComboAnimationSequence的Montage
 	UPROPERTY(EditDefaultsOnly,Category="Animation")

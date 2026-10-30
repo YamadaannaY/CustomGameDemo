@@ -67,14 +67,14 @@ void UGA_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	}
 
 	// 本 GA 按 PerActor 实例复用，跨激活重置时停/快照状态
-	FrozenEnemies.Reset();
+
 	bHasAimPoint = false;
 	AimTargetLocation = FVector::ZeroVector;
+	ShootIndex = 0;
 
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
-		// 时停全场敌方 + 缓存锁定目标位置为瞄准快照
-		ApplyTimeFreeze();
+
 		UpdateAimSnapshot();
 
 		// 挂载放箭帧监听：Montage 内 3 个 AN 依次触发 ability.heavyattack.shoot，每收到一次射一箭
@@ -256,6 +256,17 @@ void UGA_HeavyAttack::SpawnArrowAtSocket()
 	}
 
 	Arrow->InitProjectile(Char, ArrowDamageEffect,(GetAbilityLevel()), FireDir, ArrowSpeed, ArrowLifeTime);
-	//为Arrow配置GA的Energy值
-	Arrow->SetEnergyOnHit(ClaimEnergyForCurrentAttack());
+
+	// 按发射顺序注入伤害段：三支箭可以配不同系数
+	if (ArrowDamageSegments.Num() > 0)
+	{
+		const int32 Index = FMath::Min(ShootIndex, ArrowDamageSegments.Num() - 1);
+		TArray<FDamageSegment> Segments;
+		Segments.Add(ArrowDamageSegments[Index]);
+		Arrow->SetDamageSegments(Segments);
+		++ShootIndex;
+	}
+
+	//为Arrow配置GA的Energy值（同一段攻击只认领一次）
+	Arrow->SetEnergyOnHit(ClaimEnergyValue(GetConfiguredEnergyGain()));
 }

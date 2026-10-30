@@ -133,17 +133,6 @@ FName UGA_Combo::GetCurrentComboSectionName() const
 	return NAME_None;
 }
 
-TSubclassOf<UGameplayEffect> UGA_Combo::GetDamageEffect() const
-{
-	const FName CurrentSectionName = GetCurrentComboSectionName();
-	const TSubclassOf<UGameplayEffect>* FoundEffectPtr = DamageEffectMap.Find(CurrentSectionName);
-	if (FoundEffectPtr)
-	{
-		return *FoundEffectPtr;
-	}
-	return DefaultWeaponDamageEffect;
-}
-
 UAnimMontage* UGA_Combo::GetEnergyGainMontage() const
 {
 	return ComboMontage;

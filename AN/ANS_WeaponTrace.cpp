@@ -12,7 +12,7 @@ void UANS_WeaponTrace::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequen
 
 	if (UExtraGameWeaponComponent* WeaponComp = MeshComp->GetOwner()->FindComponentByClass<UExtraGameWeaponComponent>())
 	{
-		WeaponComp->BeginWeaponTrace();
+		WeaponComp->BeginWeaponTrace(DamageWindowId);
 	}
 }
 

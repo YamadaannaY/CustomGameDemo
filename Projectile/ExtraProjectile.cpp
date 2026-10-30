@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "GameplayEffect.h"
 #include "Components/PrimitiveComponent.h"
 #include "ExtractGameCharacter/ExtraCharacter.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
@@ -139,9 +140,8 @@ void AExtraProjectile::ProcessHit(AActor* HitActor)
 	
 	if (bHasAuthorityNow && bIsEnemy)
 	{
+		// 伤害 GE 结算后，受击/倒地由受击侧属性集按 GE 参数自行触发
 		ApplyProjectileDamage(HitActor);
-
-		UUExtraAbilitySystemStatic::SendHitReactEvent(HitActor, SourceActor.Get());
 
 		// 能量：本投射物只结算一次，穿透剑气连穿多个目标时不重复加
 		if (!bEnergyGranted && EnergyOnHit > 0.f)
@@ -202,14 +202,67 @@ void AExtraProjectile::ApplyProjectileDamage(AActor* Victim) const
 		return;
 	}
 
-	//构造GE Context
-	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
-	Context.AddInstigator(Source, Source);
-	Context.AddSourceObject(Source);
+	const float AttackPower = SourceASC->GetNumericAttribute(UExtraGameAttributeSet::GetAttackPowerAttribute());
 
-	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffectClass, AbilityLevel, Context);
-	if (SpecHandle.Data.Get())
+	// 展开伤害段：GA 未注入时按 100% 攻击力单段
+	TArray<FDamageSegment> ResolvedSegments;
+	if (DamageSegments.Num() > 0)
 	{
+		for (const FDamageSegment& Segment : DamageSegments)
+		{
+			const int32 Count = FMath::Max(1, Segment.Count);
+			for (int32 i = 0; i < Count; ++i)
+			{
+				ResolvedSegments.Add(Segment);
+			}
+		}
+	}
+	else
+	{
+		FDamageSegment DefaultSegment;
+		DefaultSegment.Coefficient = 1.f;
+		ResolvedSegments.Add(DefaultSegment);
+	}
+
+	bool bFirstSegment = true;
+	bool bKnockDownUsed = false;
+	for (const FDamageSegment& Segment : ResolvedSegments)
+	{
+		// 一次命中的多段只允许第一个击飞段生效
+		const bool bKnockDownThisSegment = Segment.bKnockDown && !bKnockDownUsed;
+		if (bKnockDownThisSegment)
+		{
+			bKnockDownUsed = true;
+		}
+
+		FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+		Context.AddInstigator(Source, Source);
+		Context.AddSourceObject(Source);
+
+		FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffectClass, AbilityLevel, Context);
+		if (!SpecHandle.Data.IsValid())
+		{
+			continue;
+		}
+
+		SpecHandle.Data->SetSetByCallerMagnitude(
+			UUExtraAbilitySystemStatic::GetDamageSetByCallerTag(), -AttackPower * Segment.Coefficient);
+
+		// 表现：第一段与第一个击飞段触发，其余段抑制（同一次命中的多段只发一次受击）
+		const bool bTriggerReaction = bFirstSegment || bKnockDownThisSegment;
+		SpecHandle.Data->SetSetByCallerMagnitude(
+			UUExtraAbilitySystemStatic::GetHitReactionTriggerTag(), bTriggerReaction ? 1.f : 0.f);
+
+		if (bKnockDownThisSegment)
+		{
+			SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionLevelTag(), 1.f);
+			SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionKnockbackXTag(), Segment.KnockbackVelocity.X);
+			SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionKnockbackYTag(), Segment.KnockbackVelocity.Y);
+			SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionKnockbackZTag(), Segment.KnockbackVelocity.Z);
+			SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionOverrideXYTag(), Segment.bOverrideXY ? 1.f : 0.f);
+			SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionOverrideZTag(), Segment.bOverrideZ ? 1.f : 0.f);
+		}
+
 		// 飘字数值读结算前后的 Health/Shield 差值：护盾吸收、clamp 后的实际结果才准确
 		const float HealthBefore = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetHealthAttribute());
 		const float ShieldBefore = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetShieldAttribute());
@@ -224,6 +277,8 @@ void AExtraProjectile::ApplyProjectileDamage(AActor* Victim) const
 		const float HealthLoss = HealthAfter > HealthBefore ? HealthBefore : HealthBefore - HealthAfter;
 		const float ShieldLoss = FMath::Max(0.f, ShieldBefore - ShieldAfter);
 		UUExtraAbilitySystemStatic::SendDamageNumberCue(Victim, HealthLoss + ShieldLoss);
+
+		bFirstSegment = false;
 	}
 }
 

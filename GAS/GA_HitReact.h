@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "ExtraPassiveGameplayAbility.h"
+#include "Engine/EngineTypes.h"
 #include "GA_HitReact.generated.h"
 
 class UAbilityTask_PlayMontageAndWait;
@@ -19,6 +20,9 @@ class EXTRACTGAMECHARACTER_API UGA_HitReact : public UExtraPassiveGameplayAbilit
 
 public:
 	UGA_HitReact();
+
+	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
 	virtual void OnReactActivated(const FGameplayEventData* TriggerEventData) override;
@@ -39,19 +43,21 @@ private:
 	// 无有效攻击者时随机，避免总是同一侧
 	UAnimMontage* SelectHitReactMontage(const AActor* Attacker) const;
 
-	// 窗口长度（秒）
-	UPROPERTY(EditDefaultsOnly, Category = "HitReact|KnockDown", meta = (ClampMin = "0.0"))
-	float KnockDownWindow = 5.f;
+	void PlayHitReactMontage(UAnimMontage* Montage);
 
-	// 窗口内累计受击达到这个次数时，本次改为触发倒地
-	UPROPERTY(EditDefaultsOnly, Category = "HitReact|KnockDown", meta = (ClampMin = "2"))
-	int32 HitCountToKnockDown = 3;
-	
-	//窗口内达到指定的受击次数，变为倒地
-	bool ShouldKnockDown(float Now);
+	// 时停（CustomTimeDilation=0）期间 Montage 时间不推进，开始播放只会卡在首帧，
+	// 且后续命中会反复重触发。改为等解冻后再播一次。
+	void StartWaitingForUnfreeze();
 
-	// 窗口内的受击时间戳
-	TArray<float> RecentHitTimes;
+	UFUNCTION()
+	void TryPlayAfterUnfreeze();
+
+	void StopWaitingForUnfreeze();
+
+	UPROPERTY()
+	TObjectPtr<UAnimMontage> PendingMontage;
+
+	FTimerHandle UnfreezeCheckTimerHandle;
 
 	UPROPERTY()
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> PlayHitReactTask;

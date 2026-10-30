@@ -10,6 +10,36 @@ class UGameplayEffect;
 class AExtraSwordQi;
 class UAbilitySystemComponent;
 
+// 单道剑气的配置：伤害段 + 命中能量
+USTRUCT(BlueprintType)
+struct FSwordQiShotConfig
+{
+	GENERATED_BODY()
+
+	// 本道剑气的伤害段（空 = 100% 攻击力）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SwordQi")
+	TArray<FDamageSegment> DamageSegments;
+
+	// 本道剑气命中时给来源的能量（0 = 不给）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SwordQi", meta = (ClampMin = "0.0"))
+	float EnergyGain = 0.f;
+};
+
+// 单个空中段（Montage）的剑气配置
+USTRUCT(BlueprintType)
+struct FStageSwordQiConfig
+{
+	GENERATED_BODY()
+
+	// 段索引（0 起，与 StageIndex 对应）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SwordQi")
+	int32 StageIndex = 0;
+
+	// 段内按斩击顺序消耗；数量不足时沿用最后一项
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SwordQi")
+	TArray<FSwordQiShotConfig> Shots;
+};
+
 /**
  * 二阶段空中连打：一段腾空内最多打出三段（段1 → 段2 → 第三段下砸，交给 GA_AirAttack）。
  *
@@ -76,6 +106,13 @@ private:
 	// 剑气命中的伤害 GE（留空 = 剑气只飞不造成伤害）
 	UPROPERTY(EditDefaultsOnly, Category = "SwordQi")
 	TSubclassOf<UGameplayEffect> SwordQiDamageEffect;
+
+	// 按段配置剑气：每段各一套，段内按斩击顺序消耗
+	UPROPERTY(EditDefaultsOnly, Category = "SwordQi")
+	TArray<FStageSwordQiConfig> SwordQiConfigByStage;
+
+	// 当前段内已斩出的剑气数（PlayStage 时重置）
+	int32 SwordQiShootIndex = 0;
 
 	// 当前推进到第几段（0 起）
 	int32 StageIndex = 0;

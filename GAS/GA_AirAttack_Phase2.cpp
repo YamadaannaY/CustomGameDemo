@@ -38,9 +38,6 @@ UGA_AirAttack_Phase2::UGA_AirAttack_Phase2()
 	// 启用通用武器碰撞伤害（基类机制）：Montage 上的轨迹 AN 命中即按 DefaultDamageEffect 结算
 	bEnableWeaponDamage = true;
 
-	// 命中累积寒意
-	bEnableEnergyGain = true;
-
 	// 启用基类重力机制：连段各段的 ANS_GravityScale 覆写
 	bEnableGravityScale = true;
 
@@ -70,8 +67,9 @@ void UGA_AirAttack_Phase2::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		return;
 	}
 
-	// 先清掉本轮激活的内存状态 
+	// 先清掉本轮激活的内存状态
 	StageIndex = 0;
+	SwordQiShootIndex = 0;
 	bComboWindowOpen = false;
 	bTransitioning = false;
 	bInLanding = false;
@@ -150,6 +148,9 @@ void UGA_AirAttack_Phase2::PlayStage(int32 InIndex)
 		K2_EndAbility();
 		return;
 	}
+
+	// 每段开始时重置段内斩击序号
+	SwordQiShootIndex = 0;
 
 	CurrentPlayingMontage = GetMontageForStage(InIndex);
 	if (!CurrentPlayingMontage)
@@ -355,8 +356,31 @@ void UGA_AirAttack_Phase2::SpawnSwordQi(float RollOffset)
 	
 	SwordQi->InitProjectile(Char, SwordQiDamageEffect, (GetAbilityLevel()), FireDir, SwordQiSpeed, SwordQiLifeTime, RollOffset);
 
-	// 能量按当前段认领，命中时才到账；穿透连穿多个目标也只结算一次
-	SwordQi->SetEnergyOnHit(ClaimEnergyForCurrentAttack());
+	// 按当前段取对应配置，段内按斩击顺序消耗
+	const TArray<FSwordQiShotConfig>* SourceShots = nullptr;
+	for (const FStageSwordQiConfig& StageConfig : SwordQiConfigByStage)
+	{
+		if (StageConfig.StageIndex == StageIndex)
+		{
+			SourceShots = &StageConfig.Shots;
+			break;
+		}
+	}
+
+	if (SourceShots && SourceShots->Num() > 0)
+	{
+		// 每道剑气独立配置伤害与能量
+		const int32 Index = FMath::Min(SwordQiShootIndex, SourceShots->Num() - 1);
+		const FSwordQiShotConfig& Shot = (*SourceShots)[Index];
+		SwordQi->SetDamageSegments(Shot.DamageSegments);
+		SwordQi->SetEnergyOnHit(Shot.EnergyGain);
+		++SwordQiShootIndex;
+	}
+	else
+	{
+		// 未配置该段：伤害按 100% 攻击力，能量按当前 Section 配置（同一段只认领一次）
+		SwordQi->SetEnergyOnHit(ClaimEnergyValue(GetConfiguredEnergyGain()));
+	}
 }
 
 void UGA_AirAttack_Phase2::AdvanceToNextStage()

@@ -98,6 +98,17 @@ FGenericTeamId AExtraCharacter::GetGenericTeamId() const
 	return TeamID;
 }
 
+void AExtraCharacter::MulticastLaunchCharacter_Implementation(const FVector& LaunchVelocity, bool bOverrideXY, bool bOverrideZ)
+{
+	// 纯模拟代理不本地推：速度由服务端复制跟随，避免本地预测被纠正
+	if (GetLocalRole() == ROLE_SimulatedProxy)
+	{
+		return;
+	}
+
+	LaunchCharacter(LaunchVelocity, bOverrideXY, bOverrideZ);
+}
+
 void AExtraCharacter::BeginPlay()
 {
 	Super::BeginPlay();

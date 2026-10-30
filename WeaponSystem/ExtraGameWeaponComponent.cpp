@@ -3,6 +3,7 @@
 #include "ExtraGameWeaponComponent.h"
 #include "ExtraGameWeaponData.h"
 #include "ExtractGameCharacter/GAS/ExtraGameplayAbility.h"
+#include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
 #include "ExtractGameCharacter/GAS/ExtraAbilitySystemComponent.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "AbilitySystemComponent.h"
@@ -927,7 +928,7 @@ void UExtraGameWeaponComponent::SyncGroupTagsToLocalASC()
 	}
 }
 
-void UExtraGameWeaponComponent::BeginWeaponTrace()
+void UExtraGameWeaponComponent::BeginWeaponTrace(FName InDamageWindowId)
 {
 	// 伤害检测和实际应用只在服务端结算（GA 基类 DoDamage 会拦下客户端）
 	if (!IsAuthorityOwner())
@@ -943,6 +944,7 @@ void UExtraGameWeaponComponent::BeginWeaponTrace()
 	}
 
 	bTraceActive = true;
+	ActiveDamageWindowId = InDamageWindowId;
 	TraceSocketPrevLocations.Empty();
 	AlreadyHitActors.Empty();
 
@@ -999,6 +1001,7 @@ void UExtraGameWeaponComponent::EndWeaponTrace()
 	}
 
 	bTraceActive = false;
+	ActiveDamageWindowId = NAME_None;
 
 	// 即时结算模式下，NotifyEnd 只负责清空黑名单，等待下一次攻击窗口重新累计
 	AlreadyHitActors.Empty();
@@ -1167,7 +1170,15 @@ void UExtraGameWeaponComponent::SendHitEventForActor(AActor* HitActor)
 	ActorArray->TargetActorArray.Add(HitActor);
 
 	FGameplayAbilityTargetDataHandle TargetData;
-	TargetData.Add(ActorArray); 
+	TargetData.Add(ActorArray);
+
+	// 伤害窗口标识：GA 用它区分同一 Montage 里的多个伤害区间
+	if (!ActiveDamageWindowId.IsNone())
+	{
+		FDamageWindowData* WindowData = new FDamageWindowData();
+		WindowData->WindowId = ActiveDamageWindowId;
+		TargetData.Add(WindowData);
+	}
 
 	FGameplayEventData EventData;
 	EventData.Instigator = Owner;

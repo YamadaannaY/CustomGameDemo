@@ -1,5 +1,4 @@
 #include "GameplayCueNotify_DamageNumber.h"
-
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "ExtractGameCharacter/UI/DamageNumberActor.h"

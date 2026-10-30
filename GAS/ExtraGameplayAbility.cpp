@@ -1,6 +1,10 @@
 #include "ExtraGameplayAbility.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "GameplayEffect.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "TimerManager.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Animation/AnimMontage.h"
 #include "EngineUtils.h"
@@ -17,6 +21,27 @@
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
 #include "ExtractGameCharacter/Camera/UCombatCameraComponent.h"
+
+namespace
+{
+	// 应用一次伤害 Spec 并按前后属性差发飘字（多段结算与旧路径共用口径）
+	void ApplyDamageSpecAndReportCue(UAbilitySystemComponent* SourceASC, AActor* Target,
+		UAbilitySystemComponent* TargetASC, const FGameplayEffectSpec& Spec)
+	{
+		const float HealthBefore = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetHealthAttribute());
+		const float ShieldBefore = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetShieldAttribute());
+
+		SourceASC->ApplyGameplayEffectSpecToTarget(Spec, TargetASC);
+
+		const float HealthAfter = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetHealthAttribute());
+		const float ShieldAfter = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetShieldAttribute());
+
+		// AI 血量归零会立刻回满（bRefillHealthOnZero），特别考虑此情况
+		const float HealthLoss = HealthAfter > HealthBefore ? HealthBefore : HealthBefore - HealthAfter;
+		const float ShieldLoss = FMath::Max(0.f, ShieldBefore - ShieldAfter);
+		UUExtraAbilitySystemStatic::SendDamageNumberCue(Target, HealthLoss + ShieldLoss);
+	}
+}
 
 UExtraGameplayAbility::UExtraGameplayAbility()
 {
@@ -102,7 +127,10 @@ void UExtraGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	
 	WarpSwitchBaseline.Reset();
 	ForwardOvershootCache.Reset();
-	
+
+	// 多段伤害调度：GA 结束即停止剩余段，避免断招后继续掉血
+	ClearDamageSequences();
+
 	SetForwardOvershootStateTag(false);
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -232,75 +260,88 @@ void UExtraGameplayAbility::DoDamage(const FGameplayEventData& Data)
 		return;
 	}
 
-	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
-	if (!SourceASC)
-	{
-		return;
-	}
-
-	AActor* Avatar = GetAvatarActorFromActorInfo();
-	if (!Avatar)
-	{
-		return;
-	}
-
-	const TSubclassOf<UGameplayEffect> DamageEffect = GetDamageEffect();
-	if (!DamageEffect)
-	{
-		return;
-	}
 	const TArray<AActor*> HitActors = UAbilitySystemBlueprintLibrary::GetAllActorsFromTargetData(Data.TargetData);
 	if (HitActors.Num() == 0)
 	{
 		return;
 	}
-	
-	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
-	Context.AddInstigator(Avatar, Avatar);
-	Context.AddSourceObject(Avatar);
-	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffect, GetAbilityLevel(), Context);
 
-	for (AActor* HitActor : HitActors)
+	// 攻击段表是唯一伤害来源；未配置 = 这一段没有伤害
+	const FAttackSegmentConfig* SegmentConfig = FindAttackSegmentConfig();
+	if (!SegmentConfig)
 	{
-		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
-		if (!TargetASC)
-		{
-			continue;
-		}
-
-		// 飘字数值
-		const float HealthBefore = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetHealthAttribute());
-		const float ShieldBefore = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetShieldAttribute());
-
-		SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
-
-		const float HealthAfter = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetHealthAttribute());
-		const float ShieldAfter = TargetASC->GetNumericAttribute(UExtraGameAttributeSet::GetShieldAttribute());
-
-		// AI 血量归零会立刻回满（bRefillHealthOnZero），特别考虑此情况
-		const float HealthLoss = HealthAfter > HealthBefore ? HealthBefore : HealthBefore - HealthAfter;
-		const float ShieldLoss = FMath::Max(0.f, ShieldBefore - ShieldAfter);
-		
-		UUExtraAbilitySystemStatic::SendDamageNumberCue(HitActor, HealthLoss + ShieldLoss);
-		UUExtraAbilitySystemStatic::SendHitReactEvent(HitActor, Avatar);
+		return;
 	}
 
-	// 确实打到目标后才累积能量。同一段 Montage/Section 内，武器轨迹与范围伤害可能
-	// 分多次进入本函数，但「打中过」只算一次
-	AddEnergyValue(ClaimEnergyForCurrentAttack());
+	// 伤害窗口标识（ANS_WeaponTrace / AN_AreaCheck 附带）；为空则用通用整段配置（即所有造成伤害的部分都会应用的无Id配置部分）
+	FName WindowId = NAME_None;
+	for (int32 i = 0; i < Data.TargetData.Num(); ++i)
+	{
+		const FGameplayAbilityTargetData* Item = Data.TargetData.Get(i);
+		if (Item && Item->GetScriptStruct() == FDamageWindowData::StaticStruct())
+		{
+			WindowId = static_cast<const FDamageWindowData*>(Item)->WindowId;
+			break;
+		}
+	}
+
+	ApplyDamageProfile(HitActors, *SegmentConfig, WindowId);
 }
 
-float UExtraGameplayAbility::ClaimEnergyForCurrentAttack()
+const FAttackSegmentConfig* UExtraGameplayAbility::FindAttackSegmentConfig() const
 {
-	if (!bEnableEnergyGain)
+	if (AttackSegmentConfigs.Num() == 0)
 	{
-		return 0.f;
+		return nullptr;
 	}
 
+	UAnimMontage* Montage = GetEnergyGainMontage();
+	FName Section = GetEnergyGainSection();
+
+	// 子类没覆写时，自动取当前播放的 Montage / Section
+	if (!Montage || Section == NAME_None)
+	{
+		if (const UAnimInstance* AnimInst = GetOwnerAnimInstance())
+		{
+			UAnimMontage* ActiveMontage = AnimInst->GetCurrentActiveMontage();
+			if (!Montage)
+			{
+				Montage = ActiveMontage;
+			}
+			if (Section == NAME_None && ActiveMontage)
+			{
+				Section = AnimInst->Montage_GetCurrentSection(ActiveMontage);
+			}
+		}
+	}
+
+	// 1) Section 精确匹配：多 Section 的 Combo 用这个
+	if (Section != NAME_None)
+	{
+		if (const FAttackSegmentConfig* Found = AttackSegmentConfigs.Find(Section))
+		{
+			return Found;
+		}
+	}
+
+	// 2) Montage 名匹配：单 Section 的 GA 只配一次，不必按 "Default" 逐个配
+	if (Montage)
+	{
+		if (const FAttackSegmentConfig* Found = AttackSegmentConfigs.Find(Montage->GetFName()))
+		{
+			return Found;
+		}
+	}
+
+	return nullptr;
+}
+
+float UExtraGameplayAbility::ClaimEnergyValue(float Value)
+{
 	UAnimMontage* CurrentPlayMontage = GetEnergyGainMontage();
 	const FName CurrentSection = GetEnergyGainSection();
 
-	// 换段
+	// 换段即视为新的一次攻击
 	if (CurrentPlayMontage != LastEnergyGainMontage || CurrentSection != LastEnergyGainSection)
 	{
 		LastEnergyGainMontage = CurrentPlayMontage;
@@ -313,18 +354,210 @@ float UExtraGameplayAbility::ClaimEnergyForCurrentAttack()
 		return 0.f;
 	}
 
-	//一个Montage只结算一次
 	bEnergyGainedForCurrentAttack = true;
-	return ResolveEnergyGainPerHit();
+	return Value;
 }
 
-float UExtraGameplayAbility::ResolveEnergyGainPerHit() const
+void UExtraGameplayAbility::ApplyDamageProfile(const TArray<AActor*>& Targets, const FAttackSegmentConfig& Config, FName WindowId)
 {
-	if (!bEnableEnergyGain)
+	if (!K2_HasAuthority() || Targets.Num() == 0)
+	{
+		return;
+	}
+	if (!GetDamageEffect())
+	{
+		return;
+	}
+
+	// 有伤害窗口 ID 且配置里命中时用窗口段，否则用整段兜底
+	const TArray<FDamageSegment>* SourceSegments = &Config.DamageSegments;
+	if (WindowId != NAME_None)
+	{
+		for (const FDamageWindowConfig& Window : Config.DamageWindows)
+		{
+			if (Window.WindowId == WindowId)
+			{
+				SourceSegments = &Window.DamageSegments;
+				break;
+			}
+		}
+	}
+	if (SourceSegments->Num() == 0)
+	{
+		return;
+	}
+
+	// Count 展开
+	TArray<FDamageSegment> Segments;
+	for (const FDamageSegment& Segment : *SourceSegments)
+	{
+		const int32 Count = FMath::Max(1, Segment.Count);
+		for (int32 i = 0; i < Count; ++i)
+		{
+			Segments.Add(Segment);
+		}
+	}
+
+	// 能量：同一段攻击只结算一次；RequiredTags 由 GetConfiguredEnergyGain 检查
+	const float EnergyGain = GetConfiguredEnergyGain();
+	if (EnergyGain > 0.f)
+	{
+		AddEnergyValue(ClaimEnergyValue(EnergyGain));
+	}
+
+	for (AActor* Target : Targets)
+	{
+		if (!IsValid(Target))
+		{
+			continue;
+		}
+
+		//同一目标已在调度中则不重复开一套
+		const bool bAlreadyRunning = ActiveDamageSequences.ContainsByPredicate(
+			[Target](const TSharedPtr<FDamageSequence>& Sequence)
+			{
+				return Sequence.IsValid() && Sequence->Target.Get() == Target;
+			});
+		if (bAlreadyRunning)
+		{
+			continue;
+		}
+
+		TSharedPtr<FDamageSequence> Sequence = MakeShared<FDamageSequence>();
+		Sequence->Target = Target;
+		Sequence->Segments = Segments;
+		Sequence->Interval = FMath::Max(0.f, Config.SegmentInterval);
+		Sequence->bSendHitReact = Config.bSendHitReact;
+		ActiveDamageSequences.Add(Sequence);
+
+		ApplyNextDamageSegment(Sequence->Target);
+	}
+}
+
+void UExtraGameplayAbility::ApplyNextDamageSegment(TWeakObjectPtr<AActor> Target)
+{
+	const int32 SequenceIndex = ActiveDamageSequences.IndexOfByPredicate(
+		[&Target](const TSharedPtr<FDamageSequence>& Sequence)
+		{
+			return Sequence.IsValid() && Sequence->Target == Target;
+		});
+	if (SequenceIndex == INDEX_NONE)
+	{
+		return;
+	}
+
+	const TSharedPtr<FDamageSequence> Sequence = ActiveDamageSequences[SequenceIndex];
+	AActor* TargetActor = Sequence->Target.Get();
+	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
+	UAbilitySystemComponent* TargetASC = IsValid(TargetActor)
+		? UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor)
+		: nullptr;
+	const TSubclassOf<UGameplayEffect> DamageEffect = GetDamageEffect();
+
+	if (!Sequence->Segments.IsValidIndex(Sequence->NextIndex) || !SourceASC || !TargetASC || !DamageEffect)
+	{
+		ActiveDamageSequences.RemoveAt(SequenceIndex);
+		return;
+	}
+
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar)
+	{
+		ActiveDamageSequences.RemoveAt(SequenceIndex);
+		return;
+	}
+
+	const FDamageSegment& Segment = Sequence->Segments[Sequence->NextIndex];
+	const bool bIsFirstSegment = (Sequence->NextIndex == 0);
+	++Sequence->NextIndex;
+
+	// 一次命中序列只允许第一个击飞段生效（后续段即使勾了击飞也抑制）
+	const bool bKnockDownThisSegment = Segment.bKnockDown && !Sequence->bKnockDownUsed;
+	if (bKnockDownThisSegment)
+	{
+		Sequence->bKnockDownUsed = true;
+	}
+
+	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+	Context.AddInstigator(Avatar, Avatar);
+	Context.AddSourceObject(Avatar);
+	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffect, GetAbilityLevel(), Context);
+	if (!SpecHandle.Data.IsValid())
+	{
+		ActiveDamageSequences.RemoveAt(SequenceIndex);
+		return;
+	}
+
+	// 数值：攻击力 × 系数（负值扣血，伤害 GE 的 Modifier 需引用 Data.Damage）
+	const float AttackPower = SourceASC->GetNumericAttribute(UExtraGameAttributeSet::GetAttackPowerAttribute());
+	SpecHandle.Data->SetSetByCallerMagnitude(
+		UUExtraAbilitySystemStatic::GetDamageSetByCallerTag(), -AttackPower * Segment.Coefficient);
+
+	// 表现：第一段发受击、第一个击飞段发倒地；同一序列其余段全部抑制
+	const bool bTriggerReaction = Sequence->bSendHitReact && (bIsFirstSegment || bKnockDownThisSegment);
+	SpecHandle.Data->SetSetByCallerMagnitude(
+		UUExtraAbilitySystemStatic::GetHitReactionTriggerTag(), bTriggerReaction ? 1.f : 0.f);
+
+	//传递PushVel
+	if (bKnockDownThisSegment)
+	{
+		SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionLevelTag(), 1.f);
+		SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionKnockbackXTag(), Segment.KnockbackVelocity.X);
+		SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionKnockbackYTag(), Segment.KnockbackVelocity.Y);
+		SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionKnockbackZTag(), Segment.KnockbackVelocity.Z);
+		SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionOverrideXYTag(), Segment.bOverrideXY ? 1.f : 0.f);
+		SpecHandle.Data->SetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionOverrideZTag(), Segment.bOverrideZ ? 1.f : 0.f);
+	}
+
+	ApplyDamageSpecAndReportCue(SourceASC, TargetActor, TargetASC, *SpecHandle.Data.Get());
+
+	if (!Sequence->Segments.IsValidIndex(Sequence->NextIndex))
+	{
+		ActiveDamageSequences.RemoveAt(SequenceIndex);
+		return;
+	}
+
+	if (Sequence->Interval > 0.f)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			FTimerDelegate Delegate;
+			Delegate.BindWeakLambda(this, [this, Target]()
+			{
+				ApplyNextDamageSegment(Target);
+			});
+			World->GetTimerManager().SetTimer(Sequence->TimerHandle, Delegate, Sequence->Interval, false);
+		}
+	}
+	else
+	{
+		ApplyNextDamageSegment(Target);
+	}
+}
+
+void UExtraGameplayAbility::ClearDamageSequences()
+{
+	if (UWorld* World = GetWorld())
+	{
+		for (const TSharedPtr<FDamageSequence>& Sequence : ActiveDamageSequences)
+		{
+			if (Sequence.IsValid())
+			{
+				World->GetTimerManager().ClearTimer(Sequence->TimerHandle);
+			}
+		}
+	}
+	ActiveDamageSequences.Reset();
+}
+
+float UExtraGameplayAbility::GetConfiguredEnergyGain() const
+{
+	const FAttackSegmentConfig* Config = FindAttackSegmentConfig();
+	if (!Config || Config->EnergyGain <= 0.f)
 	{
 		return 0.f;
 	}
-	
+
 	if (!EnergyGainRequiredTags.IsEmpty())
 	{
 		const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
@@ -334,24 +567,7 @@ float UExtraGameplayAbility::ResolveEnergyGainPerHit() const
 		}
 	}
 
-	if (UAnimMontage* Montage = GetEnergyGainMontage())
-	{
-		if (const float* Found = EnergyGainPerMontage.Find(Montage))
-		{
-			return *Found;
-		}
-	}
-
-	const FName SectionName = GetEnergyGainSection();
-	if (SectionName != NAME_None)
-	{
-		if (const float* Found = EnergyGainPerSection.Find(SectionName))
-		{
-			return *Found;
-		}
-	}
-
-	return EnergyGainPerHit;
+	return Config->EnergyGain;
 }
 
 UAnimMontage* UExtraGameplayAbility::GetEnergyGainMontage() const
@@ -406,6 +622,7 @@ void UExtraGameplayAbility::OnAreaDamageEventReceived(FGameplayEventData Payload
 	FVector CenterOffset = FVector::ZeroVector;
 	float Radius = 0.f;
 	EAreaCenterMode CenterMode = EAreaCenterMode::Inherit;
+	FName WindowId = NAME_None;
 
 	const FGameplayAbilityTargetDataHandle& Handle = Payload.TargetData;
 	for (int32 i = 0; i < Handle.Num(); ++i)
@@ -417,14 +634,17 @@ void UExtraGameplayAbility::OnAreaDamageEventReceived(FGameplayEventData Payload
 			CenterOffset = AreaData->CenterOffset;
 			Radius = AreaData->Radius;
 			CenterMode = AreaData->CenterMode;
-			break;
+		}
+		else if (Data && Data->GetScriptStruct() == FDamageWindowData::StaticStruct())
+		{
+			WindowId = static_cast<const FDamageWindowData*>(Data)->WindowId;
 		}
 	}
 
-	PerformAreaDamage(CenterOffset, Radius, CenterMode);
+	PerformAreaDamage(CenterOffset, Radius, CenterMode, WindowId);
 }
 
-void UExtraGameplayAbility::PerformAreaDamage(const FVector& CenterOffset, float Radius, EAreaCenterMode CenterMode)
+void UExtraGameplayAbility::PerformAreaDamage(const FVector& CenterOffset, float Radius, EAreaCenterMode CenterMode, FName WindowId)
 {
 	// 伤害判定只在服务端执行
 	if (!K2_HasAuthority())
@@ -525,6 +745,15 @@ void UExtraGameplayAbility::PerformAreaDamage(const FVector& CenterOffset, float
 	FGameplayEventData EventData;
 	EventData.Instigator = Char;
 	EventData.TargetData.Add(ActorArray);
+
+	// 保留伤害窗口标识，交给 DoDamage 选择对应的伤害段
+	if (!WindowId.IsNone())
+	{
+		FDamageWindowData* WindowData = new FDamageWindowData();
+		WindowData->WindowId = WindowId;
+		EventData.TargetData.Add(WindowData);
+	}
+
 	DoDamage(EventData);
 }
 

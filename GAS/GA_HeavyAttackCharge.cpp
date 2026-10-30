@@ -23,9 +23,6 @@ UGA_HeavyAttackCharge::UGA_HeavyAttackCharge()
 
 	bEnableWeaponDamage = true;
 
-	// 命中累积寒意
-	bEnableEnergyGain = true;
-
 	bRotateToLockTarget = true;
 
 	InputTag = UUExtraAbilitySystemStatic::GetHeavyAttackInputTag();

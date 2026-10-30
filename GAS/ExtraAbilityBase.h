@@ -4,6 +4,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "Abilities/GameplayAbilityTargetTypes.h"
 #include "GameplayTagContainer.h"
+#include "ExtraGameplayTypes.h"
 #include "ExtraAbilityBase.generated.h"
 
 /**
@@ -97,12 +98,15 @@ protected:
 	// 本 GA 激活期间统一监听 Push_Self 事件，Montage 里放 AN_ApplyPush 在指定帧发一次，
 	// AN 带 FPushTargetData（推力向量 + XY/Z 覆盖标志），这里解析后作用到自身。
 
-	// Push_Self 事件回调：解析负载里的 FPushTargetData 后调用 PushSelf
+	// Push_Self 事件回调：解析负载里的 FPushTargetData 后调用 PushSelf，使用AN_ApplyPush触发
 	UFUNCTION()
 	void OnPushSelfNotifyReceived(FGameplayEventData Payload);
 
 	// 挂载 Push_Self 事件监听（PreActivate 自动调用）
 	void SetupPushSelfListener();
+
+	// 从 TargetData 中取出 FPushTargetData，成功则返回true
+	static bool ExtractPushData(const FGameplayAbilityTargetDataHandle& Handle, FPushTargetData& OutData);
 
 	// 推单个目标：给目标发 LaunchedAbilityActivation 事件，方向以 ImpactNormal 承载
 	static void PushTarget(AActor* Target, const FVector& PushVel);

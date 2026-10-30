@@ -201,25 +201,27 @@ void UExtraAbilityBase::SetupPushSelfListener()
 
 void UExtraAbilityBase::OnPushSelfNotifyReceived(FGameplayEventData Payload)
 {
-	FVector PushVelocity = FVector::ZeroVector;
-	bool bOverrideXY = false;
-	bool bOverrideZ = true;
+	FPushTargetData PushData;
+	if (!ExtractPushData(Payload.TargetData, PushData))
+	{
+		return;
+	}
 
-	const FGameplayAbilityTargetDataHandle& Handle = Payload.TargetData;
+	PushSelf(PushData.PushVelocity, PushData.bOverrideXY, PushData.bOverrideZ);
+}
+
+bool UExtraAbilityBase::ExtractPushData(const FGameplayAbilityTargetDataHandle& Handle, FPushTargetData& OutData)
+{
 	for (int32 i = 0; i < Handle.Num(); ++i)
 	{
 		const FGameplayAbilityTargetData* Data = Handle.Get(i);
 		if (Data && Data->GetScriptStruct() == FPushTargetData::StaticStruct())
 		{
-			const FPushTargetData* PushData = static_cast<const FPushTargetData*>(Data);
-			PushVelocity = PushData->PushVelocity;
-			bOverrideXY = PushData->bOverrideXY;
-			bOverrideZ = PushData->bOverrideZ;
-			break;
+			OutData = *static_cast<const FPushTargetData*>(Data);
+			return true;
 		}
 	}
-
-	PushSelf(PushVelocity, bOverrideXY, bOverrideZ);
+	return false;
 }
 
 void UExtraAbilityBase::PushSelf(const FVector& PushVel, bool bOverrideXY, bool bOverrideZ)

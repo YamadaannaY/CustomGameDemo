@@ -1,14 +1,17 @@
 #include "GA_KnockDown.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "ExtractGameCharacter/ExtraCharacter.h"
 #include "TimerManager.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
 
 UGA_KnockDown::UGA_KnockDown()
 {
@@ -45,8 +48,73 @@ void UGA_KnockDown::OnReactActivated(const FGameplayEventData* TriggerEventData)
 
 	CurrentPhase = EKnockDownPhase::None;
 	bHasLeftGround = false;
-	
+	DownHitCount = 0;
+	bPushScheduled = false;
+
+	// 激活期间监听再次受击：倒地中被打走专用轻推与重播，而不是重新激活本 GA
+	SetupDownHitListener();
+
+	// 先施加推力再播动画：起手段是靠 LaunchCharacter+根骨骼位移离地的
+	FPushTargetData PushData;
+	if (TriggerEventData && ExtractPushData(TriggerEventData->TargetData, PushData))
+	{
+		ApplyKnockDownPush(PushData);
+	}
+
 	PlayStartMontage();
+}
+
+void UGA_KnockDown::ApplyKnockDownPush(const FPushTargetData& PushData)
+{
+	SchedulePush(PushData.PushVelocity, PushData.bOverrideXY, PushData.bOverrideZ);
+}
+
+void UGA_KnockDown::SchedulePush(const FVector& Velocity, bool bOverrideXY, bool bOverrideZ)
+{
+	if (!K2_HasAuthority())
+	{
+		return;
+	}
+
+	// 同一次倒地的后续伤害段不覆盖第一次击飞
+	if (bPushScheduled)
+	{
+		return;
+	}
+	bPushScheduled = true;
+
+	PendingPushVelocity = Velocity;
+	bPendingPushOverrideXY = bOverrideXY;
+	bPendingPushOverrideZ = bOverrideZ;
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		bPushScheduled = false;
+		return;
+	}
+
+	FTimerDelegate Delegate;
+	Delegate.BindWeakLambda(this, [this]()
+	{
+		bPushScheduled = false;
+		ApplyPushToAvatar(PendingPushVelocity, bPendingPushOverrideXY, bPendingPushOverrideZ);
+	});
+	World->GetTimerManager().SetTimer(PushTimerHandle, Delegate, PushDelay, false);
+}
+
+void UGA_KnockDown::ApplyPushToAvatar(const FVector& Velocity, bool bOverrideXY, bool bOverrideZ)
+{
+	if (!K2_HasAuthority())
+	{
+		return;
+	}
+
+	// 必须 Multicast：本地控制角色只在服务端推会被客户端下一次 ServerMove 覆盖
+	if (AExtraCharacter* AvatarCharacter = Cast<AExtraCharacter>(GetAvatarActorFromActorInfo()))
+	{
+		AvatarCharacter->MulticastLaunchCharacter(Velocity, bOverrideXY, bOverrideZ);
+	}
 }
 
 UAnimInstance* UGA_KnockDown::GetAvatarAnimInstance() const
@@ -62,9 +130,21 @@ void UGA_KnockDown::PlayStartMontage()
 {
 	CurrentPhase = EKnockDownPhase::Start;
 
-	// 起手阶段就开始监听落地：低空被击飞时可能还没播完就落地了
+	// 重受击会重播起手段：先清理上一次的播放任务，避免回调叠加
+	if (PlayStartTask)
+	{
+		PlayStartTask->OnBlendOut.RemoveDynamic(this, &ThisClass::OnStartMontageFinished);
+		PlayStartTask->OnInterrupted.RemoveDynamic(this, &UGA_KnockDown::OnStartMontageInterrupted);
+		PlayStartTask->OnCancelled.RemoveDynamic(this, &UGA_KnockDown::OnStartMontageInterrupted);
+		PlayStartTask->EndTask();
+		PlayStartTask = nullptr;
+	}
+
+	// 起手阶段就开始监听落地：低空被击飞时可能还没播完就落地了。
+	// 重播时先解绑再绑定，避免重复注册
 	if (ACharacter* AvatarChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
 	{
+		AvatarChar->LandedDelegate.RemoveDynamic(this, &UGA_KnockDown::OnLandDetected);
 		AvatarChar->LandedDelegate.AddDynamic(this, &UGA_KnockDown::OnLandDetected);
 	}
 	if (UWorld* World = GetWorld())
@@ -72,12 +152,55 @@ void UGA_KnockDown::PlayStartMontage()
 		World->GetTimerManager().SetTimer(LandCheckTimerHandle, this, &UGA_KnockDown::PollLandCheck, LandCheckInterval, true);
 	}
 
-	UAbilityTask_PlayMontageAndWait* PlayStartTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+	PlayStartTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this, NAME_None, KnockDownStartMontage);
-	PlayStartTask->OnBlendOut.AddDynamic(this,&ThisClass::OnStartMontageFinished);
+	PlayStartTask->OnBlendOut.AddDynamic(this, &ThisClass::OnStartMontageFinished);
 	PlayStartTask->OnInterrupted.AddDynamic(this, &UGA_KnockDown::OnStartMontageInterrupted);
 	PlayStartTask->OnCancelled.AddDynamic(this, &UGA_KnockDown::OnStartMontageInterrupted);
 	PlayStartTask->ReadyForActivation();
+}
+
+void UGA_KnockDown::SetupDownHitListener()
+{
+	// 倒地中被打有两种事件来源：攻击配置了击飞段发 ability.knockdown，
+	// 普通攻击发 ability.hitreact（受击 GA 被本 GA 的 BlockAbilitiesWithTag 挡住）。
+	// 两者都走会触发再次受击。
+	
+	UAbilityTask_WaitGameplayEvent* KnockDownTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, UUExtraAbilitySystemStatic::GetKnockDownEventTag(), nullptr, false, false);
+	KnockDownTask->EventReceived.AddDynamic(this, &UGA_KnockDown::OnDownHitReceived);
+	KnockDownTask->ReadyForActivation();
+
+	UAbilityTask_WaitGameplayEvent* HitReactTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, UUExtraAbilitySystemStatic::GetHitReactEventTag(), nullptr, false, false);
+	HitReactTask->EventReceived.AddDynamic(this, &UGA_KnockDown::OnDownHitReceived);
+	HitReactTask->ReadyForActivation();
+}
+
+void UGA_KnockDown::OnDownHitReceived(FGameplayEventData Payload)
+{
+	// 倒地中再次被打：固定上方速度轻推 + 重播起手段；起身阶段或次数用尽则忽略
+	if (!K2_HasAuthority())
+	{
+		return;
+	}
+	if (CurrentPhase != EKnockDownPhase::Start && CurrentPhase != EKnockDownPhase::Loop)
+	{
+		return;
+	}
+	if (DownHitCount >= MaxDownHits)
+	{
+		return;
+	}
+	++DownHitCount;
+
+	// 只覆盖 Z，保留当前水平速度
+	SchedulePush(DownHitVelocity, false, true);
+
+	// 回到起手：停 Loop、重置离地门闩，重新走一遍落地检测
+	StopLoopMontage();
+	bHasLeftGround = false;
+	PlayStartMontage();
 }
 
 void UGA_KnockDown::OnStartMontageFinished()
@@ -252,6 +375,7 @@ void UGA_KnockDown::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(LandCheckTimerHandle);
+		World->GetTimerManager().ClearTimer(PushTimerHandle);
 	}
 
 	// 解绑落地事件
@@ -271,6 +395,8 @@ void UGA_KnockDown::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 	}
 
 	CurrentPhase = EKnockDownPhase::None;
+	DownHitCount = 0;
+	PlayStartTask = nullptr;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

@@ -19,9 +19,6 @@ UGA_AttackPro_Phase_2::UGA_AttackPro_Phase_2()
 
 	// 长按普攻达到阈值时，角色按「是否就绪」分派到这个专属 Tag
 	InputTag = UUExtraAbilitySystemStatic::GetAttackProInputTag();
-
-	// 命中累积寒意
-	bEnableEnergyGain = true;
 }
 
 void UGA_AttackPro_Phase_2::ActivateAbility(const FGameplayAbilitySpecHandle Handle,

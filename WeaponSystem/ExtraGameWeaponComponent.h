@@ -157,8 +157,9 @@ public:
 	void OnASCInitialized();
 
 	// ── 轨迹伤害扫描（由 ANS_WeaponTrace 驱动） ─────────────────
-	// 攻击窗口开始：收集当前武器组参与扫描的 Socket 并清空窗口状态
-	void BeginWeaponTrace();
+	// 攻击窗口开始：收集当前武器组参与扫描的 Socket 并清空窗口状态。
+	// InDamageWindowId：本窗口的伤害窗口标识（与 GA 攻击段表 DamageWindows 对应），随命中事件发出
+	void BeginWeaponTrace(FName InDamageWindowId = NAME_None);
 
 	// 每动画帧推进：记录各 Socket 世界坐标，对 prev→cur 做球体扫描
 	void TickWeaponTrace();
@@ -310,6 +311,9 @@ private:
 	TMap<FName, FVector> TraceSocketPrevLocations;
 	// 已命中黑名单：本窗口内已结算过的 Actor，重复扫到不再结算；窗口结束清空
 	TSet<TWeakObjectPtr<AActor>> AlreadyHitActors;
+
+	// 本窗口的伤害窗口标识（由 ANS_WeaponTrace 注入，随命中事件发出）
+	FName ActiveDamageWindowId = NAME_None;
 
 	// 从当前武器组收集参与扫描的 Socket 与配置
 	bool GatherTraceSocketsFromCurrentGroup();

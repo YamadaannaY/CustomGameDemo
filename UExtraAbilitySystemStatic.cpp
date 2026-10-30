@@ -75,6 +75,14 @@ UE_DEFINE_GAMEPLAY_TAG(Ability_HitReact, "ability.hitreact");
 UE_DEFINE_GAMEPLAY_TAG(State_HitReactCooldown, "State.HitReact.Cooldown");
 UE_DEFINE_GAMEPLAY_TAG(Ability_KnockDown, "ability.knockdown");
 
+UE_DEFINE_GAMEPLAY_TAG(HitReaction_Level, "Data.HitReaction.Level");
+UE_DEFINE_GAMEPLAY_TAG(HitReaction_KnockbackX, "Data.HitReaction.KnockbackX");
+UE_DEFINE_GAMEPLAY_TAG(HitReaction_KnockbackY, "Data.HitReaction.KnockbackY");
+UE_DEFINE_GAMEPLAY_TAG(HitReaction_KnockbackZ, "Data.HitReaction.KnockbackZ");
+UE_DEFINE_GAMEPLAY_TAG(HitReaction_OverrideXY, "Data.HitReaction.OverrideXY");
+UE_DEFINE_GAMEPLAY_TAG(HitReaction_OverrideZ, "Data.HitReaction.OverrideZ");
+UE_DEFINE_GAMEPLAY_TAG(HitReaction_Trigger, "Data.HitReaction.Trigger");
+
 // 伤害飘字 Cue。必须以 GameplayCue. 开头，否则 GameplayCueManager 不会认
 UE_DEFINE_GAMEPLAY_TAG(DamageNumber_Cue, "GameplayCue.Damage.Number");
 
@@ -358,6 +366,41 @@ FGameplayTag UUExtraAbilitySystemStatic::GetKnockDownEventTag()
 	return Ability_KnockDown;
 }
 
+FGameplayTag UUExtraAbilitySystemStatic::GetHitReactionLevelTag()
+{
+	return HitReaction_Level;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHitReactionKnockbackXTag()
+{
+	return HitReaction_KnockbackX;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHitReactionKnockbackYTag()
+{
+	return HitReaction_KnockbackY;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHitReactionKnockbackZTag()
+{
+	return HitReaction_KnockbackZ;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHitReactionOverrideXYTag()
+{
+	return HitReaction_OverrideXY;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHitReactionOverrideZTag()
+{
+	return HitReaction_OverrideZ;
+}
+
+FGameplayTag UUExtraAbilitySystemStatic::GetHitReactionTriggerTag()
+{
+	return HitReaction_Trigger;
+}
+
 void UUExtraAbilitySystemStatic::SendHitReactEvent(AActor* Target, AActor* Instigator)
 {
 	if (!IsValid(Target))
@@ -368,7 +411,23 @@ void UUExtraAbilitySystemStatic::SendHitReactEvent(AActor* Target, AActor* Insti
 	FGameplayEventData EventData;
 	EventData.Instigator = Instigator;
 	EventData.Target = Target;
+
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Target, GetHitReactEventTag(), EventData);
+}
+
+void UUExtraAbilitySystemStatic::SendKnockDownEvent(AActor* Target, AActor* Instigator, const FPushTargetData& PushData)
+{
+	if (!IsValid(Target))
+	{
+		return;
+	}
+
+	FGameplayEventData EventData;
+	EventData.Instigator = Instigator;
+	EventData.Target = Target;
+	EventData.TargetData.Add(new FPushTargetData(PushData));
+
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Target, GetKnockDownEventTag(), EventData);
 }
 
 FGameplayTag UUExtraAbilitySystemStatic::GetDamageNumberCueTag()

@@ -6,10 +6,12 @@
 #include "GA_KnockDown.generated.h"
 
 class UAnimMontage;
+class UAbilityTask_PlayMontageAndWait;
+struct FPushTargetData;
 
 /**
- * 受击连段后倒地。
- * 触发：GA_HitReact 判定受击窗口内累计次数达阈值后，把 ability.knockdown 发回自身 *
+ * 受击后倒地效果，被动GA。
+ * 触发：攻击 GA 命中目标时发 ability.knockdown（负载带推力参数），由 AbilityTriggers 收到并激活此GA
  */
 UCLASS()
 class EXTRACTGAMECHARACTER_API UGA_KnockDown : public UExtraPassiveGameplayAbility
@@ -63,7 +65,48 @@ private:
 	void PlayEndMontage();
 	void StopLoopMontage();
 
-	// 落地委托与轮询共用的入口，带阶段与 IsFalling 双重校验
+	// 激活瞬间施加击飞推力（参数由攻击方的伤害段经 GE 参数带到受击侧被动倒地GA的TriggerEventData中）
+	void ApplyKnockDownPush(const FPushTargetData& PushData);
+
+	// 通过 Multicast 在各端本地施加推力：
+	// 本地控制角色只在服务端推会被客户端 ServerMove 覆盖，必须两端各自执行
+	void ApplyPushToAvatar(const FVector& Velocity, bool bOverrideXY, bool bOverrideZ);
+
+	// 延迟施加推力：激活流程里直接推可能被同帧移动更新压掉
+	void SchedulePush(const FVector& Velocity, bool bOverrideXY, bool bOverrideZ);
+
+	// 击飞推力的延迟施加时间
+	UPROPERTY(EditDefaultsOnly, Category = "KnockDown|Push", meta = (ClampMin = "0.0"))
+	float PushDelay = 0.1f;
+
+	FVector PendingPushVelocity = FVector::ZeroVector;
+	bool bPendingPushOverrideXY = false;
+	bool bPendingPushOverrideZ = true;
+	// 同一次倒地只认第一次击飞，避免后续伤害段覆盖首段数值
+	bool bPushScheduled = false;
+	FTimerHandle PushTimerHandle;
+
+	// ── 倒地中再次受击 ────────────────────────────────────────
+	// 倒地 Start/Loop 阶段再次被击中：用固定的上方速度轻推并重播起手段，
+	// 不沿用攻击本身的击飞参数。次数上限内有效，起身阶段不再触发。
+	UPROPERTY(EditDefaultsOnly, Category = "KnockDown|DownHit")
+	FVector DownHitVelocity = FVector(0.0f, 0.0f, 200.0f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "KnockDown|DownHit", meta = (ClampMin = "0"))
+	int32 MaxDownHits = 3;
+
+	int32 DownHitCount = 0;
+
+	void SetupDownHitListener();
+
+	UFUNCTION()
+	void OnDownHitReceived(FGameplayEventData Payload);
+
+	// 起手段播放任务：重受击重播时需要先清理旧任务
+	UPROPERTY()
+	TObjectPtr<UAbilityTask_PlayMontageAndWait> PlayStartTask;
+
+	// 落地委托与轮询共用的入口，带阶段与 IsFalling 双重校验	
 	void TryTriggerLand();
 	
 	// 被动基类没有 GetOwnerAnimInstance（那个在主动基类上），这里自己取

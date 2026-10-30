@@ -2,6 +2,9 @@
 
 #include "ExtraGameAttributeSet.h"
 #include "ExtractGameCharacter/AI/ExtraAICharacter.h"
+#include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
+#include "ExtractGameCharacter/GAS/ExtraGameplayTypes.h"
+#include "GameplayEffect.h"
 #include "GameplayEffectTypes.h"
 #include "GameplayEffectExtension.h"
 #include "Net/UnrealNetwork.h"
@@ -98,6 +101,12 @@ void UExtraGameAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModC
 	// GE 执行后再次 Clamp
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
+		// 掉血即视为被攻击命中：受击/倒地由受击侧按 GE 参数决定
+		if (Data.EvaluatedData.Magnitude < 0.f)
+		{
+			HandleHitReaction(Data);
+		}
+
 		SetHealth(FMath::Clamp(GetHealth(), 0.f, GetMaxHealth()));
 
 		if (GetHealth() == 0.f)
@@ -125,7 +134,51 @@ void UExtraGameAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModC
 	}
 }
 
-// ── Rep 回调 ──────────────────────────────────────────
+void UExtraGameAttributeSet::HandleHitReaction(const FGameplayEffectModCallbackData& Data) const
+{
+	AActor* Victim = Data.Target.GetOwnerActor();
+	if (!IsValid(Victim))
+	{
+		return;
+	}
+
+	const FGameplayEffectSpec& Spec = Data.EffectSpec;
+	AActor* Instigator = Spec.GetEffectContext().GetInstigator();
+
+	// 多段伤害只在需要表现的段发事件：后续段显式写 0 抑制；未写参数（环境伤害等）按默认触发
+	const float Trigger = Spec.GetSetByCallerMagnitude(
+		UUExtraAbilitySystemStatic::GetHitReactionTriggerTag(), false, 1.f);
+	if (Trigger <= 0.f)
+	{
+		return;
+	}
+
+	//0受击 1击倒
+	const float Level = Spec.GetSetByCallerMagnitude(
+		UUExtraAbilitySystemStatic::GetHitReactionLevelTag(), false, 0.f);
+	if (Level < 1.f)
+	{
+		UUExtraAbilitySystemStatic::SendHitReactEvent(Victim, Instigator);
+		return;
+	}
+
+	// 击飞向量在 GE 里是攻击者本地空间（X 前 / Y 右 / Z 上），这里转成世界空间交给倒地 GA
+	const FVector LocalKnockback(
+		Spec.GetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionKnockbackXTag(), false, 0.f),
+		Spec.GetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionKnockbackYTag(), false, 0.f),
+		Spec.GetSetByCallerMagnitude(UUExtraAbilitySystemStatic::GetHitReactionKnockbackZTag(), false, 0.f));
+
+	FPushTargetData PushData;
+	PushData.PushVelocity = (Instigator && !LocalKnockback.IsNearlyZero())
+		? FRotator(0.f, Instigator->GetActorRotation().Yaw, 0.f).RotateVector(LocalKnockback)
+		: LocalKnockback;
+	PushData.bOverrideXY = Spec.GetSetByCallerMagnitude(
+		UUExtraAbilitySystemStatic::GetHitReactionOverrideXYTag(), false, 0.f) > 0.5f;
+	PushData.bOverrideZ = Spec.GetSetByCallerMagnitude(
+		UUExtraAbilitySystemStatic::GetHitReactionOverrideZTag(), false, 1.f) > 0.5f;
+
+	UUExtraAbilitySystemStatic::SendKnockDownEvent(Victim, Instigator, PushData);
+}
 
 void UExtraGameAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth)
 {

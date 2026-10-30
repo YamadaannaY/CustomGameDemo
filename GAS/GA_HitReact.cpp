@@ -3,9 +3,10 @@
 
 #include "GA_HitReact.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
-#include "AbilitySystemBlueprintLibrary.h"
 #include "Animation/AnimMontage.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
+#include "TimerManager.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 
 UGA_HitReact::UGA_HitReact()
@@ -52,30 +53,73 @@ void UGA_HitReact::OnReactActivated(const FGameplayEventData* TriggerEventData)
 		return;
 	}
 
-	if (ShouldKnockDown(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f))
+	const ACharacter* AvatarCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (AvatarCharacter && AvatarCharacter->CustomTimeDilation <= KINDA_SMALL_NUMBER)
 	{
-		AActor* Avatar = GetAvatarActorFromActorInfo();
-
-		// 攻击者随 TriggerEventData 透传过去，供 KnockDown 决定击飞方向
-		const FGameplayEventData KnockData = TriggerEventData ? *TriggerEventData : FGameplayEventData();
-
-		// 先收掉自己再转交：KnockDown 激活时会取消一切进行中的能力
-		K2_EndAbility();
-
-		if (Avatar)
-		{
-			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-				Avatar, UUExtraAbilitySystemStatic::GetKnockDownEventTag(), KnockData);
-		}
+		PendingMontage = Montage;
+		StartWaitingForUnfreeze();
 		return;
 	}
 
+	PlayHitReactMontage(Montage);
+}
+
+void UGA_HitReact::PlayHitReactMontage(UAnimMontage* Montage)
+{
 	PlayHitReactTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage);
 	PlayHitReactTask->OnCompleted.AddDynamic(this, &ThisClass::OnHitReactMontageFinished);
 	PlayHitReactTask->OnBlendOut.AddDynamic(this, &ThisClass::OnHitReactMontageFinished);
 	PlayHitReactTask->OnInterrupted.AddDynamic(this, &ThisClass::OnHitReactMontageFinished);
 	PlayHitReactTask->OnCancelled.AddDynamic(this, &ThisClass::OnHitReactMontageFinished);
 	PlayHitReactTask->ReadyForActivation();
+}
+
+void UGA_HitReact::StartWaitingForUnfreeze()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		K2_EndAbility();
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(UnfreezeCheckTimerHandle, this, &UGA_HitReact::TryPlayAfterUnfreeze, 0.05f, true);}
+
+void UGA_HitReact::TryPlayAfterUnfreeze()
+{
+	const ACharacter* AvatarCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!AvatarCharacter || AvatarCharacter->CustomTimeDilation > KINDA_SMALL_NUMBER)
+	{
+		UAnimMontage* Montage = PendingMontage;
+		PendingMontage = nullptr;
+		StopWaitingForUnfreeze();
+
+		if (Montage)
+		{
+			PlayHitReactMontage(Montage);
+		}
+		else
+		{
+			K2_EndAbility();
+		}
+	}
+}
+
+void UGA_HitReact::StopWaitingForUnfreeze()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(UnfreezeCheckTimerHandle);
+	}
+}
+
+void UGA_HitReact::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	StopWaitingForUnfreeze();
+	PendingMontage = nullptr;
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
 UAnimMontage* UGA_HitReact::SelectHitReactMontage(const AActor* Attacker) const
@@ -99,24 +143,4 @@ UAnimMontage* UGA_HitReact::SelectHitReactMontage(const AActor* Attacker) const
 void UGA_HitReact::OnHitReactMontageFinished()
 {
 	K2_EndAbility();
-}
-
-bool UGA_HitReact::ShouldKnockDown(float Now)
-{
-	// 严格滑动窗口：先剔除窗口外的旧记录
-	RecentHitTimes.RemoveAll([this, Now](float Time)
-	{
-		return Now - Time > KnockDownWindow;
-	});
-
-	// 窗口内已经攒够（阈值 - 1）次，本次就是压垮的那一下
-	if (RecentHitTimes.Num() >= HitCountToKnockDown - 1)
-	{
-		// 倒地后清空，起身再挨打从头累计
-		RecentHitTimes.Reset();
-		return true;
-	}
-
-	RecentHitTimes.Add(Now);
-	return false;
 }

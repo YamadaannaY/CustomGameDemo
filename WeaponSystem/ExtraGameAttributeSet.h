@@ -42,6 +42,10 @@ public:
 	// 属性变化后回调（BaseValue → CurrentValue，触发 GameplayEffect 执行）
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 
+	// 被攻击时的受击表现：读伤害 GE 的 SetByCaller 参数，决定播受击还是倒地并发出事件，并获取PushVel等参数信息。
+	// 参数由攻击方写入伤害 GE 的 SetByCaller（FAttackSegmentConfig），受击侧只负责执行
+	void HandleHitReaction(const FGameplayEffectModCallbackData& Data) const;
+
 	// ── 核心属性 ─────────────────────────────────────────
 
 	// 当前生命值

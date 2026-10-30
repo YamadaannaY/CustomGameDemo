@@ -8,9 +8,6 @@ UGA_Combo_Phase_2::UGA_Combo_Phase_2()
 {
 	// 居合进行中不可激活普攻：居合 GA 用 loose tag 开关，AN 分界事件后移除即放行
 	ActivationBlockedTags.AddTag(UUExtraAbilitySystemStatic::GetJuheStateTag());
-
-	// 命中累积寒意：每段的值配在基类 EnergyGainPerSection（按 Section 名）
-	bEnableEnergyGain = true;
 }
 
 void UGA_Combo_Phase_2::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

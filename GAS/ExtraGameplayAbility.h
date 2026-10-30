@@ -176,37 +176,53 @@ protected:
 	// 子类如需追加独有逻辑（击飞/附加效果），先调用 Super::DoDamage(Data)。
 	virtual void DoDamage(const FGameplayEventData& Data);
 
-	// 开启后，同一段攻击命中目标时按 ResolveEnergyGainPerHit() 值累积一次能量
+	// ── 攻击段配置（伤害多段 / 能量 / 表现）────────────────────
+	// key = Montage Section 名（无 Section 时用 Montage 资产名）。
+	// 未配置的 GA 回退旧的单段 DoDamage 路径，行为不变。
+	UPROPERTY(EditDefaultsOnly, Category = "Damage|Segment")
+	TMap<FName, FAttackSegmentConfig> AttackSegmentConfigs;
+
+	// 统一伤害结算入口：把配置展开成多段，按 SegmentInterval 调度，目标在命中瞬间锁定。
+	// WindowId 非空时优先取配置里对应的伤害窗口段，找不到回退整段配置。
+	// DoDamage / 范围伤害共用；投射物后续也可复用。
+	void ApplyDamageProfile(const TArray<AActor*>& Targets, const FAttackSegmentConfig& Config, FName WindowId = NAME_None);
+
+	// 当前 Section 对应的攻击段配置；未配置返回 nullptr
+	const FAttackSegmentConfig* FindAttackSegmentConfig() const;
+
+	// 能量去重：同一 Montage/Section 只返回一次 Value
+	float ClaimEnergyValue(float Value);
+
+	// 单个目标的伤害段调度状态（多目标时各自独立推进，互不覆盖）
+	struct FDamageSequence
+	{
+		TWeakObjectPtr<AActor> Target;
+		TArray<FDamageSegment> Segments;   // Count 已展开成多条
+		int32 NextIndex = 0;
+		float Interval = 0.f;
+		bool bSendHitReact = true;
+		// 一次命中序列只允许第一个击飞段生效，后续段即使勾了击飞也抑制
+		bool bKnockDownUsed = false;
+		FTimerHandle TimerHandle;
+	};
+
+	TArray<TSharedPtr<FDamageSequence>> ActiveDamageSequences;
+
+	void ApplyNextDamageSegment(TWeakObjectPtr<AActor> Target);
+	void ClearDamageSequences();
+
+	// 能量数值由 AttackSegmentConfigs 的 EnergyGain 提供；这里只保留资格门控（留空 = 不限）。
 	UPROPERTY(EditDefaultsOnly, Category = "Energy")
-	bool bEnableEnergyGain = false;
-
-	// 兜底值
-	UPROPERTY(EditDefaultsOnly, Category = "Energy", meta = (EditCondition = "bEnableEnergyGain"))
-	float EnergyGainPerHit = 0.f;
-
-	// 按 Section 名配置：一个 Montage 多段各给不同值
-	UPROPERTY(EditDefaultsOnly, Category = "Energy", meta = (EditCondition = "bEnableEnergyGain"))
-	TMap<FName, float> EnergyGainPerSection;
-
-	// 按 Montage 配置：一次攻击由多个 Montage 组成时各给不同值
-	UPROPERTY(EditDefaultsOnly, Category = "Energy", meta = (EditCondition = "bEnableEnergyGain"))
-	TMap<TObjectPtr<UAnimMontage>, float> EnergyGainPerMontage;
-
-	// 获取能量的资格 Tag（留空 = 不限）。
-	UPROPERTY(EditDefaultsOnly, Category = "Energy", meta = (EditCondition = "bEnableEnergyGain"))
 	FGameplayTagContainer EnergyGainRequiredTags;
 
-	// 命中一次累积具体能量，需要GA子类覆写当前激活的Montage段
-	virtual float ResolveEnergyGainPerHit() const; 
+	// 当前攻击段配置的能量值（已检查 RequiredTags）；未配置返回 0
+	float GetConfiguredEnergyGain() const;
 
 	virtual UAnimMontage* GetEnergyGainMontage() const;
 	virtual FName GetEnergyGainSection() const;
 
 	// 权威端给自身累积能量（封顶由属性集按 EnergyMaxValue 处理）
 	void AddEnergyValue(float Delta);
-
-	// 为「当前这一段攻击」认领能量：同一 Montage/Section 只有第一次调用返回非 0，多段伤害只结算一次能量
-	float ClaimEnergyForCurrentAttack();
 
 	// 能量去重：本次结算对应的是哪一段攻击（Montage + Section）。
 	// 同一段内武器轨迹 / 范围伤害多次进入 DoDamage 时只结算一次；换段即视为新的一次攻击。
@@ -248,7 +264,7 @@ protected:
 	// LockTarget→锁定目标位置（无锁定回退角色位置）。Radius <=0 时回退到 AreaDamageRadius。
 	// 内部事件回调调用；子类也可在无 Notify 的时机手动触发（注意只应权威端执行）。
 	void PerformAreaDamage(const FVector& CenterOffset = FVector::ZeroVector, float Radius = 0.f,
-	                       EAreaCenterMode CenterMode = EAreaCenterMode::Inherit);
+	                       EAreaCenterMode CenterMode = EAreaCenterMode::Inherit, FName WindowId = NAME_None);
 
 	// 挂载范围伤害事件监听
 	void SetupAreaDamageListener();
