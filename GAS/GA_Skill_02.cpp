@@ -520,10 +520,6 @@ void UGA_Skill_02::PlayLandAttackLandMontage()
 	{
 		if (LandAttackStartMontage) { ASC->StopMontageIfCurrent(*LandAttackStartMontage); }
 	}
-	if (LandAttackStartMontage && AnimInst->Montage_IsPlaying(LandAttackStartMontage))
-	{
-		AnimInst->Montage_StopWithBlendOut(LandAttackStartMontage->BlendOut, LandAttackStartMontage);
-	}
 
 	// 落地段必须走 ASC：模拟端靠 RepAnimMontageInfo 接收，直连播不会复制过去
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
@@ -565,4 +561,3 @@ void UGA_Skill_02::OnLandAttackLandMontageEnded(UAnimMontage* Montage, bool bInt
 {
 	K2_EndAbility();
 }
-      

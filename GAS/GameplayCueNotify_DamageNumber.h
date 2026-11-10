@@ -17,6 +17,7 @@ class EXTRACTGAMECHARACTER_API UGameplayCueNotify_DamageNumber : public UGamepla
 	GENERATED_BODY()
 
 public:
+	UGameplayCueNotify_DamageNumber();
 	virtual bool OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) const override;
 
 	// 飘字 Actor 类

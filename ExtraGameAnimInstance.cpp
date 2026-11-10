@@ -111,7 +111,7 @@ void UExtraGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		bIsMoving = GroundSpeed > 3.f && OwnerMovementComp->IsMovingOnGround();
 
-		//缓存速度用来处理停步
+		//缓存速度用来处理停步，停步触发时，GroundSpeed不会再更新，保持在那个值并使用专用减速度进行减速
 		if (!bRequestStop)
 		{
 			CacheVelocity = OwnerCharacter->GetVelocity();

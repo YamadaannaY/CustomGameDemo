@@ -6,7 +6,6 @@
 #include "Animation/AnimMontage.h"
 #include "TimerManager.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
-#include "Animation/AnimMontage.h"
 #include "EngineUtils.h"
 #include "DrawDebugHelpers.h"
 #include "Components/CapsuleComponent.h"
@@ -24,7 +23,7 @@
 
 namespace
 {
-	// 应用一次伤害 Spec 并按前后属性差发飘字（多段结算与旧路径共用口径）
+	// 应用一次伤害 Spec 并按前后属性差发飘字
 	void ApplyDamageSpecAndReportCue(UAbilitySystemComponent* SourceASC, AActor* Target,
 		UAbilitySystemComponent* TargetASC, const FGameplayEffectSpec& Spec)
 	{
@@ -369,7 +368,7 @@ void UExtraGameplayAbility::ApplyDamageProfile(const TArray<AActor*>& Targets, c
 		return;
 	}
 
-	// 有伤害窗口 ID 且配置里命中时用窗口段，否则用整段兜底
+	// 初始赋值为默认窗口，有伤害窗口 ID 且配置里命中时用具体ID窗口段
 	const TArray<FDamageSegment>* SourceSegments = &Config.DamageSegments;
 	if (WindowId != NAME_None)
 	{
@@ -423,6 +422,7 @@ void UExtraGameplayAbility::ApplyDamageProfile(const TArray<AActor*>& Targets, c
 			continue;
 		}
 
+		//为每个Target配置一个Seq，这个Seq包含目标、多段同一个伤害的数组，以及激活间隔，是否触发受击
 		TSharedPtr<FDamageSequence> Sequence = MakeShared<FDamageSequence>();
 		Sequence->Target = Target;
 		Sequence->Segments = Segments;
@@ -517,6 +517,7 @@ void UExtraGameplayAbility::ApplyNextDamageSegment(TWeakObjectPtr<AActor> Target
 		return;
 	}
 
+	//递归，如果有间隔，则过了间隔之后再触发下一段伤害
 	if (Sequence->Interval > 0.f)
 	{
 		if (UWorld* World = GetWorld())

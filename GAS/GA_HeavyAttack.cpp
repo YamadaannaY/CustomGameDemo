@@ -8,6 +8,7 @@
 #include "EngineUtils.h"
 #include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/ExtraCharacter.h"
+#include "ExtractGameCharacter/AI/ExtraAICharacter.h"
 #include "ExtractGameCharacter/ExtraPlayerCharacter.h"
 #include "ExtractGameCharacter/Projectile/ExtraArrow.h"
 #include "ExtractGameCharacter/WeaponSystem/ExtraGameAttributeSet.h"
@@ -74,6 +75,8 @@ void UGA_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
 	if (HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
 	{
+		// 时停：冻结场上所有 AI 角色
+		ApplyTimeFreeze();
 
 		UpdateAimSnapshot();
 
@@ -121,10 +124,11 @@ void UGA_HeavyAttack::ApplyTimeFreeze()
 		return;
 	}
 
-	for (TActorIterator<AExtraCharacter> It(World); It; ++It)
+	// 只冻结 AI 角色，不波及玩家
+	for (TActorIterator<AExtraAICharacter> It(World); It; ++It)
 	{
-		AExtraCharacter* Enemy = *It;
-		if (!Enemy || Enemy == Char)
+		AExtraAICharacter* Enemy = *It;
+		if (!Enemy)
 		{
 			continue;
 		}

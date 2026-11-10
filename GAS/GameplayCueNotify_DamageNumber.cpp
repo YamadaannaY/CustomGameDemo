@@ -1,7 +1,13 @@
 #include "GameplayCueNotify_DamageNumber.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "ExtractGameCharacter/UExtraAbilitySystemStatic.h"
 #include "ExtractGameCharacter/UI/DamageNumberActor.h"
+
+UGameplayCueNotify_DamageNumber::UGameplayCueNotify_DamageNumber()
+{
+	GameplayCueTag  = UUExtraAbilitySystemStatic::GetDamageNumberCueTag();
+}
 
 bool UGameplayCueNotify_DamageNumber::OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) const
 {
@@ -33,7 +39,7 @@ bool UGameplayCueNotify_DamageNumber::OnExecute_Implementation(AActor* MyTarget,
 	SpawnLocation.Z += SpawnHeightOffset;
 
 	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	if (ADamageNumberActor* DamageNumber = World->SpawnActor<ADamageNumberActor>(
 		DamageNumberActorClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams))
 	{

@@ -41,8 +41,9 @@ void UGameplayWidget::UpdateComboEnergyText()
 	const float CurrentEnergy = OwnerAbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyValueAttribute());
 	const float MaxEnergy = OwnerAbilitySystemComponent->GetNumericAttribute(UExtraGameAttributeSet::GetEnergyMaxValueAttribute());
 
-	//与 ValueGauge 的数值文本保持一致：无小数、当前值/最大值
-	const FNumberFormattingOptions FormatOps = FNumberFormattingOptions().SetMaximumFractionalDigits(0);
+	//与 ValueGauge 的数值文本保持一致：无小数、不做千分位分组、当前值/最大值
+	const FNumberFormattingOptions FormatOps =
+		FNumberFormattingOptions().SetMaximumFractionalDigits(0).SetUseGrouping(false);
 	ComboValueText->SetText(FText::Format(
 		FTextFormat::FromString(TEXT("{0}/{1}")),
 		FText::AsNumber(CurrentEnergy, &FormatOps),

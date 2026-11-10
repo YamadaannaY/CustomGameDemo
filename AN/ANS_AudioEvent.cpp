@@ -114,6 +114,7 @@ void UANS_AudioEvent::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenc
 	{
 		return;
 	}
+	//Rand值比概率大，意味着不触发
 	if (Settings.Probability < 1.f && FMath::FRand() >= Settings.Probability)
 	{
 		return;

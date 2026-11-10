@@ -24,7 +24,7 @@ protected:
 
 	// 进入 Section 后允许触发居合的窗口时长（秒）
 	UPROPERTY(EditDefaultsOnly, Category = "Energy")
-	float JuheReadyWindow = 3.f;
+	float JuheReadyWindow = 1.5f;
 
 private:
 	// 开启（刷新）居合窗口：置 State.JuheReady 并按 JuheReadyWindow 计时，超时自动清除

@@ -127,15 +127,6 @@ public:
 	// 本组件是否正在接管 SpringArm 的 TargetArmLength。接管期间角色的 Zoom 应让位，否则两边逐帧写同一个值会互相覆盖，臂长抖动
 	FORCEINLINE bool IsManagingArmLength() const { return bManagingArmLength; }
 
-	// ── 调试访问器（供 Gameplay Debugger 分类读取当前状态）──
-	const FCombatCameraRequest* GetActiveRequest() const { return FindActiveRequest(); }
-	FORCEINLINE FVector GetCurrentLocationOffset() const { return CurrentLocationOffset; }
-	FORCEINLINE FRotator GetCurrentArmRotationOffset() const { return CurrentArmRotationOffset; }
-	FORCEINLINE float GetCurrentArmLength() const { return CurrentArmLength; }
-	FORCEINLINE float GetCurrentFOV() const { return CurrentFOV; }
-	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
-	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
-
 protected:
 	// 返回当前应生效的请求（Priority 最高；相同则取最新 Push 的）。无请求返回 nullptr
 	// OutRequestId 非空时输出该请求的 ID（供接管状态判断Request是否变化），空时直接返回激活的Request

@@ -119,7 +119,8 @@ void UValueGauge::SetValue(float NewValue, float NewMaxValue)
 	}
 
 	//ValueText的设置，设置没有小数点，并且规定了Text的格式，传入值
-	const FNumberFormattingOptions FormatOps=FNumberFormattingOptions().SetMaximumFractionalDigits(0);
+	const FNumberFormattingOptions FormatOps =
+		FNumberFormattingOptions().SetMaximumFractionalDigits(0).SetUseGrouping(false);
 	const FText NewText = FText::Format(
 		FTextFormat::FromString("{0}/{1}"),
 		FText::AsNumber(NewValue, &FormatOps),

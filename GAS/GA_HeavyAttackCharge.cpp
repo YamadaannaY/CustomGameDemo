@@ -2,7 +2,6 @@
 
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
-#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "Animation/AnimInstance.h"
 #include "GameplayEffect.h"

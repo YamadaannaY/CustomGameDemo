@@ -238,14 +238,7 @@ void UGA_KnockDown::PlayLoopMontage()
 	{
 		ASC->PlayMontage(this, GetCurrentActivationInfo(), KnockDownLoopMontage, 1.0f);
 	}
-
-	/*
-	// section 自循环
-	if (const FName LoopSection = AnimInst->Montage_GetCurrentSection(KnockDownLoopMontage); LoopSection != NAME_None)
-	{
-		AnimInst->Montage_SetNextSection(LoopSection, LoopSection, KnockDownLoopMontage);
-	}*/
-
+	
 	// 监听 Loop 被外部打断：主动停 Loop 进 End 时相位已是 End，回调会直接返回
 	FOnMontageEnded LoopEndDelegate;
 	LoopEndDelegate.BindUObject(this, &UGA_KnockDown::OnLoopMontageEnded);

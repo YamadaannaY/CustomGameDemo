@@ -10,13 +10,10 @@ UGA_Skill_01::UGA_Skill_01()
 	SetAssetTags(AssetTags);
 	BlockAbilitiesWithTag.AddTag(UUExtraAbilitySystemStatic::GetSkill01Tag());
 
-	// 窗口：表现动画段挂 State.Uninterruptible，后摇段由 AN_EndUninterruptible 放开。
 	bEnableUninterruptible = true;
 
-	// 启用通用武器碰撞伤害（基类机制）：服务端监听命中事件并应用 DefaultDamageEffect
 	bEnableWeaponDamage = true;
 
-	// 启用锁定目标转向（MR）：攻击朝向锁定目标释放
 	bRotateToLockTarget = true;
 
 	InputTag = UUExtraAbilitySystemStatic::GetSkillInputTag();
