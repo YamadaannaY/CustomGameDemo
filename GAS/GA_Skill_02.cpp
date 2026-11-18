@@ -521,7 +521,7 @@ void UGA_Skill_02::PlayLandAttackLandMontage()
 		if (LandAttackStartMontage) { ASC->StopMontageIfCurrent(*LandAttackStartMontage); }
 	}
 
-	// 落地段必须走 ASC：模拟端靠 RepAnimMontageInfo 接收，直连播不会复制过去
+	// 落地段必须走 ASC：模拟端靠 RepAnimMontageInfo 接收
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->PlayMontage(this, GetCurrentActivationInfo(), LandAttackLandMontage, 1.0f);

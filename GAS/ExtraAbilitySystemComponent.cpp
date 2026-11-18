@@ -178,7 +178,8 @@ void UExtraAbilitySystemComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 {
 	if (Skill02ChargeTagEventHandle.IsValid())
 	{
-		RegisterGameplayTagEvent(UUExtraAbilitySystemStatic::GetSkill02CooldownTag(), EGameplayTagEventType::AnyCountChange)
+		RegisterGameplayTagEvent
+		(UUExtraAbilitySystemStatic::GetSkill02CooldownTag(), EGameplayTagEventType::AnyCountChange)
 			.Remove(Skill02ChargeTagEventHandle);
 		Skill02ChargeTagEventHandle.Reset();
 	}

@@ -69,10 +69,9 @@ void UGA_HeavyAttackCharge::EndAbility(const FGameplayAbilitySpecHandle Handle,
                                        const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
                                        bool bReplicateEndAbility, bool bWasCancelled)
 {
-	CurrentPlayingMontage = nullptr;
-	
 	// 兜底停掉仍在播的段（异常结束 / 被打断路径）
 	StopCurrentPlayingMontage();
+	CurrentPlayingMontage = nullptr;
 
 	// 兜底移除持续消耗（正常路径已在 EnterEndPhase 移除）
 	RemoveStaminaDrain();
@@ -88,17 +87,22 @@ UAbilityTask_PlayMontageAndWait* UGA_HeavyAttackCharge::PlayMontage(UAnimMontage
 	}
 
 	CurrentPlayingMontage = Montage;
-	
+
 	// 该任务会一直播放、不产生完成回调，直到被StopCurrentPlayingMontage停掉
 	return UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage);
 }
 
 void UGA_HeavyAttackCharge::StopCurrentPlayingMontage()
 {
-	UAnimInstance* Anim = GetOwnerAnimInstance();
-	if (Anim && CurrentPlayingMontage && Anim->Montage_IsPlaying(CurrentPlayingMontage))
+	if (!CurrentPlayingMontage)
 	{
-		Anim->Montage_Stop(-1, CurrentPlayingMontage);
+		return;
+	}
+
+	// 走 ASC：模拟端只认 RepAnimMontageInfo，直连 AnimInstance 停不会同步过去
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->StopMontageIfCurrent(*CurrentPlayingMontage);
 	}
 }
 
