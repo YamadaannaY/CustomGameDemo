@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "ExtraCharacterNetworkMoveData.h"
 #include "ExtraGameMovementComponent.generated.h"
 
 class UCurveFloat;
@@ -9,7 +10,9 @@ class UCurveVector;
 
 /*
  *  项目用CMC
- * -旋转逻辑：双层插值（目标朝向匀速逼近最后一次有效速度朝向+角色朝向指数逼近目标朝向） + 转向速率曲线（按速度档位读取）+ 相机转速放大（相机速度越大，转向速度越快以实现跟手效果）
+ * -地面旋转：双层插值（目标朝向匀速逼近最后一次有效速度朝向+角色朝向指数逼近目标朝向） + 转向速率曲线（按速度档位读取）+ 相机转速放大（相机速度越大，转向速度越快以实现跟手效果）
+ *  （由 bUseCustomPhysicsRotation 控制，关闭后完全交回基类 PhysicsRotation）
+ * -空中 / 游泳 / 飞行等其余模式：仍由基类 UCharacterMovementComponent::PhysicsRotation 处理
  * -MovementCurve 按速度档位驱动最大加速度/刹车减速度/地面摩擦
  */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -22,10 +25,18 @@ public:
 
 	virtual void BeginPlay() override;
 
-	// 空中（跳跃/下落）时转向的削弱系数，缩放两层插值速率：1 = 与地面完全一致，越小空中越难转向（线性）。
-	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation Settings)", meta=(ClampMin="0.01", ClampMax="1.0"))
+	// 转向实现开关（用于对比优化前后）：
+	// true  = 使用本项目的完整转向逻辑（地面双层插值 + 速率曲线 + 相机转速放大 + 项目特化分支）
+	// false = 完全交回基类 UCharacterMovementComponent::PhysicsRotation，
+	//         跳过客户端权威 Yaw 拦截、Montage 让位等所有项目特化分支。
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Movement (Rotation)")
+	bool bUseCustomPhysicsRotation = true;
+
+	// 空中（跳跃/下落）时转向的削弱系数：缩放基类 PhysicsRotation 使用的 RotationRate.Yaw。
+	// 1 = 与基类原始速率一致，越小空中越难转向。不能为 0（速率 0 时基类会瞬间对齐目标）。
+	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.01", ClampMax="1.0"))
 	float AirRotationScale = 0.3f;
-	
+
 	// 第一层插值速率（deg/s）：把缓存的 TargetRotation 匀速推向「速度方向」。越大目标跟得越紧
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
 	float TargetRotationInterpSpeed = 800.f;
@@ -33,10 +44,6 @@ public:
 	// 第二层插值用的转向速率曲线：横轴 = 映射速度（0 停 / 1 走 / 2 跑 / 3 冲刺），纵轴 = deg/s。
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)")
 	TObjectPtr<UCurveFloat> RotationRateCurve;
-
-	// 速度高于此值（cm/s）才刷新「最后输入方向」，低于此值可以看做已经没有输入了，将此刻输入朝向作为输入朝向
-	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
-	float MovingSpeedRefreshThreshold = 50.f;
 
 	// 相机转速放大：相机 yaw 变化率达到 MaxCameraYawRate 时，转向速率放大到 MaxCameraYawRateMultiplier 倍。
 	// 甩镜头越快角色跟得越紧，是「跟手」的来源
@@ -62,11 +69,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Stop)", meta=(ClampMin="0.0"))
 	float StopBrakingDeceleration = 500.f;
 
-	void SetClientAuthoritativeYaw(float InYaw)
-	{
-		bHasClientAuthoritativeYaw = true;
-	}
-	
 	// 把当前速度映射到 0..3的区间内：0 = 停，1 = 走，2 = 跑，3 = 冲刺
 	// 这样做的意义是为了换速度数据时曲线不用重画
 	float GetMappedSpeed() const;
@@ -78,6 +80,11 @@ public:
 	virtual void PhysWalking(float DeltaTime, int32 Iterations) override;
 	
 	virtual void PhysicsRotation(float DeltaTime) override;
+
+	// 服务端处理一次客户端移动：期间抑制本项目/原生的旋转计算，
+	// Super 完成后用客户端这次移动的结束朝向覆盖胶囊朝向。
+	virtual void ServerMove_PerformMovement(const FCharacterNetworkMoveData& MoveData) override;
+
 private:
 	//地面转向主体核心
 	void CustomPhysicsRotation(float DeltaTime);
@@ -111,5 +118,10 @@ private:
 	// 停步窗口标记，见 SetStopRequested
 	bool bStopRequested = false;
 
-	bool bHasClientAuthoritativeYaw = false;
+	// 仅在 ServerMove_PerformMovement 调用 Super 期间为 true：
+	// 用于抑制服务端自己的 PhysicsRotation，避免覆盖客户端朝向。
+	bool bSuppressServerRotation = false;
+
+	// 自定义 MoveData 容器，必须在组件生命周期内持久存在
+	FExtraCharacterNetworkMoveDataContainer CustomNetworkMoveDataContainer;
 };

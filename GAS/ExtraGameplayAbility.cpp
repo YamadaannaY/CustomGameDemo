@@ -901,8 +901,8 @@ void UExtraGameplayAbility::UpdateLockOnWarpTarget()
 		FaceDir = PlayerChar->GetActorForwardVector();
 	}
 
-	// 服务端只复现位移：朝向已由客户端每帧 Server_SyncClientYaw 抄写主导（Montage 期间
-	// UExtraGameMovementComponent::PhysicsRotation 让位给动画），这里再 warp 旋转会和抄写抢朝向
+	// 服务端只复现位移：朝向已由客户端随 ServerMove 的 MoveData 上传并覆盖（Montage 期间
+	// UExtraGameMovementComponent::PhysicsRotation 让位给动画），这里再 warp 旋转会和客户端朝向抢控制权
 	if (bRemoteServerInstance)
 	{
 		bWarpRotation = false;

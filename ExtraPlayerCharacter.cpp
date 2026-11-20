@@ -133,18 +133,6 @@ void AExtraPlayerCharacter::Server_SetMoveInputState_Implementation(bool bNewHas
 	}
 }
 
-void AExtraPlayerCharacter::Server_SyncClientYaw_Implementation(float Yaw)
-{
-	// RPC 与本帧 ServerMove 的处理顺序不保证：若只在 PhysicsRotation 里应用，
-	// 本帧的 PerformMovement 早已用旧朝向算过一遍，服务器朝向会恒定滞后一个 tick。
-	SetActorRotation(FRotator(0.f, Yaw, 0.f));
-
-	if (UExtraGameMovementComponent* MoveComp = Cast<UExtraGameMovementComponent>(GetCharacterMovement()))
-	{
-		MoveComp->SetClientAuthoritativeYaw(Yaw);
-	}
-}
-
 void AExtraPlayerCharacter::Server_NotifyStopMontagePlayed_Implementation(bool bLeft)
 {
 	PlayStopMontage(bLeft);
@@ -185,11 +173,24 @@ void AExtraPlayerCharacter::Tick(float DeltaTime)
 		bIsJumping = JumpCurrentCount > 0;
 	}
 
-	// 本端朝向已由 CMC 算好同步给服务器：
-	// 服务器复现不出双层插值转向，让它抄写客户端的值
-	if (!HasAuthority() && IsLocallyControlled())
+	// 停步进行中的按下：按住超过阈值才算恢复移动；短的按下松手会被当成点按，在 StopMoveInput 里忽略
+	if (bPressUnresolved && GetWorld()->GetTimeSeconds() - MoveInputStartTime >= MoveHoldResumeTime)
 	{
-		Server_SyncClientYaw(GetActorRotation().Yaw);
+		bPressUnresolved = false;
+
+		if (bPressDuringStop)
+		{
+			bPressDuringStop = false;
+
+			if (UExtraGameAnimInstance* AI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
+			{
+				AI->ClearStopRequest();
+			}
+
+			CancelStopMontageIfPlaying();
+
+			Server_SetMoveInputState(true, EMoveReleaseAction::None, 0.f);
+		}
 	}
 
 	// 模拟代理：跟随服务器播急停/转身 Montage，并在服务器停播 RM Montage 时收掉本地那份。
@@ -356,17 +357,24 @@ void AExtraPlayerCharacter::Move(const FInputActionValue& InputActionValue)
 	// 检测 无输入→有输入 的跳变，记录按键开始时间
 	if (!bHasMoveInput && !InputVal.IsNearlyZero())
 	{
-		if (UExtraGameAnimInstance* GameAI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
-		{
-			GameAI->ClearStopRequest();
-		}
-
-		CancelStopMontageIfPlaying();
-
 		MoveInputStartTime = GetWorld()->GetTimeSeconds();
+		bPressUnresolved   = true;
+		bPressDuringStop   = IsStopPipelineActive();
 
-		//服务端同步
-		Server_SetMoveInputState(true, EMoveReleaseAction::None, 0.f);
+		// 停步进行中：先不取消，等 Tick 判定这次按下是按住还是点按。
+		// 点按要无视，所以这里也不发给服务端
+		if (!bPressDuringStop)
+		{
+			if (UExtraGameAnimInstance* GameAI = Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()))
+			{
+				GameAI->ClearStopRequest();
+			}
+
+			CancelStopMontageIfPlaying();
+
+			//服务端同步
+			Server_SetMoveInputState(true, EMoveReleaseAction::None, 0.f);
+		}
 	}
 
 	bHasMoveInput = !InputVal.IsNearlyZero();
@@ -419,6 +427,10 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 {
 	LastMoveInputDuration = GetWorld()->GetTimeSeconds() - MoveInputStartTime;
 
+	// 停步进行中按下的那一次：还没到按住阈值就松手，算点按
+	const bool bWasStopProbe = bPressUnresolved && bPressDuringStop;
+	bPressUnresolved = false;
+
 	bHasMoveInput = false;
 
 	// 松开移动输入即退出冲刺模式（速度由 Tick 插值回落，停步走既有流程）；
@@ -432,6 +444,22 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	ForwardDirectionInput = 0.f;
 	RightDirectionInput = 0.f;
 	InputDirection = FVector::ZeroVector;
+
+	// 停步进行中的点按：不重开判定，按当前停步走到哪一步分别处理
+	if (bWasStopProbe)
+	{
+		bPressDuringStop = false;
+
+		// 还没走到落脚点：无视这次点按，原停步继续
+		if (!IsStopMontagePlaying())
+		{
+			return;
+		}
+
+		// 已经进入停步：改播点按对应的急停/转身
+		ResolveStopDecision(LastMoveInputDuration);
+		return;
+	}
 	
 	// 仅在仍有非停步类 Montage（Evade / 攻击等）播放时才跳过松手停步，避免松手去打断战斗动作。
 	// 不能用 IsAnyMontagePlaying() 判断：它等价于 MontageInstances.Num()>0，
@@ -441,7 +469,9 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 	{
 		if (UAnimMontage* ActiveMontage = AnimInst->GetCurrentActiveMontage())
 		{
-			if (ActiveMontage != LeftStopRunMontage &&
+			if (ActiveMontage != LeftStopMontage &&
+				ActiveMontage != RightStopMontage &&
+				ActiveMontage != LeftStopRunMontage &&
 				ActiveMontage != RightStopRunMontage &&
 				ActiveMontage != TurnLeft90Montage &&
 				ActiveMontage != TurnRight90Montage)
@@ -453,8 +483,64 @@ void AExtraPlayerCharacter::StopMoveInput(const FInputActionValue& InputActionVa
 		}
 	}
 
-	// 轻触判定：输入持续时间 < 0.2s
-	if (LastMoveInputDuration > 0.f && LastMoveInputDuration < 0.2f)
+	// 正常松手：先把输入状态同步过去（结算可能因为速度等原因不播动作，状态也要对），
+	// 再按按住时长决定播急停/转身还是走等落脚点的停步
+	Server_SetMoveInputState(false, EMoveReleaseAction::None, TargetYaw);
+	ResolveStopDecision(LastMoveInputDuration);
+}
+
+bool AExtraPlayerCharacter::IsStopPipelineActive() const
+{
+	const UExtraGameAnimInstance* AI = GetMesh() ? Cast<UExtraGameAnimInstance>(GetMesh()->GetAnimInstance()) : nullptr;
+	if (AI && AI->bRequestStop)
+	{
+		return true;
+	}
+
+	return IsStopMontagePlaying();
+}
+
+bool AExtraPlayerCharacter::IsStopMontagePlaying() const
+{
+	UAnimInstance* AnimInst = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (!AnimInst)
+	{
+		return false;
+	}
+
+	// 停步/急停/转身四类都要认，缺一组就会把正在播的停步当成"没有停步"，后续判定全错
+	const UAnimMontage* ActiveMontage = AnimInst->GetCurrentActiveMontage();
+	return ActiveMontage == LeftStopMontage
+		|| ActiveMontage == RightStopMontage
+		|| ActiveMontage == LeftStopRunMontage
+		|| ActiveMontage == RightStopRunMontage
+		|| ActiveMontage == TurnLeft90Montage
+		|| ActiveMontage == TurnRight90Montage;
+}
+
+void AExtraPlayerCharacter::ResolveStopDecision(float HoldDuration)
+{
+	// 挂起期间可能已经进了战斗动作：这时放弃本次停步，别把停步/急停压在攻击 Montage 上
+	if (UAnimInstance* AnimInst = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+	{
+		if (UAnimMontage* ActiveMontage = AnimInst->GetCurrentActiveMontage())
+		{
+			if (ActiveMontage != LeftStopMontage &&
+				ActiveMontage != RightStopMontage &&
+				ActiveMontage != LeftStopRunMontage &&
+				ActiveMontage != RightStopRunMontage &&
+				ActiveMontage != TurnLeft90Montage &&
+				ActiveMontage != TurnRight90Montage)
+			{
+				return;
+			}
+		}
+	}
+
+	// 松手只按时长分流，不看速度：
+	// - < 0.2s 是点按，直接播急停/转身
+	// - ≥ 0.2s 是停步，锁速等落脚点，由 AnimInstance 在 FootPlant 起播
+	if (HoldDuration > 0.f && HoldDuration < 0.2f)
 	{
 		const float TargetDelta = GetTargetDelta();
 		const float AbsTargetDelta = FMath::Abs(TargetDelta);
@@ -505,6 +591,8 @@ void AExtraPlayerCharacter::Jump()
 	}
 
 	CancelStopMontageIfPlaying();
+	bPressUnresolved = false;	// 起跳打断本次按下/松手判定，落地后重新按过才算
+	bPressDuringStop = false;
 	// RootMotion 驱动的前冲（Evade 等）会在 Velocity 上算出一个非常快的速度：
 	// Jump 只设置 Z 分量，空中无水平阻尼，残速在整段滞空生效导致跳得极远。此处收拢到地面速度上限。
 	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
@@ -586,9 +674,7 @@ void AExtraPlayerCharacter::CalculateTargetDelta(float ForwardInput,float RightI
 		// 无明确输入方向则保留上一次的目标朝向
 		return;
 	}
-
-	// 只记录目标方向的绝对 Yaw。不在这里和角色当前朝向做差：
-	// 差值会随角色转动而变旧，松手时用它重建目标就会把「按键期间已经转掉的角度」重复计入
+	
 	TargetYaw = DesiredDirection.Rotation().Yaw;
 }
 

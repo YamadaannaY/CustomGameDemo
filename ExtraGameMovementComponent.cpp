@@ -1,5 +1,4 @@
 #include "ExtraGameMovementComponent.h"
-
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Curves/CurveFloat.h"
@@ -23,12 +22,15 @@ namespace
 	}
 
 	// 已松手、但速度仍高于此值时也继续回正朝向
-	constexpr float FallbackRotationSpeed = 10.f;
+	constexpr float FallbackRotationSpeed = 30.f;
 }
 
 UExtraGameMovementComponent::UExtraGameMovementComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+
+	// 用自定义 MoveData 容器替换默认容器，使 ServerMove 包携带客户端朝向
+	SetNetworkMoveDataContainer(CustomNetworkMoveDataContainer);
 }
 
 void UExtraGameMovementComponent::BeginPlay()
@@ -122,14 +124,21 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 	{
 		return;
 	}
-	
-	// 服务器上本地控制的角色朝向由客户端主导：
-	// 客户端拥有即时的输入与相机数据，服务器只有经过网络延迟的副本，所以直接用客户端RPC发来的值。
-	// 这里拦住服务器自己的转向逻辑
+
+	// 服务端上的远程客户端：朝向由客户端主导。
+	// bSuppressServerRotation 只在本次 MoveData 处理期间为 true。
 	if (CharacterOwner->GetLocalRole() == ROLE_Authority
 		&& CharacterOwner->GetRemoteRole() == ROLE_AutonomousProxy
-		&& bHasClientAuthoritativeYaw)
+		&& bSuppressServerRotation)
 	{
+		return;
+	}
+
+	// 开关关闭：完全交回基类，跳过下面所有项目特化分支
+	// （包括客户端权威 Yaw 拦截与 Montage 让位），用于对比优化前后。
+	if (!bUseCustomPhysicsRotation)
+	{
+		Super::PhysicsRotation(DeltaTime);
 		return;
 	}
 	
@@ -144,20 +153,67 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 		return;
 	}
 
-	// 「最后有效方向」是各分支共用的缓存：无输入时沿用上一次的方向，避免松手瞬间方向乱飘。
-	// 记录的是「输入方向」而不是速度方向：反向/急变向时速度要先刹车过零才掉头，方向滞后很多，
-	// 短促输入松开后速度方向还没转到位，角色会停在侧后方。输入方向即时反映玩家意图。
-	// 用 CMC 的 Velocity 而不是 UpdatedComponent->GetComponentVelocity() 做「在动」的判据：
-	// 后者靠 UpdateComponentVelocity() 同步，时机不保证，可能整帧读到 0
-	if (Velocity.Size2D() > MovingSpeedRefreshThreshold)
+	// 地面且启用 OrientToMovement：由本项目的双层插值接管地面转向。
+	// 其余运动模式（空中 / 游泳 / 飞行）以及 bUseControllerDesiredRotation 分支
+	// 全部交回基类，保持原有行为。
+	if (IsMovingOnGround() && bOrientRotationToMovement)
 	{
-		if (!Acceleration.IsNearlyZero(0.001f))
+		// 「最后有效方向」只在地面转向里使用：无输入时沿用上一次的方向，避免松手瞬间方向乱飘。
+		// 记录的是「输入方向」而不是速度方向：反向/急变向时速度要先刹车过零才掉头，方向滞后很多，
+		// 短促输入松开后速度方向还没转到位，角色会停在侧后方。输入方向即时反映玩家意图。
+		// 判据只看 Acceleration：它每帧由 ConsumeInputVector() 重算（ControlledCharacterMove），
+		// 松手当帧即归零，本身已能区分「有输入」与「惯性滑行」。
+		// 不再加速度门槛：静止起步时速度必然为 0，门槛会让意图白等 2~4 帧才刷新；
+		// 且速度在门槛下时会「意图不刷新却仍在转」，表现为朝旧方向扭一下再摆正。
+		if (!Acceleration.IsNearlyZero())
 		{
 			LastRotationTarget = FRotator(0.f, Acceleration.ToOrientationRotator().Yaw, 0.f);
 		}
+
+		CustomPhysicsRotation(DeltaTime);
+		return;
 	}
 
-	CustomPhysicsRotation(DeltaTime);
+	// 空中 / 游泳 / 飞行等其余模式交回基类。空中额外用 AirRotationScale 缩放基类使用的
+	// RotationRate.Yaw，保留「空中比地面更难转向」的手感；系数不能为 0，
+	// 基类的 RInterpConstantTo 在速率为 0 时会直接对齐目标。
+	if (IsFalling())
+	{
+		// LWC 下 FRotator 分量为 double，按实际类型取模板参数
+		TGuardValue<decltype(RotationRate.Yaw)> AirRateGuard(
+			RotationRate.Yaw, RotationRate.Yaw * AirRotationScale);
+		Super::PhysicsRotation(DeltaTime);
+		return;
+	}
+
+	Super::PhysicsRotation(DeltaTime);
+}
+
+void UExtraGameMovementComponent::ServerMove_PerformMovement(const FCharacterNetworkMoveData& MoveData)
+{
+	// 容器不是我们的自定义类型时，完全走原生逻辑
+	if (&GetNetworkMoveDataContainer() != &CustomNetworkMoveDataContainer)
+	{
+		Super::ServerMove_PerformMovement(MoveData);
+		return;
+	}
+
+	const FExtraCharacterNetworkMoveData& Extra =
+		static_cast<const FExtraCharacterNetworkMoveData&>(MoveData);
+
+	// Super 期间抑制服务端自己的旋转计算，避免覆盖客户端朝向；
+	// TGuardValue 保证提前 return 时恢复。
+	TGuardValue<bool> SuppressGuard(bSuppressServerRotation, true);
+
+	Super::ServerMove_PerformMovement(MoveData);
+
+	// 只对真正被处理的 move 应用，过滤过期/重复时间戳
+	FNetworkPredictionData_Server_Character* ServerData = GetPredictionData_Server_Character();
+	if (Extra.bHasClientRotation && CharacterOwner && ServerData &&
+		ServerData->CurrentClientTimeStamp == MoveData.TimeStamp)
+	{
+		CharacterOwner->SetActorRotation(Extra.ClientRotation);
+	}
 }
 
 void UExtraGameMovementComponent::CustomPhysicsRotation(float DeltaTime)
@@ -175,23 +231,22 @@ void UExtraGameMovementComponent::CustomPhysicsRotation(float DeltaTime)
 	}
 
 	const float Speed = Velocity.Size2D();
-	const bool bIsMoving = Speed > MovingSpeedRefreshThreshold;
 	const bool bHasMovementInput = !Acceleration.IsNearlyZero(0.001f);
-	const bool bShouldRotate = (bIsMoving && bHasMovementInput) || Speed > FallbackRotationSpeed;
+
+	// 有输入就转（含原地转身）；无输入但仍有惯性时继续收敛。
+	// 不再用速度门槛判断「是否在动」：那会让速度未达门槛时「意图不刷新却仍在转」，朝旧方向扭
+	const bool bShouldRotate = bHasMovementInput || Speed > FallbackRotationSpeed;
 
 	const float GroundedRate = CalculateGroundedRotationRate();
 	
-	//  要有速度且仍有输入才转向；已松手但速度还快时也允许回正
+	//  有输入就转；已松手但速度还快时也允许回正
 	if (!bShouldRotate)
 	{
 		return;
 	}
 
-	// 空中削弱作用在两层插值速率上，AirRotationScale=1 时与地面完全等价。
-	// 注意不能把系数压到 0：RInterpTo / RInterpConstantTo 在速率为 0 时会直接返回目标（瞬间对齐）
-	const float AirScale = IsFalling() ? AirRotationScale : 1.f;
-
-	SmoothCharacterRotation(LastRotationTarget, TargetRotationInterpSpeed * AirScale, GroundedRate * AirScale, DeltaTime);
+	// 本函数只在地面分支被调用；空中转向已交回基类 PhysicsRotation。
+	SmoothCharacterRotation(LastRotationTarget, TargetRotationInterpSpeed, GroundedRate, DeltaTime);
 }
 
 void UExtraGameMovementComponent::SmoothCharacterRotation(const FRotator& Target, float TargetInterpSpeed,

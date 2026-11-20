@@ -62,6 +62,11 @@ public:
 
 	float LastMoveInputDuration = 0.f;
 
+	// 按住判定（秒）：按下后超过这个时长还没松开才算按住。
+	// 按住会取消进行中的停步；短于它的按下松手算点按，点按在停步进行中会被忽略
+	UPROPERTY(EditDefaultsOnly, Category="Movement|Stop", meta=(ClampMin="0.0"))
+	float MoveHoldResumeTime = 0.2f;
+
 	// 锁定/解锁移动输入
 	void SetMovementInputLocked(bool bLocked) { bMovementInputLocked = bLocked; }
 	
@@ -129,6 +134,16 @@ public:
 
 	// 停步 Montage 正在播放时，收到移动输入即打断
 	void CancelStopMontageIfPlaying();
+
+	// 松手结算：按松手时记下的按住时长决定播急停/转身，还是走等落脚点的停步流程。
+	// 停步进行中被点按（点按后松手）时也会调用，改播点按对应的急停/转身
+	void ResolveStopDecision(float HoldDuration);
+
+	// 停步管线是否在进行：等落脚点的停步请求中，或停步/转身 Montage 正在播
+	bool IsStopPipelineActive() const;
+
+	// 停步/转身 Montage 是否正在播
+	bool IsStopMontagePlaying() const;
 private:
 	UPROPERTY(VisibleDefaultsOnly,Category="View")
 	USpringArmComponent* CamBoom;
@@ -232,12 +247,6 @@ private:
 	UFUNCTION(Server, Reliable)
 	void Server_SetMoveInputState(bool bNewHasMoveInput, EMoveReleaseAction ReleaseAction, float InTargetYaw);
 
-	// 客户端 → 服务器：上报客户端算好的角色朝向。
-	// 服务器缺少即时的输入与相机数据，无法复现客户端的双层插值转向逻辑，因此使用客户端的结果
-	// Unreliable：高频且可丢，丢一帧只是服务器朝向停一帧，下一帧即补上
-	UFUNCTION(Server, Unreliable)
-	void Server_SyncClientYaw(float Yaw);
-
 	//客户端输入层触发Ctrl，切换WalkMode，服务端抄写这个值
 	UFUNCTION(Server, Reliable)
 	void Server_ChangeWalkMode(bool WalkMode);
@@ -322,6 +331,11 @@ private:
 	float TargetYaw = 0.f;
 	
 	float MoveInputStartTime = 0.f;
+
+	// 本次按下还没判定是点按还是按住
+	bool bPressUnresolved = false;
+	// 按下时停步管线已经在进行（等落脚点的请求中，或停步/转身 Montage 正在播）
+	bool bPressDuringStop = false;
 
 	float ForwardDirectionInput;
 
