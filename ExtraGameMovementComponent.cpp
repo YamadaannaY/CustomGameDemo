@@ -200,19 +200,66 @@ void UExtraGameMovementComponent::ServerMove_PerformMovement(const FCharacterNet
 
 	const FExtraCharacterNetworkMoveData& Extra =
 		static_cast<const FExtraCharacterNetworkMoveData&>(MoveData);
-
-	// Super 期间抑制服务端自己的旋转计算，避免覆盖客户端朝向；
-	// TGuardValue 保证提前 return 时恢复。
+	
+	//抑制服务端的CustomPhysicsRotation
 	TGuardValue<bool> SuppressGuard(bSuppressServerRotation, true);
 
+	// 必须在 Super 之前取上一次的时间戳：Super 内部会把 CurrentClientTimeStamp 推进到本次 move，
+	// 之后再算差值恒为 0，而我们需要时间戳差值计算预期的最大Yaw值，避免误差。
+	FNetworkPredictionData_Server_Character* ServerData = GetPredictionData_Server_Character();
+	//CurrentClientTimeStamp == 记录的最近一次处理的移动包时间戳
+	const float PrevClientTimeStamp = ServerData ? ServerData->CurrentClientTimeStamp : 0.f;
+
+	//原生逻辑处理移动
 	Super::ServerMove_PerformMovement(MoveData);
 
-	// 只对真正被处理的 move 应用，过滤过期/重复时间戳
-	FNetworkPredictionData_Server_Character* ServerData = GetPredictionData_Server_Character();
+	// 这一部分处理旋转
 	if (Extra.bHasClientRotation && CharacterOwner && ServerData &&
 		ServerData->CurrentClientTimeStamp == MoveData.TimeStamp)
 	{
-		CharacterOwner->SetActorRotation(Extra.ClientRotation);
+		FRotator DesiredRotation = Extra.ClientRotation;
+
+		// 基准取服务端当前朝向和Delta值
+		const double CurrentYaw = CharacterOwner->GetActorRotation().Yaw;
+		const double DeltaYaw   = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredRotation.Yaw);
+
+		// 根运动期间朝向由动画驱动，单帧步进可能很大，直接放行
+		const bool bAllowLargeStep = HasAnimRootMotion()
+			|| CharacterOwner->GetRootMotionAnimMontageInstance() != nullptr;
+
+		float Dt     = 0.f;
+		float Budget = 0.f;
+		bool  bClamped = false;
+		
+		//基于客户端上传值算出的
+		const float ClientDt = MoveData.TimeStamp - PrevClientTimeStamp;
+
+		if (!bAllowLargeStep && MaxYawRateForValidation > 0.f && ClientDt > 0.f)
+		{
+			Dt = ClientDt;
+
+			// 本帧允许的角度预算：按本次 move 实际覆盖的时长算，不用固定每包，否则丢包/合包会误判
+			Budget = MaxYawRateForValidation * Dt * (1.f + YawValidationTolerance);
+
+			if (FMath::Abs(DeltaYaw) > Budget)
+			{
+				bClamped = true;
+				DesiredRotation.Yaw = CurrentYaw + FMath::Sign(DeltaYaw) * Budget;
+			}
+		}
+
+		if (bClamped)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[Rotation] 客户端朝向超出单帧预算 %.1f > %.1f 度 (dt=%.4f)，已钳制到预算内"),
+				(float)FMath::Abs(DeltaYaw), Budget, Dt);
+		}
+
+		//只接受 Yaw：Pitch/Roll 归零
+		DesiredRotation.Pitch = 0.f;
+		DesiredRotation.Roll  = 0.f;
+
+		MoveUpdatedComponent(FVector::ZeroVector, DesiredRotation, false);
 	}
 }
 
@@ -234,7 +281,6 @@ void UExtraGameMovementComponent::CustomPhysicsRotation(float DeltaTime)
 	const bool bHasMovementInput = !Acceleration.IsNearlyZero(0.001f);
 
 	// 有输入就转（含原地转身）；无输入但仍有惯性时继续收敛。
-	// 不再用速度门槛判断「是否在动」：那会让速度未达门槛时「意图不刷新却仍在转」，朝旧方向扭
 	const bool bShouldRotate = bHasMovementInput || Speed > FallbackRotationSpeed;
 
 	const float GroundedRate = CalculateGroundedRotationRate();
@@ -276,14 +322,35 @@ float UExtraGameMovementComponent::CalculateGroundedRotationRate() const
 		}
 	}
 
-	if (MaxCameraYawRate <= 0.f)
-	{
-		return BaseRate;
-	}
+	float Rate = BaseRate;
 
 	// 相机甩得越快，角色跟得越快
-	const float CameraYawRateScale = MapRangeClamped(
-		GetCameraYawRate(), 0.f, MaxCameraYawRate, 1.f, FMath::Max(MaxCameraYawRateMultiplier, 1.f));
+	if (MaxCameraYawRate > 0.f)
+	{
+		const float CameraYawRateScale = MapRangeClamped(
+			GetCameraYawRate(), 0.f, MaxCameraYawRate, 1.f, FMath::Max(MaxCameraYawRateMultiplier, 1.f));
+		Rate *= CameraYawRateScale;
+	}
 
-	return BaseRate * CameraYawRateScale;
+	// 总角差增幅：离最终意图越远，第二层 λ 越大——只减小跟踪滞后/尾巴，
+	// 不改变第一段 TargetRotationInterpSpeed 的匀速斜坡（峰值转速仍是第一段速率）。
+	// 输入用「角色当前朝向 → LastRotationTarget」的总角差，不能用 TargetRotation 的滞后量（会形成非线性反馈）。
+	if (AngleRateBoost > 0.f && UpdatedComponent)
+	{
+		const float IntentError = static_cast<float>(FMath::Abs(FMath::FindDeltaAngleDegrees(
+			UpdatedComponent->GetComponentRotation().Yaw, LastRotationTarget.Yaw)));
+
+		const float AngleRateScale = MapRangeClamped(
+			IntentError, AngleRateBoostStart, AngleRateBoostFull, 1.f, 1.f + AngleRateBoost);
+
+		Rate *= AngleRateScale;
+	}
+	
+	//Clamp
+	if (MaxGroundedRotationRate > 0.f)
+	{
+		Rate = FMath::Min(Rate, MaxGroundedRotationRate);
+	}
+
+	return Rate;
 }

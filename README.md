@@ -610,8 +610,8 @@ PlayRate    = (映射速度 / StrideBlend) / 缩放，Clamp 到 [0,3]
     └─ 长按：
          → AnimInstance->RequestStop()
          → 等 FootPlant Notify 的落脚点
-         → 起播左/右停步 Montage
-         → Server_NotifyStopMontagePlayed(bLeft)
+         → 起播左/右停步 Montage（按 bWalkMode 选 RunStop / WalkStop）
+         → Server_NotifyStopMontagePlayed(bLeft, bWalkMode)
          → 模拟代理通过 RepPendingAction 同步播放
 ```
 
@@ -676,7 +676,10 @@ PhysicsRotation()
            └─ 第二层：角色指数逼近 TargetRotation（RInterpTo）
 
 第二层速率：
-  RotationRateCurve(MappedSpeed) × MapRange(CameraYawRate, 0..Max, 1..MaxMultiplier)
+  RotationRateCurve(MappedSpeed)
+  × MapRange(CameraYawRate, 0..Max, 1..MaxMultiplier)
+  × MapRange(|ActorYaw - LastRotationTarget.Yaw|, AngleRateBoostStart..Full, 1..1+AngleRateBoost)
+  → clamp 到 MaxGroundedRotationRate
 ```
 
 设计意图：
@@ -684,6 +687,7 @@ PhysicsRotation()
 - 第一层消除输入跳变造成的硬拐点。
 - 第二层仿照原生的指数收敛。
 - 相机甩得越快，角色转得越快（跟手）。
+- 总角差越大，第二层 λ 越大：只减小大角度转身的滞后/尾巴，小角度修正基本不变；峰值转速仍由第一段 `TargetRotationInterpSpeed` 决定。
 - 空中按 `AirRotationScale` 线性削弱速率。
 
 ### 7.3 移动输入与 DS 同步
@@ -959,7 +963,7 @@ AExtraCharacter::BeginPlay
 | `Server_SyncClientYaw` | C→S | Unreliable | 客户端权威朝向 |
 | `Server_SendInputDirection` | C→S | Reliable | 输入方向 |
 | `Server_ChangeWalkMode` | C→S | Reliable | 走跑切换 |
-| `Server_NotifyStopMontagePlayed` | C→S | Reliable | 停步 Montage 起播同步 |
+| `Server_NotifyStopMontagePlayed` | C→S | Reliable | 停步 Montage 起播同步（带 bWalkMode，区分走/跑资产） |
 | `Server_SetHoldingAttack` | C→S | Reliable | 按住攻击状态 |
 | `ServerNotifyInputTagPressed` | C→S | Reliable | 输入 Tag 上行 |
 | `Server_OpenJuheReadyWindow` | C→S | Reliable | 居合窗口先行同步 |

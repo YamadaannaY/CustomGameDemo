@@ -16,11 +16,13 @@ void UExtraGameAnimInstance::OnFootPlantNotify(EFootPlant Foot)
 	if (OwnerCharacter)
 	{
 		const bool bLeft = (Foot == EFootPlant::Left);
-		OwnerCharacter->PlayStopMontage(bLeft);
 
-		// 通知服务器在同一瞬间起播。服务器若也等它自己的落脚点，
-		// 两端起播时刻的相位差会放大成 RootMotion 位移分歧 → 被位置校验持续纠正 → 本地客户端抖动。
-		OwnerCharacter->Server_NotifyStopMontagePlayed(bLeft);
+		// Run/Walk 走同一条停步路径，由模式选择对应的 Stop Montage
+		OwnerCharacter->PlayStopMontageForMode(bLeft, 0.f, bWalkMode);
+
+		// 通知服务器在同一瞬间起播，并把走/跑模式一起带过去，保证两端选同一份资产。
+		// 服务器若也等它自己的落脚点，两端起播时刻的相位差会放大成 RootMotion 位移分歧 → 被位置校验持续纠正 → 本地客户端抖动。
+		OwnerCharacter->Server_NotifyStopMontagePlayed(bLeft, bWalkMode);
 	}
 	
 	//停步逻辑结束，重置相关变量

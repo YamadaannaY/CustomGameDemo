@@ -11,6 +11,7 @@ class UCurveVector;
 /*
  *  项目用CMC
  * -地面旋转：双层插值（目标朝向匀速逼近最后一次有效速度朝向+角色朝向指数逼近目标朝向） + 转向速率曲线（按速度档位读取）+ 相机转速放大（相机速度越大，转向速度越快以实现跟手效果）
+ *  + 总角差增幅（离最终意图越远，第二层收敛越快；只减小跟踪滞后，不改变第一段匀速斜坡的峰值转速）
  *  （由 bUseCustomPhysicsRotation 控制，关闭后完全交回基类 PhysicsRotation）
  * -空中 / 游泳 / 飞行等其余模式：仍由基类 UCharacterMovementComponent::PhysicsRotation 处理
  * -MovementCurve 按速度档位驱动最大加速度/刹车减速度/地面摩擦
@@ -26,7 +27,7 @@ public:
 	virtual void BeginPlay() override;
 
 	// 转向实现开关（用于对比优化前后）：
-	// true  = 使用本项目的完整转向逻辑（地面双层插值 + 速率曲线 + 相机转速放大 + 项目特化分支）
+	// true  = 使用本项目的完整转向逻辑（地面双层插值 + 速率曲线 + 相机转速放大 + 总角差增幅 + 项目特化分支）
 	// false = 完全交回基类 UCharacterMovementComponent::PhysicsRotation，
 	//         跳过客户端权威 Yaw 拦截、Montage 让位等所有项目特化分支。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Movement (Rotation)")
@@ -41,7 +42,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
 	float TargetRotationInterpSpeed = 800.f;
 
-	// 第二层插值用的转向速率曲线：横轴 = 映射速度（0 停 / 1 走 / 2 跑 / 3 冲刺），纵轴 = deg/s。
+	// 第二层插值用的转向速率曲线：横轴 = 映射速度（0 停 / 1 走 / 2 跑 / 3 冲刺）
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)")
 	TObjectPtr<UCurveFloat> RotationRateCurve;
 
@@ -53,6 +54,35 @@ public:
 	//将相机转速放大区间落到1-3之间
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="1.0"))
 	float MaxCameraYawRateMultiplier = 3.f;
+
+	// ── 总角差增幅──────────────────
+	// 离最终意图（LastRotationTarget）的总角差从 AngleRateBoostStart 到 AngleRateBoostFull 时，
+	// 从 1 倍线性放大到 (1 + AngleRateBoost) 倍。
+	// 只减小跟踪滞后/尾巴，不改变第一段 TargetRotationInterpSpeed 的匀速斜坡（峰值转速不变）。
+	// 0 = 关闭；小角度修正基本不受影响，大角度转身更跟手。
+	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
+	float AngleRateBoost = 0.5f;
+
+	// 增幅起点角差（度）：小于它的修正不加成
+	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
+	float AngleRateBoostStart = 20.f;
+
+	// 增幅满额角差（度）：大于它的转身拿到最大倍率
+	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
+	float AngleRateBoostFull = 150.f;
+
+	// 第二层 λ 的最终上限（1/秒）
+	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
+	float MaxGroundedRotationRate = 45.f;
+
+	// 服务端朝向校验：单个 move 允许的最大角速度（度/秒）。
+	// 取正常玩法的上限（第一段插值速率 × 相机倍率上限），正常操作不会触发，只有异常/作弊数据会被钳
+	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
+	float MaxYawRateForValidation = 2500.f;
+
+	// 校验容差：预算再放宽这个比例，避免正常的急停/转身被误伤
+	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
+	float YawValidationTolerance = 0.2f;
 	
 	// ── 移动曲线（MovementCurve）────────────────────────
 	// 横轴 = 映射速度（0..3），根据Mapped后的速度区间值读其纵轴，其中：X = 加速度，Y = 减速度，Z = 地面摩擦

@@ -21,6 +21,8 @@ enum class EMoveReleaseAction : uint8
 	TurnRight,      // 轻触 + 大角差：右转身 Montage
 	StopLeft,       // 长按停步（左脚）：由服务器接受两个值
 	StopRight,      // 长按停步（右脚）
+	StopWalkLeft,   // 长按走路停步（左脚）
+	StopWalkRight,  // 长按走路停步（右脚）
 };
 
 UCLASS()
@@ -62,8 +64,8 @@ public:
 
 	float LastMoveInputDuration = 0.f;
 
-	// 按住判定（秒）：按下后超过这个时长还没松开才算按住。
-	// 按住会取消进行中的停步；短于它的按下松手算点按，点按在停步进行中会被忽略
+	// 短按/长按分界（秒）：idle 松手结算时，短于它走急停/转身，长于它走停步。
+	// 停步管线中的新按下会立即取消停步、恢复输入，不受这个阈值限制
 	UPROPERTY(EditDefaultsOnly, Category="Movement|Stop", meta=(ClampMin="0.0"))
 	float MoveHoldResumeTime = 0.2f;
 
@@ -121,12 +123,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Movement|Sprint", meta=(ClampMin="0.0"))
 	float SprintSpeed = 800.f;
 	
-	// 长按停步 Montage
-	void PlayStopMontage(bool bLeft);
+	// 长按停步 Montage（按本端走/跑模式选对应资产）
+	void PlayStopMontage(bool bLeft, float InStartPosition = 0.f);
 
-	//RPC发给服务端让它也播，只慢一个RPC发送时间
+	// 指定走/跑模式的停步起播入口：客户端在 FootPlant 时把本地模式一并告诉服务器，
+	// 服务器和模拟代理据此播同一份资产，避免切换走跑瞬间两端选的 Montage 不一致
+	void PlayStopMontageForMode(bool bLeft, float InStartPosition, bool bInWalkMode);
+
+	//RPC发给服务端让它也播，只慢一个发送时间
 	UFUNCTION(Server, Reliable)
-	void Server_NotifyStopMontagePlayed(bool bLeft);
+	void Server_NotifyStopMontagePlayed(bool bLeft, bool bInWalkMode);
 
 	// 持续按住攻击键的标记RPC发送
 	UFUNCTION(Server, Reliable)
@@ -136,7 +142,7 @@ public:
 	void CancelStopMontageIfPlaying();
 
 	// 松手结算：按松手时记下的按住时长决定播急停/转身，还是走等落脚点的停步流程。
-	// 停步进行中被点按（点按后松手）时也会调用，改播点按对应的急停/转身
+	// 停步管线中的按下已在 Move 里取消停步并恢复输入，松手走的是 StopMoveInput 的 bResumedFromStop 分支。
 	void ResolveStopDecision(float HoldDuration);
 
 	// 停步管线是否在进行：等落脚点的停步请求中，或停步/转身 Montage 正在播
@@ -202,16 +208,23 @@ private:
 	UMotionWarpingComponent* MotionWarpingComp;
 
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
-	UAnimMontage* LeftStopRunMontage;
+	UAnimMontage* LeftQuickStopRunMontage;
 
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
-	UAnimMontage* RightStopRunMontage;
+	UAnimMontage* RightQuickStopRunMontage;
 	
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
-	UAnimMontage* LeftStopMontage;
+	UAnimMontage* LeftRunStopMontage;
 
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
-	UAnimMontage* RightStopMontage;
+	UAnimMontage* RightRunStopMontage;
+
+	// 走路长按停步：与 RunStop 走同一条 RequestStop → FootPlant → PlayStopMontage 路径
+	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
+	UAnimMontage* LeftWalkStopMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
+	UAnimMontage* RightWalkStopMontage;
 
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Turn")
 	UAnimMontage* TurnLeft90Montage;
@@ -283,9 +296,9 @@ private:
 	void TickArmLengthLerp(float Goal);
 
 	// bLeft 由客户端按 TargetDelta 判定后传入，服务端复用这个结果
-	void PlayQuickStopMontage(bool bLeft);
+	void PlayQuickStopMontage(bool bLeft, float InStartPosition = 0.f);
 
-	void PlayTurnMontage(bool bTurnLeft);
+	void PlayTurnMontage(bool bTurnLeft, float InStartPosition = 0.f);
 	
 	// 停步/转身 montage 结束（正常播完或被打断）回调
 	UFUNCTION()
@@ -317,14 +330,23 @@ private:
 	UPROPERTY(Replicated)
 	EMoveReleaseAction RepPendingAction = EMoveReleaseAction::None;
 
+	// 服务器每播一次动作就自增，复制给模拟代理。
+	// 代理按序号变化来播，而不是依赖"观察到 None 再复位"——后者在
+	// None 与动作值落在同一次网络更新里时会漏掉，导致后续动作都不播
+	UPROPERTY(Replicated)
+	uint8 RepActionSerial = 0;
+
 	// 服务器权威的目标朝向：急停 / 转身 / 停步 Montage 上的 MotionWarping 都拿它当目标。
 	// 模拟代理本地没有输入，TargetYaw 会一直是默认值，必须靠这份复制值覆盖，
 	// 否则 MW 会把远端角色转到错误方向。
 	UPROPERTY(Replicated)
 	float RepTargetYaw = 0.f;
 
-	// 模拟代理去重：本轮 RepPendingAction 是否已消费（它要到下次移动才复位）
-	bool bRepActionConsumed = false;
+	// 模拟代理去重：已经播到哪个序号
+	uint8 LastSeenActionSerial = 0;
+
+	// 代理按动作播蒙太奇
+	void PlayProxyAction(EMoveReleaseAction Action, float InStartPosition);
 
 	// 目标朝向的世界 Yaw：由最后一次有效移动输入方向算出，与角色当前朝向无关。
 	// 存绝对方向而不是相对角差，是为了让转身/急停的目标不受按下到松手期间CMC转过的角度的影响
@@ -332,10 +354,8 @@ private:
 	
 	float MoveInputStartTime = 0.f;
 
-	// 本次按下还没判定是点按还是按住
-	bool bPressUnresolved = false;
-	// 按下时停步管线已经在进行（等落脚点的请求中，或停步/转身 Montage 正在播）
-	bool bPressDuringStop = false;
+	// 本次按下发生在停步管线中：按下时已立即取消停步并恢复输入，松手走正常停步（RequestStop）
+	bool bResumedFromStop = false;
 
 	float ForwardDirectionInput;
 
