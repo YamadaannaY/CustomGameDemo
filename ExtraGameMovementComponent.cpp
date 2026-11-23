@@ -20,9 +20,6 @@ namespace
 		const float T = FMath::Clamp((Value - InMin) / (InMax - InMin), 0.f, 1.f);
 		return FMath::Lerp(OutMin, OutMax, T);
 	}
-
-	// 已松手、但速度仍高于此值时也继续回正朝向
-	constexpr float FallbackRotationSpeed = 30.f;
 }
 
 UExtraGameMovementComponent::UExtraGameMovementComponent()
@@ -133,9 +130,7 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 	{
 		return;
 	}
-
-	// 开关关闭：完全交回基类，跳过下面所有项目特化分支
-	// （包括客户端权威 Yaw 拦截与 Montage 让位），用于对比优化前后。
+	
 	if (!bUseCustomPhysicsRotation)
 	{
 		Super::PhysicsRotation(DeltaTime);
@@ -162,9 +157,6 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 		// 记录的是「输入方向」而不是速度方向：反向/急变向时速度要先刹车过零才掉头，方向滞后很多，
 		// 短促输入松开后速度方向还没转到位，角色会停在侧后方。输入方向即时反映玩家意图。
 		// 判据只看 Acceleration：它每帧由 ConsumeInputVector() 重算（ControlledCharacterMove），
-		// 松手当帧即归零，本身已能区分「有输入」与「惯性滑行」。
-		// 不再加速度门槛：静止起步时速度必然为 0，门槛会让意图白等 2~4 帧才刷新；
-		// 且速度在门槛下时会「意图不刷新却仍在转」，表现为朝旧方向扭一下再摆正。
 		if (!Acceleration.IsNearlyZero())
 		{
 			LastRotationTarget = FRotator(0.f, Acceleration.ToOrientationRotator().Yaw, 0.f);
@@ -179,7 +171,6 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 	// 基类的 RInterpConstantTo 在速率为 0 时会直接对齐目标。
 	if (IsFalling())
 	{
-		// LWC 下 FRotator 分量为 double，按实际类型取模板参数
 		TGuardValue<decltype(RotationRate.Yaw)> AirRateGuard(
 			RotationRate.Yaw, RotationRate.Yaw * AirRotationScale);
 		Super::PhysicsRotation(DeltaTime);
@@ -191,7 +182,7 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 
 void UExtraGameMovementComponent::ServerMove_PerformMovement(const FCharacterNetworkMoveData& MoveData)
 {
-	// 容器不是我们的自定义类型时，完全走原生逻辑
+	// 容器不是我们的自定义类型时，走原生逻辑
 	if (&GetNetworkMoveDataContainer() != &CustomNetworkMoveDataContainer)
 	{
 		Super::ServerMove_PerformMovement(MoveData);
@@ -210,7 +201,7 @@ void UExtraGameMovementComponent::ServerMove_PerformMovement(const FCharacterNet
 	//CurrentClientTimeStamp == 记录的最近一次处理的移动包时间戳
 	const float PrevClientTimeStamp = ServerData ? ServerData->CurrentClientTimeStamp : 0.f;
 
-	//原生逻辑处理移动
+	// 原生逻辑处理移动
 	Super::ServerMove_PerformMovement(MoveData);
 
 	// 这一部分处理旋转
@@ -269,7 +260,7 @@ void UExtraGameMovementComponent::CustomPhysicsRotation(float DeltaTime)
 	CachedCameraYawRate = 0.f;
 	if (const AController* OwnerController = CharacterOwner->GetController())
 	{
-		//模拟代理上没有Controller
+		//模拟代理上没有Controller,
 		const float CurrentCameraYaw = OwnerController->GetControlRotation().Yaw;
 		CachedCameraYawRate = FMath::Abs(
 			FMath::FindDeltaAngleDegrees(LastCameraYaw, CurrentCameraYaw)
@@ -278,7 +269,7 @@ void UExtraGameMovementComponent::CustomPhysicsRotation(float DeltaTime)
 	}
 
 	const float Speed = Velocity.Size2D();
-	const bool bHasMovementInput = !Acceleration.IsNearlyZero(0.001f);
+	const bool bHasMovementInput = !Acceleration.IsNearlyZero();
 
 	// 有输入就转（含原地转身）；无输入但仍有惯性时继续收敛。
 	const bool bShouldRotate = bHasMovementInput || Speed > FallbackRotationSpeed;
@@ -332,9 +323,7 @@ float UExtraGameMovementComponent::CalculateGroundedRotationRate() const
 		Rate *= CameraYawRateScale;
 	}
 
-	// 总角差增幅：离最终意图越远，第二层 λ 越大——只减小跟踪滞后/尾巴，
-	// 不改变第一段 TargetRotationInterpSpeed 的匀速斜坡（峰值转速仍是第一段速率）。
-	// 输入用「角色当前朝向 → LastRotationTarget」的总角差，不能用 TargetRotation 的滞后量（会形成非线性反馈）。
+	// 总角差增幅：离最终目标方向越远增幅越大，配置增幅起点角差和上限
 	if (AngleRateBoost > 0.f && UpdatedComponent)
 	{
 		const float IntentError = static_cast<float>(FMath::Abs(FMath::FindDeltaAngleDegrees(

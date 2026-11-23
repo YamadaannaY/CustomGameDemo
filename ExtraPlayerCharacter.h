@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "ExtraCharacter.h"
-#include "GameplayAbilitySpec.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "MotionWarpingComponent.h"
@@ -13,16 +12,16 @@
 UENUM()
 enum class EMoveReleaseAction : uint8
 {
-	None,           // 不触发停步（本次松手被战斗 Montage 接管）
-	RequestStop,    // 长按：等客户端落脚点起播后通知服务器（服务器不再自己等落脚点）
+	None,           // 不触发停步
+	RequestStop,    // 长按
 	QuickStopLeft,  // 轻触 + 小角差：左急停 Montage
 	QuickStopRight, // 轻触 + 小角差：右急停 Montage
 	TurnLeft,       // 轻触 + 大角差：左转身 Montage
 	TurnRight,      // 轻触 + 大角差：右转身 Montage
-	StopLeft,       // 长按停步（左脚）：由服务器接受两个值
-	StopRight,      // 长按停步（右脚）
-	StopWalkLeft,   // 长按走路停步（左脚）
-	StopWalkRight,  // 长按走路停步（右脚）
+	StopLeft,       // 跑步停步（左脚）
+	StopRight,      // 跑步停步（右脚）
+	StopWalkLeft,   // 走路停步（左脚）
+	StopWalkRight,  // 走路停步（右脚）
 };
 
 UCLASS()
@@ -123,14 +122,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Movement|Sprint", meta=(ClampMin="0.0"))
 	float SprintSpeed = 800.f;
 	
-	// 长按停步 Montage（按本端走/跑模式选对应资产）
-	void PlayStopMontage(bool bLeft, float InStartPosition = 0.f);
+	// 停步起播入口：按本端走/跑模式选对应资产，客户端在 FootPlant 时把本地模式一并告诉服务器
+	void PlayStopMontageForMode(bool bLeft, bool bInWalkMode);
 
-	// 指定走/跑模式的停步起播入口：客户端在 FootPlant 时把本地模式一并告诉服务器，
-	// 服务器和模拟代理据此播同一份资产，避免切换走跑瞬间两端选的 Montage 不一致
-	void PlayStopMontageForMode(bool bLeft, float InStartPosition, bool bInWalkMode);
-
-	//RPC发给服务端让它也播，只慢一个发送时间
+	//RPC发给服务端让它也播相同的停步动画，只慢一个发送时间
 	UFUNCTION(Server, Reliable)
 	void Server_NotifyStopMontagePlayed(bool bLeft, bool bInWalkMode);
 
@@ -219,7 +214,7 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
 	UAnimMontage* RightRunStopMontage;
 
-	// 走路长按停步：与 RunStop 走同一条 RequestStop → FootPlant → PlayStopMontage 路径
+	// 走路长按停步：与 RunStop 走同一条 RequestStop → FootPlant → PlayStopMontageForMode 路径
 	UPROPERTY(EditDefaultsOnly, Category="Animation|Stop")
 	UAnimMontage* LeftWalkStopMontage;
 
@@ -296,9 +291,9 @@ private:
 	void TickArmLengthLerp(float Goal);
 
 	// bLeft 由客户端按 TargetDelta 判定后传入，服务端复用这个结果
-	void PlayQuickStopMontage(bool bLeft, float InStartPosition = 0.f);
+	void PlayQuickStopMontage(bool bLeft);
 
-	void PlayTurnMontage(bool bTurnLeft, float InStartPosition = 0.f);
+	void PlayTurnMontage(bool bTurnLeft);
 	
 	// 停步/转身 montage 结束（正常播完或被打断）回调
 	UFUNCTION()
@@ -313,7 +308,7 @@ private:
 	// 由 GA_Evade 截断蒙太奇时设置，下一帧写入 Velocity 以保持冲刺速度（仅当前帧有效）
 	FVector SprintTransitionVelocity = FVector::ZeroVector;
 
-	// 上一帧 RepRootMotion 是否处于播放中：模拟代理用它检测「服务器停播」的下降沿
+	// 上一帧 RepRootMotion 是否处于播放中：模拟代理用它检测服务器是否执行了对停步动画的停播操作
 	bool bWasRepRootMotionActive = false;
 
 	// 是否持有移动输入,用来做服务端的加速度判断（客户端CMC的Acc是不会复制的）
@@ -332,40 +327,38 @@ private:
 
 	// 服务器每播一次动作就自增，复制给模拟代理。
 	// 代理按序号变化来播，而不是依赖"观察到 None 再复位"——后者在
-	// None 与动作值落在同一次网络更新里时会漏掉，导致后续动作都不播
-	UPROPERTY(Replicated)
+	// None 与动作值落在同一次网络更新里时会漏掉，导致后续动作都不播。
+	// 用 RepNotify 触发而不是每帧 Tick 比较：代理在帧首网络分发时就收到，少一帧延迟
+	UPROPERTY(ReplicatedUsing = OnRep_RepActionSerial)
 	uint8 RepActionSerial = 0;
 
-	// 服务器权威的目标朝向：急停 / 转身 / 停步 Montage 上的 MotionWarping 都拿它当目标。
-	// 模拟代理本地没有输入，TargetYaw 会一直是默认值，必须靠这份复制值覆盖，
-	// 否则 MW 会把远端角色转到错误方向。
-	UPROPERTY(Replicated)
-	float RepTargetYaw = 0.f;
+	UFUNCTION()
+	void OnRep_RepActionSerial();
 
-	// 模拟代理去重：已经播到哪个序号
-	uint8 LastSeenActionSerial = 0;
+	// RepRootMotion 由播放中变停止的下降沿：收尾掉上一段停步/转身蒙太奇。
+	void UpdateProxyRootMotionEdge();
 
 	// 代理按动作播蒙太奇
-	void PlayProxyAction(EMoveReleaseAction Action, float InStartPosition);
+	void PlayProxyAction(EMoveReleaseAction Action);
 
 	// 目标朝向的世界 Yaw：由最后一次有效移动输入方向算出，与角色当前朝向无关。
 	// 存绝对方向而不是相对角差，是为了让转身/急停的目标不受按下到松手期间CMC转过的角度的影响
+	UPROPERTY(Replicated)
 	float TargetYaw = 0.f;
-	
-	float MoveInputStartTime = 0.f;
-
-	// 本次按下发生在停步管线中：按下时已立即取消停步并恢复输入，松手走正常停步（RequestStop）
-	bool bResumedFromStop = false;
-
-	float ForwardDirectionInput;
-
-	float RightDirectionInput;
 
 	UPROPERTY(Replicated)
 	bool bWalkMode = false;
+	
+	float MoveInputStartTime = 0.f;
 
 	bool bIsSprinting = false;
+	
+	// 本次按下发生在停步管线中：按下时立即取消停步并恢复输入
+	bool bResumedFromStop = false;
 
+	float ForwardDirectionInput;
+	float RightDirectionInput;
+	
 	// 移动输入锁定标志（空中攻击期间为 true，忽略移动输入）
 	bool bMovementInputLocked = false;
 

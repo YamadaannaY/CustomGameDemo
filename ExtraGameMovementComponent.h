@@ -27,9 +27,8 @@ public:
 	virtual void BeginPlay() override;
 
 	// 转向实现开关（用于对比优化前后）：
-	// true  = 使用本项目的完整转向逻辑（地面双层插值 + 速率曲线 + 相机转速放大 + 总角差增幅 + 项目特化分支）
+	// true  = 使用本项目的完整转向逻辑（地面双层插值 + 速率曲线 + 相机转速放大 + 总角差增幅 ）
 	// false = 完全交回基类 UCharacterMovementComponent::PhysicsRotation，
-	//         跳过客户端权威 Yaw 拦截、Montage 让位等所有项目特化分支。
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Movement (Rotation)")
 	bool bUseCustomPhysicsRotation = true;
 
@@ -116,6 +115,10 @@ public:
 	virtual void ServerMove_PerformMovement(const FCharacterNetworkMoveData& MoveData) override;
 
 private:
+	// 已松手、但速度仍高于此值时也继续回正朝向
+	UPROPERTY(EditDefaultsOnly,Category="Character Movement (Rotation)",meta=(ClampMin="0.0"))
+	float FallbackRotationSpeed = 30.f;
+	
 	//地面转向主体核心
 	void CustomPhysicsRotation(float DeltaTime);
 	
