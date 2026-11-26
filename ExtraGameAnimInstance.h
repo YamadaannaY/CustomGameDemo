@@ -133,6 +133,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Blend | Stride", meta=(BlueprintThreadSafe))
 	float CalculateStrideBlend() const ;
 
+	//算出实际速度是动画设计速度的几倍
 	UFUNCTION(BlueprintCallable, Category="Blend | Stride", meta=(BlueprintThreadSafe))
 	float CalculateStandingPlayRate() const ;
 

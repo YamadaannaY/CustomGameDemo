@@ -3,7 +3,6 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Curves/CurveFloat.h"
 #include "Curves/CurveVector.h"
-#include "Engine/Engine.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 
@@ -109,6 +108,7 @@ void UExtraGameMovementComponent::PhysWalking(float DeltaTime, int32 Iterations)
 {
 	if (MovementCurve)
 	{
+		//与当前速度成正比的阻力
 		GroundFriction = MovementCurve->GetVectorValue(GetMappedSpeed()).Z;
 	}
 
@@ -136,7 +136,7 @@ void UExtraGameMovementComponent::PhysicsRotation(float DeltaTime)
 		Super::PhysicsRotation(DeltaTime);
 		return;
 	}
-	
+
 	// 判定「有没有 montage 在播」—— Montage存在 MW 接管朝向的情况，而Jogging基本状态没有 montage
 	const UAnimInstance* AnimInst = CharacterOwner->GetMesh() ? CharacterOwner->GetMesh()->GetAnimInstance() : nullptr;
 	const bool bAnimDrivingRotation = AnimInst && AnimInst->IsAnyMontagePlaying();
@@ -289,7 +289,7 @@ void UExtraGameMovementComponent::CustomPhysicsRotation(float DeltaTime)
 void UExtraGameMovementComponent::SmoothCharacterRotation(const FRotator& Target, float TargetInterpSpeed,
                                                            float ActorInterpSpeed, float DeltaTime)
 {
-	// 第一层：中间目标匀速逼近外部目标，起手/变向都不会有硬拐点(使用双层插值的原因，默认的OrientTo直接将加速度方向作为最终方向，没有逼近过程)
+	// 第一层：中间目标匀速逼近外部目标，起手/变向都不会有硬拐点
 	TargetRotation = FMath::RInterpConstantTo(TargetRotation, Target, DeltaTime, TargetInterpSpeed);
 
 	// 第二层：角色指数逼近中间目标
@@ -321,18 +321,6 @@ float UExtraGameMovementComponent::CalculateGroundedRotationRate() const
 		const float CameraYawRateScale = MapRangeClamped(
 			GetCameraYawRate(), 0.f, MaxCameraYawRate, 1.f, FMath::Max(MaxCameraYawRateMultiplier, 1.f));
 		Rate *= CameraYawRateScale;
-	}
-
-	// 总角差增幅：离最终目标方向越远增幅越大，配置增幅起点角差和上限
-	if (AngleRateBoost > 0.f && UpdatedComponent)
-	{
-		const float IntentError = static_cast<float>(FMath::Abs(FMath::FindDeltaAngleDegrees(
-			UpdatedComponent->GetComponentRotation().Yaw, LastRotationTarget.Yaw)));
-
-		const float AngleRateScale = MapRangeClamped(
-			IntentError, AngleRateBoostStart, AngleRateBoostFull, 1.f, 1.f + AngleRateBoost);
-
-		Rate *= AngleRateScale;
 	}
 	
 	//Clamp

@@ -199,7 +199,7 @@ void AExtraPlayerCharacter::Server_SetHoldingAttack_Implementation(bool bHolding
 {
 	bHoldingAttack = bHolding;
 }
-
+ 
 void AExtraPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();

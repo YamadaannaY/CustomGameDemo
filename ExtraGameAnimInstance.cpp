@@ -158,7 +158,7 @@ int32 UExtraGameAnimInstance::PickNextIdleAction()
 
 float UExtraGameAnimInstance::CalculateStrideBlend() const
 {
-	// 步幅曲线：把 GroundSpeed 映射到步幅系数，缩放脚步位移使其匹配移动速度。
+	//基于角色当前缩放归一化速度
 	const float CurveTime = GroundSpeed / GetOwningComponent()->GetComponentScale().Z;
 	
 	const float ClampedGait = GetAnimCurveClamped(NAME_W_Gait, -1.0, 0.0f, 1.0f);
@@ -171,9 +171,12 @@ float UExtraGameAnimInstance::CalculateStrideBlend() const
 
 float UExtraGameAnimInstance::CalculateStandingPlayRate() const
 {
+	//Lerp在这里的作用：当前速度播左边界动画应该多少倍，播右边界动画应该多少倍，现在实际在左右动画的混合区间的哪里，然后取平均乘以这个位置值
+	
+	
 	const float LerpedSpeed = FMath::Lerp(GroundSpeed / OwnerCharacter->WalkSpeed,GroundSpeed / OwnerCharacter->RunSpeed,
 									  GetAnimCurveClamped(NAME_W_Gait, -1.0f, 0.0f, 1.0f));
-
+	
 	const float SprintAffectedSpeed = FMath::Lerp(LerpedSpeed, GroundSpeed / OwnerCharacter->SprintSpeed,
 												  GetAnimCurveClamped(NAME_W_Gait, -2.0f, 0.0f, 1.0f));
 

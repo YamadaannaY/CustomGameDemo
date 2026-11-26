@@ -53,23 +53,7 @@ public:
 	//将相机转速放大区间落到1-3之间
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="1.0"))
 	float MaxCameraYawRateMultiplier = 3.f;
-
-	// ── 总角差增幅──────────────────
-	// 离最终意图（LastRotationTarget）的总角差从 AngleRateBoostStart 到 AngleRateBoostFull 时，
-	// 从 1 倍线性放大到 (1 + AngleRateBoost) 倍。
-	// 只减小跟踪滞后/尾巴，不改变第一段 TargetRotationInterpSpeed 的匀速斜坡（峰值转速不变）。
-	// 0 = 关闭；小角度修正基本不受影响，大角度转身更跟手。
-	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
-	float AngleRateBoost = 0.5f;
-
-	// 增幅起点角差（度）：小于它的修正不加成
-	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
-	float AngleRateBoostStart = 20.f;
-
-	// 增幅满额角差（度）：大于它的转身拿到最大倍率
-	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
-	float AngleRateBoostFull = 150.f;
-
+	
 	// 第二层 λ 的最终上限（1/秒）
 	UPROPERTY(EditDefaultsOnly, Category="Character Movement (Rotation)", meta=(ClampMin="0.0"))
 	float MaxGroundedRotationRate = 45.f;
